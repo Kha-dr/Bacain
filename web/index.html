@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>BacaIn Manager</title>
-  <meta name="description" content="Web Bluetooth book sync and file manager for ESP32-S3 BacaIn">
+  <title>BacaIn</title>
+  <meta name="description" content="Web Bluetooth book sync and reader manager for ESP32-S3 BacaIn">
   <meta name="theme-color" content="#2563eb">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -23,32 +23,12 @@
       <div class="brand-section">
         <img src="icon.svg" alt="BacaIn Logo" class="brand-logo">
         <div class="brand-text">
-          <h1>BacaIn <span class="brand-badge">Sync</span></h1>
-          <p>ESP32-S3 E-Paper Web Bluetooth & Firmware Manager</p>
+          <h1>BacaIn</h1>
+          <p>E-Paper Reader Manager</p>
         </div>
       </div>
 
       <div class="header-actions">
-        <!-- Theme Toggle Button -->
-        <button id="themeToggleBtn" class="btn-icon" aria-label="Toggle Theme" title="Toggle Dark/Light Mode">
-          <!-- Sun Icon (for dark mode) -->
-          <svg id="themeIconSun" class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="5"></circle>
-            <line x1="12" y1="12" x2="12" y2="3"></line>
-            <line x1="12" y1="21" x2="12" y2="23"></line>
-            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
-            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
-            <line x1="1" y1="12" x2="3" y2="12"></line>
-            <line x1="21" y1="12" x2="23" y2="12"></line>
-            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
-            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
-          </svg>
-          <!-- Moon Icon (for light mode) -->
-          <svg id="themeIconMoon" class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
-            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
-          </svg>
-        </button>
-
         <!-- BLE Connection Button -->
         <button id="connectBtn" class="btn-connect">
           <span id="statusDot" class="status-dot disconnected"></span>
@@ -57,36 +37,16 @@
             <path d="M6.5 6.5l11 11L12 23V1l5.5 5.5-11 11"></path>
           </svg>
         </button>
+
+        <!-- Settings Modal Trigger Button -->
+        <button id="settingsBtn" class="btn-icon" aria-label="Open Settings" title="Settings & Hardware Configuration">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+        </button>
       </div>
     </header>
-
-    <!-- Navigation Tab Bar -->
-    <nav class="nav-tabs" role="tablist" aria-label="Application Modules">
-      <button id="tabBtnSync" class="nav-tab active" role="tab" aria-selected="true" aria-controls="tabPanelSync" data-tab="tabPanelSync">
-        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
-          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
-          <path d="M12 7v6"></path>
-          <path d="M9 10l3-3 3 3"></path>
-        </svg>
-        <span>Book Sync (BLE)</span>
-      </button>
-
-      <button id="tabBtnControls" class="nav-tab" role="tab" aria-selected="false" aria-controls="tabPanelControls" data-tab="tabPanelControls">
-        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="4" y="2" width="16" height="20" rx="2" ry="2"></rect>
-          <line x1="12" y1="18" x2="12.01" y2="18"></line>
-        </svg>
-        <span>Device Controls (BLE)</span>
-      </button>
-
-      <button id="tabBtnFlasher" class="nav-tab" role="tab" aria-selected="false" aria-controls="tabPanelFlasher" data-tab="tabPanelFlasher">
-        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path>
-        </svg>
-        <span>Firmware Flasher (Web Serial)</span>
-      </button>
-    </nav>
 
     <!-- Browser Incompatibility Banner (hidden by default) -->
     <div id="compatBanner" class="alert-banner alert-warning" style="display: none;">
@@ -101,123 +61,10 @@
       </div>
     </div>
 
-    <!-- TAB PANEL 1: Book Sync (BLE) -->
-    <div id="tabPanelSync" class="tab-panel active" role="tabpanel" aria-labelledby="tabBtnSync">
-      <!-- Upload Section -->
-      <section class="upload-section">
-        <div class="section-title">
-          <div class="section-title-left">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-              <polyline points="17 8 12 3 7 8"></polyline>
-              <line x1="12" y1="3" x2="12" y2="15"></line>
-            </svg>
-            <h2>Send Books to BacaIn</h2>
-          </div>
-        </div>
+    <!-- MAIN DASHBOARD & MANAGER SEQUENCE -->
+    <main class="app-main-content">
 
-        <!-- Drag & Drop Zone -->
-        <div id="dropzone" class="dropzone" tabindex="0" role="button" aria-label="Drop files here or click to browse">
-          <svg class="dropzone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
-            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
-            <path d="M12 7v6"></path>
-            <path d="M9 10l3-3 3 3"></path>
-          </svg>
-          <div class="dropzone-title">Drop .txt books here, or click to browse</div>
-          <div class="dropzone-subtitle">Transfers directly to /sdcard/books/ via BLE chunked stream</div>
-          <div class="dropzone-hint">Supports UTF-8 Plain Text files (.txt) &bull; Up to 506 bytes/chunk</div>
-          <input type="file" id="fileInput" class="file-input" accept=".txt,text/plain" multiple>
-        </div>
-
-        <!-- Active Upload Card (shown while transmitting) -->
-        <div id="uploadActiveCard" class="upload-active-card">
-          <div class="upload-header">
-            <div id="uploadingFileName" class="upload-filename">uploading_book.txt</div>
-            <button id="cancelUploadBtn" class="btn-cancel-upload">Cancel Upload</button>
-          </div>
-
-          <div class="upload-progress-container">
-            <div id="uploadProgressFill" class="upload-progress-fill"></div>
-          </div>
-
-          <div class="upload-stats-grid">
-            <div class="upload-stat-item">
-              <div class="upload-stat-label">Progress</div>
-              <div id="uploadPctStat" class="upload-stat-val">0.0%</div>
-            </div>
-            <div class="upload-stat-item">
-              <div class="upload-stat-label">Transfer Speed</div>
-              <div id="uploadSpeedStat" class="upload-stat-val">0.0 KB/s</div>
-            </div>
-            <div class="upload-stat-item">
-              <div class="upload-stat-label">Sequence ID</div>
-              <div id="uploadSeqStat" class="upload-stat-val">#0 / 0</div>
-            </div>
-            <div class="upload-stat-item">
-              <div class="upload-stat-label">Estimated Time</div>
-              <div id="uploadEtaStat" class="upload-stat-val">—</div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- Remote Books Management Section -->
-      <section class="books-section">
-        <div class="section-title">
-          <div class="section-title-left">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path>
-              <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path>
-            </svg>
-            <h2>Books on BacaIn</h2>
-            <span id="booksCountBadge" class="card-badge badge-muted">0 books</span>
-          </div>
-        </div>
-
-        <!-- Controls: Filter & Refresh -->
-        <div class="books-controls">
-          <div class="search-input-wrapper">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="11" cy="11" r="8"></circle>
-              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-            </svg>
-            <input type="text" id="bookSearchInput" class="search-input" placeholder="Search books by name...">
-          </div>
-
-          <button id="refreshBooksBtn" class="btn-secondary" title="Query SD card for books">
-            <svg id="refreshBooksIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="23 4 23 10 17 10"></polyline>
-              <polyline points="1 20 1 14 7 14"></polyline>
-              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-            </svg>
-            <span>Refresh Books</span>
-          </button>
-
-          <button id="refreshStatusBtn" class="btn-secondary" title="Read Battery & Storage">
-            <svg id="refreshStatusIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path>
-            </svg>
-            <span>Refresh Status</span>
-          </button>
-        </div>
-
-        <!-- Book List Container -->
-        <div id="booksList" class="books-list">
-          <div class="empty-state">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
-              <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
-            </svg>
-            <p>Connect your BacaIn to view and manage books.</p>
-          </div>
-        </div>
-      </section>
-    </div>
-
-    <!-- TAB PANEL 2: Device Controls (BLE) -->
-    <div id="tabPanelControls" class="tab-panel" role="tabpanel" aria-labelledby="tabBtnControls">
-      <!-- Dashboard Status Grid -->
+      <!-- 1. Dashboard Status Grid -->
       <section class="dashboard-grid">
         <!-- Device Status Card -->
         <div class="card">
@@ -260,7 +107,7 @@
           </div>
         </div>
 
-        <!-- Storage Status Card -->
+        <!-- Storage Status Card (Flash & MicroSD) -->
         <div class="card">
           <div class="card-header">
             <span class="card-title">
@@ -270,7 +117,7 @@
                 <line x1="6" y1="6" x2="6.01" y2="6"></line>
                 <line x1="6" y1="18" x2="6.01" y2="18"></line>
               </svg>
-              MicroSD Storage
+              <span id="storageTitleText">Storage</span>
             </span>
             <span id="storageBadge" class="card-badge badge-muted">—</span>
           </div>
@@ -285,113 +132,277 @@
         </div>
       </section>
 
-      <!-- Extended Device Telemetry & Quick Action Controls -->
-      <section class="card device-controls-card">
-        <div class="card-header">
-          <span class="card-title">
+      <!-- 2. Remote Books Management Section -->
+      <section class="books-section">
+        <div class="section-title">
+          <div class="section-title-left">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="3"></circle>
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+              <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
             </svg>
-            BLE Device Operations & Telemetry
-          </span>
-          <span class="card-badge badge-muted">ESP-IDF NimBLE</span>
+            <h2>Books</h2>
+            <span id="booksCountBadge" class="card-badge badge-muted">0 books</span>
+          </div>
         </div>
 
-        <div class="device-actions-grid">
-          <button id="tab2RefreshStatusBtn" class="btn-secondary">
+        <!-- Controls: Search & Refresh -->
+        <div class="books-controls">
+          <div class="search-input-wrapper">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path>
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
             </svg>
-            Refresh Battery & Storage (0xfe63)
-          </button>
+            <input type="text" id="bookSearchInput" class="search-input" placeholder="Search books by name...">
+          </div>
 
-          <button id="tab2RefreshBooksBtn" class="btn-secondary">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <button id="refreshBooksBtn" class="btn-secondary" title="Query storage for books">
+            <svg id="refreshBooksIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <polyline points="23 4 23 10 17 10"></polyline>
               <polyline points="1 20 1 14 7 14"></polyline>
               <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
             </svg>
-            Refresh Books Catalog (0xfe61)
+            <span>Refresh Books</span>
+          </button>
+
+          <button id="refreshStatusBtn" class="btn-secondary" title="Read Battery & Storage">
+            <svg id="refreshStatusIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path>
+            </svg>
+            <span>Refresh Status</span>
           </button>
         </div>
 
-        <!-- Live Hardware & Reader Controls -->
-        <div class="control-groups">
-          <!-- Storage Destination Selector -->
-          <div class="control-card">
-            <div class="control-card-title">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;">
-                <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
-                <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
-              </svg>
-              Storage Target Destination
-            </div>
-            <div class="control-btn-group">
-              <button id="storageTargetSdBtn" class="btn-control active" data-target="0">
-                <span>📁 MicroSD (/sdcard)</span>
-              </button>
-              <button id="storageTargetFlashBtn" class="btn-control" data-target="1">
-                <span>⚡ Internal Flash (/spiflash 5.8MB)</span>
-              </button>
-            </div>
-            <div id="storageTargetDesc" class="control-hint">Books and reading progress are synced to MicroSD card.</div>
+        <!-- Book List Container -->
+        <div id="booksList" class="books-list">
+          <div class="empty-state">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+              <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+            </svg>
+            <p>Connect your BacaIn to view and manage books.</p>
           </div>
+        </div>
+      </section>
 
-          <!-- Typography / Font Selection -->
-          <div class="control-card">
-            <div class="control-card-title">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;">
-                <polyline points="4 7 4 4 20 4 20 7"></polyline>
-                <line x1="9" y1="20" x2="15" y2="20"></line>
-                <line x1="12" y1="4" x2="12" y2="20"></line>
-              </svg>
-              E-Paper Typography & Display
-            </div>
-            <div class="control-btn-group">
-              <button id="font16Btn" class="btn-control active" data-font="0">
-                <span>Font 16 (Standard - 8 lines)</span>
-              </button>
-              <button id="font12Btn" class="btn-control" data-font="1">
-                <span>Font 12 (Compact - 11 lines)</span>
-              </button>
-              <button id="forceRefreshBtn" class="btn-control-secondary">
-                <span>🔄 Clean Screen (Clear Ghosting)</span>
-              </button>
-            </div>
-          </div>
-
-          <!-- Power Management -->
-          <div class="control-card">
-            <div class="control-card-title">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;">
-                <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
-                <line x1="12" y1="2" x2="12" y2="12"></line>
-              </svg>
-              Power & Inactivity Sleep
-            </div>
-            <div class="control-inline-row">
-              <label for="sleepTimeoutSelect" class="control-label">Auto-Sleep Timeout:</label>
-              <select id="sleepTimeoutSelect" class="control-select">
-                <option value="30">30 seconds</option>
-                <option value="60" selected>60 seconds (Default)</option>
-                <option value="120">2 minutes</option>
-                <option value="300">5 minutes</option>
-                <option value="0">Disabled (Stay Awake)</option>
-              </select>
-            </div>
-            <div class="control-actions-row">
-              <button id="triggerSleepBtn" class="btn-danger-outline">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;">
-                  <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
-                  <line x1="12" y1="2" x2="12" y2="12"></line>
-                </svg>
-                Put BacaIn to Sleep Now
-              </button>
-            </div>
+      <!-- 3. Upload Section -->
+      <section class="upload-section">
+        <div class="section-title">
+          <div class="section-title-left">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="17 8 12 3 7 8"></polyline>
+              <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+            <h2>Upload Book</h2>
           </div>
         </div>
 
+        <!-- Drag & Drop Zone -->
+        <div id="dropzone" class="dropzone" tabindex="0" role="button" aria-label="Drop files here or click to browse">
+          <svg class="dropzone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+            <line x1="12" y1="7" x2="12" y2="13"></line>
+            <polyline points="9 10 12 7 15 10"></polyline>
+          </svg>
+          <div class="dropzone-title">Drop .txt books here, or click to browse</div>
+          <div class="dropzone-hint">Supports UTF-8 Plain Text files (.txt) &bull; Up to 506 bytes/chunk</div>
+          <input type="file" id="fileInput" class="file-input" accept=".txt,text/plain" multiple>
+        </div>
+
+        <!-- Active Upload Card (shown while transmitting) -->
+        <div id="uploadActiveCard" class="upload-active-card">
+          <div class="upload-header">
+            <div id="uploadingFileName" class="upload-filename">uploading_book.txt</div>
+            <button id="cancelUploadBtn" class="btn-cancel-upload">Cancel Upload</button>
+          </div>
+
+          <div class="upload-progress-container">
+            <div id="uploadProgressFill" class="upload-progress-fill"></div>
+          </div>
+
+          <div class="upload-stats-grid">
+            <div class="upload-stat-item">
+              <div class="upload-stat-label">Progress</div>
+              <div id="uploadPctStat" class="upload-stat-val">0.0%</div>
+            </div>
+            <div class="upload-stat-item">
+              <div class="upload-stat-label">Transfer Speed</div>
+              <div id="uploadSpeedStat" class="upload-stat-val">0.0 KB/s</div>
+            </div>
+            <div class="upload-stat-item">
+              <div class="upload-stat-label">Sequence ID</div>
+              <div id="uploadSeqStat" class="upload-stat-val">#0 / 0</div>
+            </div>
+            <div class="upload-stat-item">
+              <div class="upload-stat-label">Estimated Time</div>
+              <div id="uploadEtaStat" class="upload-stat-val">—</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+  </div>
+
+  <!-- Settings Modal Dialog -->
+  <div id="settingsModal" class="modal-backdrop" aria-hidden="true">
+    <div class="modal-card" style="max-width: 640px; max-height: 88vh; display: flex; flex-direction: column; padding: 1.25rem;">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid var(--border-color);">
+        <h3 class="modal-title" style="margin-bottom: 0; display: flex; align-items: center; gap: 0.5rem;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 20px; height: 20px;">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+          Settings
+        </h3>
+        <button id="closeSettingsBtn" class="btn-icon" aria-label="Close Settings" title="Close Settings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+
+      <div class="modal-settings-body" style="overflow-y: auto; padding-right: 4px; display: flex; flex-direction: column; gap: 1rem;">
+
+        <!-- a. Appearance -->
+        <div class="control-card">
+          <div class="control-card-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;">
+              <circle cx="12" cy="12" r="5"></circle>
+              <line x1="12" y1="1" x2="12" y2="3"></line>
+              <line x1="12" y1="21" x2="12" y2="23"></line>
+              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+              <line x1="1" y1="12" x2="3" y2="12"></line>
+              <line x1="21" y1="12" x2="23" y2="12"></line>
+              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+            </svg>
+            Appearance
+          </div>
+          <div class="control-inline-row" style="justify-content: space-between;">
+            <span class="control-label">Interface Theme</span>
+            <button id="themeToggleBtn" class="btn-icon" aria-label="Toggle Theme" title="Toggle Dark/Light Mode">
+              <!-- Sun Icon (for dark mode) -->
+              <svg id="themeIconSun" class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="5"></circle>
+                <line x1="12" y1="1" x2="12" y2="3"></line>
+                <line x1="12" y1="21" x2="12" y2="23"></line>
+                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                <line x1="1" y1="12" x2="3" y2="12"></line>
+                <line x1="21" y1="12" x2="23" y2="12"></line>
+                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+              </svg>
+              <!-- Moon Icon (for light mode) -->
+              <svg id="themeIconMoon" class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- b. Storage Target Destination -->
+        <div class="control-card">
+          <div class="control-card-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;">
+              <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
+              <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
+              <line x1="6" y1="6" x2="6.01" y2="6"></line>
+              <line x1="6" y1="18" x2="6.01" y2="18"></line>
+            </svg>
+            Storage Target Destination
+          </div>
+          <div class="control-btn-group">
+            <button id="storageTargetFlashBtn" class="btn-control" data-target="1">
+              <span>⚡ Internal Flash (/spiflash)</span>
+            </button>
+            <button id="storageTargetSdBtn" class="btn-control active" data-target="0">
+              <span>📁 MicroSD (/sdcard)</span>
+            </button>
+          </div>
+          <div id="storageTargetDesc" class="control-hint">Books and reading progress are synced to MicroSD card.</div>
+        </div>
+
+        <!-- c. Display & Typography -->
+        <div class="control-card">
+          <div class="control-card-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;">
+              <polyline points="4 7 4 4 20 4 20 7"></polyline>
+              <line x1="9" y1="20" x2="15" y2="20"></line>
+              <line x1="12" y1="4" x2="12" y2="20"></line>
+            </svg>
+            Display & Typography
+          </div>
+          <div class="control-btn-group">
+            <button id="font16Btn" class="btn-control active" data-font="0">
+              <span>Font 16 (Standard - 8 lines)</span>
+            </button>
+            <button id="font12Btn" class="btn-control" data-font="1">
+              <span>Font 12 (Compact - 11 lines)</span>
+            </button>
+            <button id="forceRefreshBtn" class="btn-control-secondary">
+              <span>🔄 Clean Screen (Clear Ghosting)</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- d. Power Management -->
+        <div class="control-card">
+          <div class="control-card-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;">
+              <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
+              <line x1="12" y1="2" x2="12" y2="12"></line>
+            </svg>
+            Power Management
+          </div>
+          <div class="control-inline-row">
+            <label for="sleepTimeoutSelect" class="control-label">Auto-Sleep Timeout:</label>
+            <select id="sleepTimeoutSelect" class="control-select">
+              <option value="30">30 seconds</option>
+              <option value="60" selected>60 seconds (Default)</option>
+              <option value="120">2 minutes</option>
+              <option value="300">5 minutes</option>
+              <option value="0">Disabled (Stay Awake)</option>
+            </select>
+          </div>
+          <div class="control-actions-row" style="margin-top: 0.5rem;">
+            <button id="triggerSleepBtn" class="btn-danger-outline">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;">
+                <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
+                <line x1="12" y1="2" x2="12" y2="12"></line>
+              </svg>
+              <span>Put BacaIn to Sleep</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- e. Firmware Flasher -->
+        <div class="control-card">
+          <div class="control-card-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;">
+              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path>
+            </svg>
+            Firmware Flasher
+          </div>
+          <p class="control-hint">Flash firmware binaries via Web Serial over USB connection directly to ESP32-S3.</p>
+          <div>
+            <a href="flasher.html" class="btn-secondary" style="display:inline-flex;align-items:center;gap:0.5rem;text-decoration:none;padding:0.55rem 0.9rem;border-radius:var(--radius-sm);font-size:0.85rem;font-weight:600;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;">
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                <polyline points="15 3 21 3 21 9"></polyline>
+                <line x1="10" y1="14" x2="21" y2="3"></line>
+              </svg>
+              <span>Open USB Firmware Flasher</span>
+            </a>
+          </div>
+        </div>
+
+        <!-- f. BLE Protocol Specs -->
         <div class="telemetry-specs">
           <div class="spec-row">
             <span class="spec-label">Service UUID</span>
@@ -410,43 +421,38 @@
             <span class="spec-value mono">0000fe63 (Read / Notify - 12B payload)</span>
           </div>
           <div class="spec-row">
-            <span class="spec-label">Chunk Payload / MTU</span>
+            <span class="spec-label">Chunk Payload</span>
             <span class="spec-value mono">506B Data + 2B Seq = 508B (512B MTU)</span>
           </div>
           <div class="spec-row">
             <span class="spec-label">Target Directory</span>
-            <span class="spec-value mono">/sdcard/books/</span>
+            <span class="spec-value mono">/spiflash/books/ atau /sdcard/books/</span>
           </div>
         </div>
-      </section>
-    </div>
 
-    <!-- TAB PANEL 3: Firmware Flasher (Web Serial) -->
-    <div id="tabPanelFlasher" class="tab-panel" role="tabpanel" aria-labelledby="tabBtnFlasher">
-      <esp-web-flasher id="espFlasher"></esp-web-flasher>
-    </div>
+        <!-- g. Activity Log Console -->
+        <section id="logSection" class="log-section" style="margin-top: 0.5rem;">
+          <div id="logHeader" class="log-header">
+            <div class="log-header-left">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="4 17 10 11 4 5"></polyline>
+                <line x1="12" y1="19" x2="20" y2="19"></line>
+              </svg>
+              <span>Activity Log</span>
+              <span id="logCountBadge" class="log-badge">0</span>
+            </div>
+            <div class="log-actions">
+              <button id="clearLogBtn" class="btn-clear-log" title="Clear log">Clear</button>
+              <span id="logToggleIcon">&#x25BC;</span>
+            </div>
+          </div>
+          <div id="logBody" class="log-body">
+            <!-- Log entries appear here -->
+          </div>
+        </section>
 
-    <!-- Activity Log Console (Always visible across all tabs) -->
-    <section class="log-section">
-      <div id="logHeader" class="log-header">
-        <div class="log-header-left">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="4 17 10 11 4 5"></polyline>
-            <line x1="12" y1="19" x2="20" y2="19"></line>
-          </svg>
-          <span>Activity Log</span>
-          <span id="logCountBadge" class="log-badge">0</span>
-        </div>
-        <div class="log-actions">
-          <button id="clearLogBtn" class="btn-clear-log" title="Clear log">Clear</button>
-          <span id="logToggleIcon">&#x25BC;</span>
-        </div>
       </div>
-      <div id="logBody" class="log-body">
-        <!-- Log entries appear here -->
-      </div>
-    </section>
-
+    </div>
   </div>
 
   <!-- Delete Book Confirmation Modal -->
@@ -467,45 +473,45 @@
   <!-- PWA Main Logic -->
   <script src="app.js"></script>
 
-  <!-- ESP Web Flasher Web Component Module -->
-  <script type="module" src="components/esp-flasher.js"></script>
-
-  <!-- Navigation Tabs Controller -->
+  <!-- Settings Modal Dialog Controller -->
   <script>
     document.addEventListener('DOMContentLoaded', () => {
-      const tabButtons = document.querySelectorAll('.nav-tab');
-      const tabPanels = document.querySelectorAll('.tab-panel');
+      const settingsModal = document.getElementById('settingsModal');
+      const settingsBtn = document.getElementById('settingsBtn');
+      const closeSettingsBtn = document.getElementById('closeSettingsBtn');
 
-      tabButtons.forEach(btn => {
-        btn.addEventListener('click', () => {
-          const targetId = btn.getAttribute('data-tab');
-          tabButtons.forEach(b => {
-            b.classList.remove('active');
-            b.setAttribute('aria-selected', 'false');
-          });
-          tabPanels.forEach(p => p.classList.remove('active'));
+      function openSettings() {
+        if (settingsModal) {
+          settingsModal.classList.add('active');
+          settingsModal.setAttribute('aria-hidden', 'false');
+        }
+      }
 
-          btn.classList.add('active');
-          btn.setAttribute('aria-selected', 'true');
-          const activePanel = document.getElementById(targetId);
-          if (activePanel) {
-            activePanel.classList.add('active');
+      function closeSettings() {
+        if (settingsModal) {
+          settingsModal.classList.remove('active');
+          settingsModal.setAttribute('aria-hidden', 'true');
+        }
+      }
+
+      if (settingsBtn) {
+        settingsBtn.addEventListener('click', openSettings);
+      }
+      if (closeSettingsBtn) {
+        closeSettingsBtn.addEventListener('click', closeSettings);
+      }
+      if (settingsModal) {
+        settingsModal.addEventListener('click', (e) => {
+          if (e.target === settingsModal) {
+            closeSettings();
           }
         });
+      }
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && settingsModal && settingsModal.classList.contains('active')) {
+          closeSettings();
+        }
       });
-
-      // Connect Tab 2 action triggers to BLE app.js buttons
-      const tab2RefreshStatus = document.getElementById('tab2RefreshStatusBtn');
-      const tab2RefreshBooks = document.getElementById('tab2RefreshBooksBtn');
-      const refreshStatusBtn = document.getElementById('refreshStatusBtn');
-      const refreshBooksBtn = document.getElementById('refreshBooksBtn');
-
-      if (tab2RefreshStatus && refreshStatusBtn) {
-        tab2RefreshStatus.addEventListener('click', () => refreshStatusBtn.click());
-      }
-      if (tab2RefreshBooks && refreshBooksBtn) {
-        tab2RefreshBooks.addEventListener('click', () => refreshBooksBtn.click());
-      }
     });
   </script>
 </body>

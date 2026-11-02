@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>BacaIn USB Flasher</title>
+  <meta name="description" content="Web Serial ESP32-S3 Firmware Flasher for BacaIn E-Reader">
+  <meta name="theme-color" content="#2563eb">
+  <link rel="icon" type="image/svg+xml" href="icon.svg">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="style.css">
+  <script>
+    const savedTheme = localStorage.getItem('ereader_pwa_theme');
+    if (savedTheme) {
+      document.documentElement.setAttribute('data-theme', savedTheme);
+    }
+  </script>
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header Section -->
+    <header class="app-header">
+      <div class="brand-section">
+        <img src="icon.svg" alt="BacaIn Logo" class="brand-logo">
+        <div class="brand-text">
+          <h1>BacaIn <span class="brand-badge">Flasher</span></h1>
+          <p>ESP32-S3 Web Serial Firmware Flashing Tool</p>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <a href="index.html" class="btn-secondary" style="display:inline-flex;align-items:center;gap:0.5rem;text-decoration:none;padding:0.6rem 1rem;font-size:0.9rem;font-weight:600;border-radius:var(--radius-md);">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;">
+            <line x1="19" y1="12" x2="5" y2="12"></line>
+            <polyline points="12 19 5 12 12 5"></polyline>
+          </svg>
+          <span>Back to Reader Manager</span>
+        </a>
+      </div>
+    </header>
+
+    <!-- Main Flasher Content -->
+    <main>
+      <esp-web-flasher id="espFlasher"></esp-web-flasher>
+    </main>
+  </div>
+
+  <!-- ESP Web Flasher Web Component Module -->
+  <script type="module" src="components/esp-flasher.js"></script>
+</body>
+</html>

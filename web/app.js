@@ -81,6 +81,7 @@ const el = {
   chargingBadge: document.getElementById('chargingBadge'),
   batteryMeterFill: document.getElementById('batteryMeterFill'),
 
+  storageTitleText: document.getElementById('storageTitleText'),
   storageFreeText: document.getElementById('storageFreeText'),
   storageUsedText: document.getElementById('storageUsedText'),
   storageTotalText: document.getElementById('storageTotalText'),
@@ -108,7 +109,11 @@ const el = {
   refreshStatusIcon: document.getElementById('refreshStatusIcon'),
   booksList: document.getElementById('booksList'),
 
-  // Modal
+  // Modals
+  settingsModal: document.getElementById('settingsModal'),
+  settingsBtn: document.getElementById('settingsBtn'),
+  closeSettingsBtn: document.getElementById('closeSettingsBtn'),
+
   deleteModal: document.getElementById('deleteModal'),
   deleteModalText: document.getElementById('deleteModalText'),
   cancelDeleteBtn: document.getElementById('cancelDeleteBtn'),
@@ -123,7 +128,7 @@ const el = {
 
   toastContainer: document.getElementById('toastContainer'),
 
-  // On-the-Fly Live Controls
+  // Settings & Hardware Controls
   storageTargetSdBtn: document.getElementById('storageTargetSdBtn'),
   storageTargetFlashBtn: document.getElementById('storageTargetFlashBtn'),
   storageTargetDesc: document.getElementById('storageTargetDesc'),
@@ -208,28 +213,35 @@ function sleep(ms) {
 // Theme Toggle & Persistence
 // ============================================================================
 function initTheme() {
-  const savedTheme = localStorage.getItem('ereader_pwa_theme');
+  const savedTheme = localStorage.getItem('bacain_theme') || localStorage.getItem('ereader_pwa_theme');
   const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
   const theme = savedTheme || (prefersDark ? 'dark' : 'light');
   setTheme(theme);
 
-  el.themeToggleBtn.addEventListener('click', () => {
-    const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
-    const nextTheme = currentTheme === 'dark' ? 'light' : 'dark';
-    setTheme(nextTheme);
-  });
+  if (el.themeToggleBtn) {
+    el.themeToggleBtn.addEventListener('click', () => {
+      const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+      const nextTheme = currentTheme === 'dark' ? 'light' : 'dark';
+      setTheme(nextTheme);
+    });
+  }
 }
 
 function setTheme(theme) {
   document.documentElement.setAttribute('data-theme', theme);
-  localStorage.setItem('ereader_pwa_theme', theme);
+  try {
+    localStorage.setItem('bacain_theme', theme);
+    localStorage.setItem('ereader_pwa_theme', theme);
+  } catch (_) {}
 
-  if (theme === 'dark') {
-    el.themeIconSun.style.display = 'block';
-    el.themeIconMoon.style.display = 'none';
-  } else {
-    el.themeIconSun.style.display = 'none';
-    el.themeIconMoon.style.display = 'block';
+  if (el.themeIconSun && el.themeIconMoon) {
+    if (theme === 'dark') {
+      el.themeIconSun.style.display = 'block';
+      el.themeIconMoon.style.display = 'none';
+    } else {
+      el.themeIconSun.style.display = 'none';
+      el.themeIconMoon.style.display = 'block';
+    }
   }
 }
 
@@ -383,19 +395,23 @@ function updateConnectionUI(state) {
     el.refreshStatusBtn.disabled = true;
 
     // Reset status indicators to placeholder
-    el.batteryPctText.textContent = '—%';
-    el.batteryVoltageText.textContent = '— V';
-    el.batteryStatusDesc.textContent = 'Not connected';
-    el.chargingBadge.className = 'card-badge badge-muted';
-    el.chargingBadge.textContent = '—';
-    el.batteryMeterFill.style.width = '0%';
+    if (el.batteryPctText) el.batteryPctText.textContent = '—%';
+    if (el.batteryVoltageText) el.batteryVoltageText.textContent = '— V';
+    if (el.batteryStatusDesc) el.batteryStatusDesc.textContent = 'Not connected';
+    if (el.chargingBadge) {
+      el.chargingBadge.className = 'card-badge badge-muted';
+      el.chargingBadge.textContent = '—';
+    }
+    if (el.batteryMeterFill) el.batteryMeterFill.style.width = '0%';
 
-    el.storageFreeText.textContent = '—';
-    el.storageUsedText.textContent = 'Used: —';
-    el.storageTotalText.textContent = 'Total: —';
-    el.storageBadge.className = 'card-badge badge-muted';
-    el.storageBadge.textContent = '—';
-    el.storageMeterFill.style.width = '0%';
+    if (el.storageFreeText) el.storageFreeText.textContent = '—';
+    if (el.storageUsedText) el.storageUsedText.textContent = 'Used: —';
+    if (el.storageTotalText) el.storageTotalText.textContent = 'Total: —';
+    if (el.storageBadge) {
+      el.storageBadge.className = 'card-badge badge-muted';
+      el.storageBadge.textContent = currentStorageTarget === 0 ? 'MicroSD' : 'Internal Flash';
+    }
+    if (el.storageMeterFill) el.storageMeterFill.style.width = '0%';
 
     remoteBooks = [];
     renderBooksList();
@@ -408,13 +424,15 @@ function updateConnectionUI(state) {
 async function readDeviceStatus() {
   if (!statusChar) return;
   try {
-    el.refreshStatusIcon.classList.add('spin');
+    if (el.refreshStatusIcon) el.refreshStatusIcon.classList.add('spin');
     const val = await statusChar.readValue();
     parseStatusValue(val);
   } catch (err) {
     log(`Failed to read status: ${err.message}`, 'error');
   } finally {
-    setTimeout(() => el.refreshStatusIcon.classList.remove('spin'), 500);
+    if (el.refreshStatusIcon) {
+      setTimeout(() => el.refreshStatusIcon.classList.remove('spin'), 500);
+    }
   }
 }
 
@@ -441,40 +459,48 @@ function parseStatusValue(dataView) {
   const totalKb = dataView.getUint32(8, true);
 
   // Update Battery UI
-  el.batteryPctText.textContent = `${batteryPct}%`;
-  el.batteryVoltageText.textContent = `${(batteryMv / 1000).toFixed(2)} V`;
-  el.batteryMeterFill.style.width = `${Math.min(100, Math.max(0, batteryPct))}%`;
+  if (el.batteryPctText) el.batteryPctText.textContent = `${batteryPct}%`;
+  if (el.batteryVoltageText) el.batteryVoltageText.textContent = `${(batteryMv / 1000).toFixed(2)} V`;
+  if (el.batteryMeterFill) {
+    el.batteryMeterFill.style.width = `${Math.min(100, Math.max(0, batteryPct))}%`;
 
-  if (batteryPct > 50) {
-    el.batteryMeterFill.style.backgroundColor = 'var(--success-color)';
-  } else if (batteryPct > 20) {
-    el.batteryMeterFill.style.backgroundColor = 'var(--warning-color)';
-  } else {
-    el.batteryMeterFill.style.backgroundColor = 'var(--danger-color)';
+    if (batteryPct > 50) {
+      el.batteryMeterFill.style.backgroundColor = 'var(--success-color)';
+    } else if (batteryPct > 20) {
+      el.batteryMeterFill.style.backgroundColor = 'var(--warning-color)';
+    } else {
+      el.batteryMeterFill.style.backgroundColor = 'var(--danger-color)';
+    }
   }
 
-  if (isCharging) {
-    el.chargingBadge.className = 'card-badge badge-charging';
-    el.chargingBadge.innerHTML = '⚡ Charging';
-    el.batteryStatusDesc.textContent = 'Charging via USB';
-  } else {
-    el.chargingBadge.className = 'card-badge badge-muted';
-    el.chargingBadge.textContent = 'On Battery';
-    el.batteryStatusDesc.textContent = 'Operating on battery';
+  if (el.chargingBadge) {
+    if (isCharging) {
+      el.chargingBadge.className = 'card-badge badge-charging';
+      el.chargingBadge.innerHTML = '⚡ Charging';
+      if (el.batteryStatusDesc) el.batteryStatusDesc.textContent = 'Charging via USB';
+    } else {
+      el.chargingBadge.className = 'card-badge badge-muted';
+      el.chargingBadge.textContent = 'On Battery';
+      if (el.batteryStatusDesc) el.batteryStatusDesc.textContent = 'Operating on battery';
+    }
   }
 
   // Update Storage UI
   const usedKb = totalKb > freeKb ? totalKb - freeKb : 0;
   const usedPct = totalKb > 0 ? ((usedKb / totalKb) * 100).toFixed(1) : 0;
 
-  el.storageFreeText.textContent = `${formatKb(freeKb)} free`;
-  el.storageUsedText.textContent = `Used: ${formatKb(usedKb)} (${usedPct}%)`;
-  el.storageTotalText.textContent = `Total: ${formatKb(totalKb)}`;
-  el.storageBadge.className = 'card-badge badge-muted';
-  el.storageBadge.textContent = `${usedPct}% used`;
-  el.storageMeterFill.style.width = `${Math.min(100, Math.max(0, usedPct))}%`;
+  if (el.storageFreeText) el.storageFreeText.textContent = `${formatKb(freeKb)} free`;
+  if (el.storageUsedText) el.storageUsedText.textContent = `Used: ${formatKb(usedKb)} (${usedPct}%)`;
+  if (el.storageTotalText) el.storageTotalText.textContent = `Total: ${formatKb(totalKb)}`;
+  if (el.storageBadge) {
+    el.storageBadge.className = 'card-badge badge-muted';
+    el.storageBadge.textContent = `${usedPct}% used`;
+  }
+  if (el.storageMeterFill) {
+    el.storageMeterFill.style.width = `${Math.min(100, Math.max(0, usedPct))}%`;
+  }
 
-  log(`Status Update: Battery ${batteryPct}% (${(batteryMv/1000).toFixed(2)}V), Storage Free: ${formatKb(freeKb)} / ${formatKb(totalKb)}`, 'info');
+  log(`Status Update: Battery ${batteryPct}% (${(batteryMv/1000).toFixed(2)}V), Storage Free: ${formatKb(freeKb)} / ${formatKb(totalKb)} (${usedPct}% used)`, 'info');
 }
 
 // ============================================================================
@@ -597,11 +623,31 @@ function finalizeBookList() {
   renderBooksList();
 }
 
+function getBookReadingProgress(filename) {
+  try {
+    const saved = localStorage.getItem(`bacain_progress_${filename}`);
+    if (saved !== null) {
+      const num = parseInt(saved, 10);
+      if (!isNaN(num) && num >= 0 && num <= 100) return num;
+    }
+  } catch (_) {}
+  return 0;
+}
+
+function setBookReadingProgress(filename, progressPct) {
+  try {
+    localStorage.setItem(`bacain_progress_${filename}`, String(Math.round(progressPct)));
+  } catch (_) {}
+}
+
 function renderBooksList() {
-  const searchTerm = el.bookSearchInput.value.trim().toLowerCase();
+  const searchTerm = el.bookSearchInput ? el.bookSearchInput.value.trim().toLowerCase() : '';
   const filtered = remoteBooks.filter(b => b.name.toLowerCase().includes(searchTerm));
 
-  el.booksCountBadge.textContent = `${remoteBooks.length} ${remoteBooks.length === 1 ? 'book' : 'books'}`;
+  if (el.booksCountBadge) {
+    el.booksCountBadge.textContent = `${remoteBooks.length} ${remoteBooks.length === 1 ? 'book' : 'books'}`;
+  }
+  if (!el.booksList) return;
   el.booksList.innerHTML = '';
 
   if (!isConnected) {
@@ -629,6 +675,8 @@ function renderBooksList() {
   }
 
   filtered.forEach(book => {
+    const progress = book.progress !== undefined ? book.progress : getBookReadingProgress(book.name);
+
     const item = document.createElement('div');
     item.className = 'book-item';
 
@@ -647,22 +695,46 @@ function renderBooksList() {
     meta.className = 'book-meta';
 
     const name = document.createElement('div');
-    name.className = 'book-name';
+    name.className = 'book-name book-title';
     name.textContent = book.name;
     name.title = book.name;
 
-    const size = document.createElement('div');
+    const details = document.createElement('div');
+    details.className = 'book-details';
+    details.style.display = 'flex';
+    details.style.alignItems = 'center';
+    details.style.gap = '0.75rem';
+    details.style.marginTop = '0.2rem';
+
+    const size = document.createElement('span');
     size.className = 'book-size';
     size.textContent = formatBytes(book.size);
 
+    const separator = document.createElement('span');
+    separator.style.color = 'var(--text-muted)';
+    separator.style.fontSize = '0.75rem';
+    separator.textContent = '•';
+
+    const progressEl = document.createElement('span');
+    progressEl.className = 'book-progress';
+    progressEl.style.fontSize = '0.78rem';
+    progressEl.style.color = progress > 0 ? 'var(--accent-color)' : 'var(--text-muted)';
+    progressEl.style.fontFamily = 'var(--font-mono)';
+    progressEl.textContent = `${progress}% read`;
+
+    details.appendChild(size);
+    details.appendChild(separator);
+    details.appendChild(progressEl);
+
     meta.appendChild(name);
-    meta.appendChild(size);
+    meta.appendChild(details);
     info.appendChild(icon);
     info.appendChild(meta);
 
     const deleteBtn = document.createElement('button');
     deleteBtn.className = 'btn-delete-book';
     deleteBtn.title = `Delete ${book.name}`;
+    deleteBtn.setAttribute('aria-label', `Delete ${book.name}`);
     deleteBtn.innerHTML = `
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <polyline points="3 6 5 6 21 6"></polyline>
@@ -682,16 +754,40 @@ function renderBooksList() {
   });
 }
 
+// Settings Modal Dialog Helpers
+function openSettingsModal() {
+  if (el.settingsModal) {
+    el.settingsModal.classList.add('active');
+    el.settingsModal.setAttribute('aria-hidden', 'false');
+  }
+}
+
+function closeSettingsModal() {
+  if (el.settingsModal) {
+    el.settingsModal.classList.remove('active');
+    el.settingsModal.setAttribute('aria-hidden', 'true');
+  }
+}
+
 // Delete Book Dialog
 function openDeleteModal(book) {
   bookPendingDelete = book;
-  el.deleteModalText.textContent = `Are you sure you want to delete "${book.name}" (${formatBytes(book.size)}) from the active storage? This cannot be undone.`;
-  el.deleteModal.classList.add('active');
+  if (el.deleteModalText) {
+    const storageName = currentStorageTarget === 0 ? 'MicroSD card' : 'Internal Flash';
+    el.deleteModalText.textContent = `Are you sure you want to delete "${book.name}" (${formatBytes(book.size)}) from ${storageName}? This cannot be undone.`;
+  }
+  if (el.deleteModal) {
+    el.deleteModal.classList.add('active');
+    el.deleteModal.setAttribute('aria-hidden', 'false');
+  }
 }
 
 function closeDeleteModal() {
   bookPendingDelete = null;
-  el.deleteModal.classList.remove('active');
+  if (el.deleteModal) {
+    el.deleteModal.classList.remove('active');
+    el.deleteModal.setAttribute('aria-hidden', 'true');
+  }
 }
 
 async function confirmDeleteBook() {
@@ -721,6 +817,9 @@ async function confirmDeleteBook() {
     if (status === 0) {
       log(`Deleted "${book.name}" successfully.`, 'success');
       showToast(`Deleted "${book.name}"`, 'success');
+      try {
+        localStorage.removeItem(`bacain_progress_${book.name}`);
+      } catch (_) {}
       // Refresh list & status
       await queryBooksList();
       await readDeviceStatus();
@@ -933,9 +1032,9 @@ function registerServiceWorker() {
 }
 
 // ============================================================================
-// Live Hardware Controls Logic (Phase 3)
+// Live Hardware Controls Logic (Storage, Typography, Refresh, Power)
 // ============================================================================
-let currentStorageTarget = 1; // 0: SD, 1: Flash
+let currentStorageTarget = 0; // 0: MicroSD (/sdcard), 1: Internal Flash (/spiflash)
 let currentFontSize = 0; // 0: Font16, 1: Font12
 
 function updateStorageTargetUI(target) {
@@ -944,12 +1043,40 @@ function updateStorageTargetUI(target) {
     el.storageTargetSdBtn.classList.toggle('active', target === 0);
     el.storageTargetFlashBtn.classList.toggle('active', target === 1);
   }
+  if (el.storageTitleText) {
+    el.storageTitleText.textContent = target === 0 ? 'MicroSD Storage' : 'Internal Flash';
+  }
   if (el.storageTargetDesc) {
     el.storageTargetDesc.textContent = target === 0
       ? 'Books and reading progress are synced to MicroSD card (/sdcard).'
-      : 'Books and reading progress are synced to Internal Flash (/spiflash 5.8MB).';
+      : 'Books and reading progress are synced to Internal Flash (/spiflash).';
+  }
+  if (el.storageBadge && !isConnected) {
+    el.storageBadge.textContent = target === 0 ? 'MicroSD' : 'Internal Flash';
+    el.storageBadge.className = 'card-badge badge-muted';
   }
 }
+
+async function setStorageTarget(target) {
+  updateStorageTargetUI(target);
+  if (!isConnected || !controlChar) {
+    showToast('Connect BacaIn first to switch storage on device', 'warning');
+    return;
+  }
+  try {
+    const targetName = target === 0 ? 'MicroSD Storage' : 'Internal Flash';
+    log(`Setting storage target to ${targetName} (OpCode 0x06)...`, 'info');
+    const packet = new Uint8Array([OPCODES.SET_STORAGE_TARGET, target]);
+    await controlChar.writeValueWithResponse(packet);
+    showToast(`Active storage: ${targetName}`, 'success');
+    await readDeviceStatus();
+    await queryBooksList();
+  } catch (err) {
+    log(`Failed to set storage target: ${err.message}`, 'error');
+    showToast('Failed to switch storage target', 'error');
+  }
+}
+const sendSetStorageTarget = setStorageTarget;
 
 function updateFontUI(fontId) {
   currentFontSize = fontId;
@@ -959,32 +1086,13 @@ function updateFontUI(fontId) {
   }
 }
 
-async function sendSetStorageTarget(target) {
+async function setFont(fontId) {
   if (!isConnected || !controlChar) {
     showToast('Connect BacaIn first', 'warning');
     return;
   }
   try {
-    log(`Setting storage target to ${target === 0 ? 'MicroSD (/sdcard)' : 'Internal Flash (/spiflash)'}...`, 'info');
-    const packet = new Uint8Array([OPCODES.SET_STORAGE_TARGET, target]);
-    await controlChar.writeValueWithResponse(packet);
-    updateStorageTargetUI(target);
-    showToast(`Active storage: ${target === 0 ? 'MicroSD (/sdcard)' : 'Internal Flash (/spiflash)'}`, 'success');
-    await readDeviceStatus();
-    await queryBooksList();
-  } catch (err) {
-    log(`Failed to set storage target: ${err.message}`, 'error');
-    showToast('Failed to switch storage target', 'error');
-  }
-}
-
-async function sendSetFont(fontId) {
-  if (!isConnected || !controlChar) {
-    showToast('Connect BacaIn first', 'warning');
-    return;
-  }
-  try {
-    log(`Setting display typography to Font${fontId === 0 ? '16' : '12'}...`, 'info');
+    log(`Setting display typography to Font${fontId === 0 ? '16' : '12'} (OpCode 0x10)...`, 'info');
     const packet = new Uint8Array([OPCODES.SET_FONT, fontId]);
     await controlChar.writeValueWithResponse(packet);
     updateFontUI(fontId);
@@ -994,14 +1102,15 @@ async function sendSetFont(fontId) {
     showToast('Failed to change typography', 'error');
   }
 }
+const sendSetFont = setFont;
 
-async function sendForceRefresh() {
+async function forceRefresh() {
   if (!isConnected || !controlChar) {
     showToast('Connect BacaIn first', 'warning');
     return;
   }
   try {
-    log('Sending screen clean / full refresh request...', 'info');
+    log('Sending screen clean / full refresh request (OpCode 0x12)...', 'info');
     const packet = new Uint8Array([OPCODES.FORCE_REFRESH]);
     await controlChar.writeValueWithResponse(packet);
     showToast('Display cleaned (ghosting cleared)', 'success');
@@ -1010,14 +1119,15 @@ async function sendForceRefresh() {
     showToast('Refresh request failed', 'error');
   }
 }
+const sendForceRefresh = forceRefresh;
 
-async function sendSetSleepTimeout(seconds) {
+async function setSleepTimeout(seconds) {
   if (!isConnected || !controlChar) {
     showToast('Connect BacaIn first', 'warning');
     return;
   }
   try {
-    log(`Setting inactivity sleep timeout to ${seconds}s...`, 'info');
+    log(`Setting inactivity sleep timeout to ${seconds}s (OpCode 0x13)...`, 'info');
     const packet = new Uint8Array([OPCODES.SET_SLEEP_TIMEOUT, seconds & 0xff, (seconds >> 8) & 0xff]);
     await controlChar.writeValueWithResponse(packet);
     showToast(`Inactivity timeout: ${seconds === 0 ? 'Disabled' : seconds + 's'}`, 'success');
@@ -1026,14 +1136,15 @@ async function sendSetSleepTimeout(seconds) {
     showToast('Failed to update timeout', 'error');
   }
 }
+const sendSetSleepTimeout = setSleepTimeout;
 
-async function sendTriggerSleep() {
+async function triggerSleep() {
   if (!isConnected || !controlChar) {
     showToast('Connect BacaIn first', 'warning');
     return;
   }
   try {
-    log('Triggering instant deep sleep on device...', 'warning');
+    log('Triggering instant deep sleep on device (OpCode 0x14)...', 'warning');
     const packet = new Uint8Array([OPCODES.TRIGGER_SLEEP]);
     await controlChar.writeValueWithResponse(packet);
     showToast('Device entering deep sleep. Disconnecting...', 'info');
@@ -1043,97 +1154,149 @@ async function sendTriggerSleep() {
     showToast('Failed to enter sleep', 'error');
   }
 }
+const sendTriggerSleep = triggerSleep;
 
 // ============================================================================
 // Event Listeners Initialization
 // ============================================================================
 function initEventListeners() {
   // BLE Connection Button
-  el.connectBtn.addEventListener('click', handleConnectToggle);
+  if (el.connectBtn) {
+    el.connectBtn.addEventListener('click', handleConnectToggle);
+  }
 
   // Status & Books Refresh Buttons
-  el.refreshStatusBtn.addEventListener('click', readDeviceStatus);
-  el.refreshBooksBtn.addEventListener('click', queryBooksList);
+  if (el.refreshStatusBtn) {
+    el.refreshStatusBtn.addEventListener('click', readDeviceStatus);
+  }
+  if (el.refreshBooksBtn) {
+    el.refreshBooksBtn.addEventListener('click', queryBooksList);
+  }
 
   // Search filter input
-  el.bookSearchInput.addEventListener('input', renderBooksList);
+  if (el.bookSearchInput) {
+    el.bookSearchInput.addEventListener('input', renderBooksList);
+  }
 
   // File Dropzone & Input
-  el.dropzone.addEventListener('click', () => el.fileInput.click());
-  el.fileInput.addEventListener('change', (e) => handleFilesSelected(e.target.files));
+  if (el.dropzone && el.fileInput) {
+    el.dropzone.addEventListener('click', () => el.fileInput.click());
+    el.fileInput.addEventListener('change', (e) => handleFilesSelected(e.target.files));
 
-  el.dropzone.addEventListener('dragover', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    el.dropzone.classList.add('dragover');
-  });
+    el.dropzone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      el.dropzone.classList.add('dragover');
+    });
 
-  el.dropzone.addEventListener('dragleave', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    el.dropzone.classList.remove('dragover');
-  });
+    el.dropzone.addEventListener('dragleave', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      el.dropzone.classList.remove('dragover');
+    });
 
-  el.dropzone.addEventListener('drop', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    el.dropzone.classList.remove('dragover');
-    if (e.dataTransfer && e.dataTransfer.files) {
-      handleFilesSelected(e.dataTransfer.files);
-    }
-  });
+    el.dropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      el.dropzone.classList.remove('dragover');
+      if (e.dataTransfer && e.dataTransfer.files) {
+        handleFilesSelected(e.dataTransfer.files);
+      }
+    });
+  }
 
   // Cancel Upload
-  el.cancelUploadBtn.addEventListener('click', () => {
-    if (isUploading) {
-      cancelUploadRequested = true;
-      log('User requested upload cancellation.', 'warning');
-      showToast('Cancelling upload...', 'warning');
-    }
-  });
+  if (el.cancelUploadBtn) {
+    el.cancelUploadBtn.addEventListener('click', () => {
+      if (isUploading) {
+        cancelUploadRequested = true;
+        log('User requested upload cancellation.', 'warning');
+        showToast('Cancelling upload...', 'warning');
+      }
+    });
+  }
+
+  // Settings Modal Dialog
+  if (el.settingsBtn) {
+    el.settingsBtn.addEventListener('click', openSettingsModal);
+  }
+  if (el.closeSettingsBtn) {
+    el.closeSettingsBtn.addEventListener('click', closeSettingsModal);
+  }
+  if (el.settingsModal) {
+    el.settingsModal.addEventListener('click', (e) => {
+      if (e.target === el.settingsModal) {
+        closeSettingsModal();
+      }
+    });
+  }
 
   // Delete Modal
-  el.cancelDeleteBtn.addEventListener('click', closeDeleteModal);
-  el.confirmDeleteBtn.addEventListener('click', confirmDeleteBook);
-  el.deleteModal.addEventListener('click', (e) => {
-    if (e.target === el.deleteModal) closeDeleteModal();
+  if (el.cancelDeleteBtn) {
+    el.cancelDeleteBtn.addEventListener('click', closeDeleteModal);
+  }
+  if (el.confirmDeleteBtn) {
+    el.confirmDeleteBtn.addEventListener('click', confirmDeleteBook);
+  }
+  if (el.deleteModal) {
+    el.deleteModal.addEventListener('click', (e) => {
+      if (e.target === el.deleteModal) closeDeleteModal();
+    });
+  }
+
+  // Keyboard shortcut (Escape to close modals)
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      if (el.settingsModal && el.settingsModal.classList.contains('active')) {
+        closeSettingsModal();
+      }
+      if (el.deleteModal && el.deleteModal.classList.contains('active')) {
+        closeDeleteModal();
+      }
+    }
   });
 
   // Log drawer
-  el.logHeader.addEventListener('click', (e) => {
-    if (e.target === el.clearLogBtn) return;
-    el.logBody.classList.toggle('collapsed');
-    el.logToggleIcon.textContent = el.logBody.classList.contains('collapsed') ? '\u25B6' : '\u25BC';
-  });
+  if (el.logHeader) {
+    el.logHeader.addEventListener('click', (e) => {
+      if (e.target === el.clearLogBtn) return;
+      el.logBody.classList.toggle('collapsed');
+      el.logToggleIcon.textContent = el.logBody.classList.contains('collapsed') ? '\u25B6' : '\u25BC';
+    });
+  }
 
-  el.clearLogBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    el.logBody.innerHTML = '';
-    logCount = 0;
-    el.logCountBadge.textContent = '0';
-  });
+  if (el.clearLogBtn) {
+    el.clearLogBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      el.logBody.innerHTML = '';
+      logCount = 0;
+      el.logCountBadge.textContent = '0';
+    });
+  }
 
-  // Tab 2 Live Control Listeners
+  // Storage Target Buttons
   if (el.storageTargetSdBtn) {
-    el.storageTargetSdBtn.addEventListener('click', () => sendSetStorageTarget(0));
+    el.storageTargetSdBtn.addEventListener('click', () => setStorageTarget(0));
   }
   if (el.storageTargetFlashBtn) {
-    el.storageTargetFlashBtn.addEventListener('click', () => sendSetStorageTarget(1));
+    el.storageTargetFlashBtn.addEventListener('click', () => setStorageTarget(1));
   }
+
+  // Settings Modal Hardware Control Listeners
   if (el.font16Btn) {
-    el.font16Btn.addEventListener('click', () => sendSetFont(0));
+    el.font16Btn.addEventListener('click', () => setFont(0));
   }
   if (el.font12Btn) {
-    el.font12Btn.addEventListener('click', () => sendSetFont(1));
+    el.font12Btn.addEventListener('click', () => setFont(1));
   }
   if (el.forceRefreshBtn) {
-    el.forceRefreshBtn.addEventListener('click', () => sendForceRefresh());
+    el.forceRefreshBtn.addEventListener('click', () => forceRefresh());
   }
   if (el.sleepTimeoutSelect) {
-    el.sleepTimeoutSelect.addEventListener('change', (e) => sendSetSleepTimeout(parseInt(e.target.value, 10)));
+    el.sleepTimeoutSelect.addEventListener('change', (e) => setSleepTimeout(parseInt(e.target.value, 10)));
   }
   if (el.triggerSleepBtn) {
-    el.triggerSleepBtn.addEventListener('click', () => sendTriggerSleep());
+    el.triggerSleepBtn.addEventListener('click', () => triggerSleep());
   }
 }
 
@@ -1144,7 +1307,7 @@ function init() {
   initTheme();
   checkBluetoothCompatibility();
   initEventListeners();
-  updateStorageTargetUI(1);
+  updateStorageTargetUI(0);
   registerServiceWorker();
   log('BacaIn Web Bluetooth PWA initialized.', 'info');
 }

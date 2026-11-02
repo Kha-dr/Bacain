@@ -1,7 +1,7 @@
 {
   "name": "BacaIn",
   "short_name": "BacaIn",
-  "description": "Web Bluetooth file manager and book synchronizer for ESP32-S3 BacaIn",
+  "description": "Web Bluetooth BacaIn library and device manager",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
