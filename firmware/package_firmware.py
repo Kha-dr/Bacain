@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-CatatIn Mini-E-Reader - Firmware Packaging Tool
+Mini-E-Reader - Firmware Packaging Tool
 Merges ESP32-S3 binaries (bootloader, partition-table, app) into a single factory binary,
-generates manifest.json metadata, and optionally copies artifacts to the PWA firmware directory.
+generates manifest.json metadata, and optionally copies artifacts to the web firmware directory.
 
 Zero-Mock & Zero-Silent-Fallback compliant (AGENTS.md).
 """
@@ -102,14 +102,18 @@ def main() -> int:
         help="Flash mode for merged image (default: 'keep')",
     )
     parser.add_argument(
+        "--web-dir",
         "--pwa-dir",
-        default="../pwa/firmware",
-        help="Path to PWA firmware directory for auto-copy (default: '../pwa/firmware')",
+        dest="web_dir",
+        default="../web/firmware",
+        help="Path to web firmware directory for auto-copy (default: '../web/firmware')",
     )
     parser.add_argument(
+        "--no-web-copy",
         "--no-pwa-copy",
+        dest="no_web_copy",
         action="store_true",
-        help="Disable automatic copying to PWA firmware directory",
+        help="Disable automatic copying to web firmware directory",
     )
 
     args = parser.parse_args()
@@ -300,17 +304,17 @@ def main() -> int:
         sys.stderr.write(f"[package_firmware] ERROR: Failed to write manifest: {e}\n")
         return 1
 
-    # Check and perform copy to PWA directory if present
-    pwa_dir = Path(args.pwa_dir)
-    if not pwa_dir.is_absolute():
-        candidate_pwa = (Path(__file__).parent / pwa_dir).resolve()
-        if candidate_pwa.is_dir():
-            pwa_dir = candidate_pwa
+    # Check and perform copy to web directory if present
+    web_dir = Path(args.web_dir)
+    if not web_dir.is_absolute():
+        candidate_web = (Path(__file__).parent / web_dir).resolve()
+        if candidate_web.is_dir():
+            web_dir = candidate_web
         else:
-            pwa_dir = pwa_dir.resolve()
+            web_dir = web_dir.resolve()
 
-    if not args.no_pwa_copy and pwa_dir.is_dir():
-        print(f"[package_firmware] PWA firmware directory found: {pwa_dir}")
+    if not args.no_web_copy and web_dir.is_dir():
+        print(f"[package_firmware] Web firmware directory found: {web_dir}")
         files_to_copy = [
             output_bin,
             manifest_path,
@@ -320,13 +324,13 @@ def main() -> int:
         ]
         for src_file in files_to_copy:
             if src_file.is_file():
-                dest_file = pwa_dir / src_file.name
+                dest_file = web_dir / src_file.name
                 shutil.copy2(src_file, dest_file)
-                print(f"[package_firmware] Copied {src_file.name} -> {pwa_dir}")
-        print(f"[package_firmware] Successfully copied all firmware artifacts to {pwa_dir}")
+                print(f"[package_firmware] Copied {src_file.name} -> {web_dir}")
+        print(f"[package_firmware] Successfully copied all firmware artifacts to {web_dir}")
     else:
         print(
-            f"[package_firmware] PWA firmware directory not found or copy disabled ({pwa_dir}); skipping copy."
+            f"[package_firmware] Web firmware directory not found or copy disabled ({web_dir}); skipping copy."
         )
 
     print("[package_firmware] Packaging complete.")

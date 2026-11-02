@@ -1,8 +1,14 @@
 # ==============================================================================
-# Git Ignore Rules for Mini-E-Reader (ESP-IDF + PWA + Python)
+# Git Ignore Rules for Mini-E-Reader (Firmware + Web + Python)
 # ==============================================================================
 
 # ESP-IDF Build & Output Directories
+firmware/build/
+firmware/sdkconfig
+firmware/sdkconfig.old
+firmware/sdkconfig*
+firmware/dependencies.lock
+firmware/managed_components/
 **/build/
 **/sdkconfig
 **/sdkconfig.old
@@ -19,7 +25,8 @@ env/
 *.egg-info/
 .pytest_cache/
 
-# Node.js & Web PWA Dependencies
+# Node.js & Web Dependencies
+web/node_modules/
 **/node_modules/
 npm-debug.log*
 yarn-debug.log*
@@ -37,7 +44,8 @@ compile_commands.json
 *.sublime-project
 *.sublime-workspace
 
-# Temporary, Scratch & Local Test Artifacts
+# Temporary, Scratch & Local Reference Artifacts
+scratch/
 **/scratch/
 waveshare_ref/
 waveshare_v2_ref/
@@ -46,7 +54,7 @@ waveshare_v2_ref/
 *.swp
 *~
 
-# Operating System Garbage
+# Operating System Files
 .DS_Store
 Thumbs.db
 ehthumbs.db

@@ -1,6 +1,6 @@
 {
   "idf.currentSetup": "C:\\esp\\v6.1\\esp-idf",
-  "idf.projectPath": "${workspaceFolder}/reader_firmware",
+  "idf.projectPath": "${workspaceFolder}/firmware",
   "idf.port": "COM6",
   "idf.openOcdConfigs": ["board/esp32s3-builtin.cfg"],
   "idf.customExtraVars": {},

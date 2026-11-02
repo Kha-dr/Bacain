@@ -31,7 +31,7 @@ jobs:
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: Build Firmware
-        working-directory: reader_firmware
+        working-directory: firmware
         run: |
           if [ -f "$IDF_PATH/export.sh" ]; then
             . "$IDF_PATH/export.sh"
@@ -40,7 +40,7 @@ jobs:
           idf.py build
 
       - name: Merge Factory Binary
-        working-directory: reader_firmware
+        working-directory: firmware
         run: |
           if [ -f "$IDF_PATH/export.sh" ]; then
             . "$IDF_PATH/export.sh"
@@ -78,11 +78,11 @@ jobs:
         with:
           name: mini-e-reader-firmware
           path: |
-            reader_firmware/build/mini_e_reader_factory.bin
-            reader_firmware/build/reader_firmware.bin
-            reader_firmware/build/bootloader.bin
-            reader_firmware/build/partition-table.bin
-            reader_firmware/build/manifest.json
+            firmware/build/mini_e_reader_factory.bin
+            firmware/build/reader_firmware.bin
+            firmware/build/bootloader.bin
+            firmware/build/partition-table.bin
+            firmware/build/manifest.json
           if-no-files-found: error
 
       - name: Publish GitHub Release
@@ -90,9 +90,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            reader_firmware/build/mini_e_reader_factory.bin
-            reader_firmware/build/reader_firmware.bin
-            reader_firmware/build/bootloader.bin
-            reader_firmware/build/partition-table.bin
-            reader_firmware/build/manifest.json
+            firmware/build/mini_e_reader_factory.bin
+            firmware/build/reader_firmware.bin
+            firmware/build/bootloader.bin
+            firmware/build/partition-table.bin
+            firmware/build/manifest.json
           generate_release_notes: true

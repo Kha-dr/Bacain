@@ -24,10 +24,11 @@ if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
 
-# 4. Package Unified Binary and Sync to PWA
+# 4. Package Unified Binary and Sync to Web
 Write-Host "[3/3] Packaging unified factory binary (0x0)..." -ForegroundColor Yellow
+$WebFirmwareDir = Join-Path (Split-Path -Parent $PSScriptRoot) "web\firmware"
 if (Test-Path "package_firmware.py") {
-    python package_firmware.py
+    python package_firmware.py --web-dir "$WebFirmwareDir"
     if ($LASTEXITCODE -ne 0) {
         Write-Host "`n[ERROR] Packaging unified binary failed." -ForegroundColor Red
         exit $LASTEXITCODE
@@ -37,4 +38,4 @@ if (Test-Path "package_firmware.py") {
 Write-Host "`n=== Build & Packaging Complete! ===" -ForegroundColor Green
 Write-Host "To flash your device, run:" -ForegroundColor White
 Write-Host "  idf.py -p COM3 flash monitor" -ForegroundColor Cyan
-Write-Host "Or flash via browser at pwa/index.html (Firmware Flasher tab)`n" -ForegroundColor White
+Write-Host "Or flash via browser at web/index.html (Firmware Flasher tab)`n" -ForegroundColor White
