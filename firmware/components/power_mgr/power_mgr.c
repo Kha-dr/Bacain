@@ -1,4 +1,5 @@
 #include "power_mgr.h"
+#include "board_config.h"
 #include "driver/gpio.h"
 #include "driver/rtc_io.h"
 #include "esp_adc/adc_oneshot.h"
@@ -10,14 +11,14 @@
 
 #define TAG "POWER_MGR"
 
-#define VBAT_PWR_HOLD_PIN  GPIO_NUM_17
-#define BOOT_BUTTON_PIN    GPIO_NUM_0
-#define PWR_BUTTON_PIN     GPIO_NUM_18
-#define AUDIO_PWR_PIN      GPIO_NUM_42
-#define AUDIO_PA_PIN       GPIO_NUM_46
-#define LED_GREEN_PIN      GPIO_NUM_3
+#define VBAT_PWR_HOLD_PIN  BOARD_VBAT_PWR_HOLD_PIN
+#define BOOT_BUTTON_PIN    BOARD_BTN_DOWN_PIN
+#define PWR_BUTTON_PIN     BOARD_BTN_UP_PIN
+#define AUDIO_PWR_PIN      BOARD_AUDIO_PWR_PIN
+#define AUDIO_PA_PIN       BOARD_AUDIO_PA_PIN
+#define LED_GREEN_PIN      BOARD_LED_GREEN_PIN
 
-#define BATTERY_ADC_CHANNEL ADC_CHANNEL_3 // GPIO 4 (ADC1_CH3 on ESP32-S3)
+#define BATTERY_ADC_CHANNEL BOARD_BATTERY_ADC_CHANNEL
 
 static adc_oneshot_unit_handle_t s_adc_handle = NULL;
 static adc_cali_handle_t         s_cali_handle = NULL;
@@ -116,9 +117,9 @@ uint32_t power_mgr_get_battery_voltage_mv(void) {
 
 uint8_t power_mgr_get_battery_percentage(void) {
     uint32_t mv = power_mgr_get_battery_voltage_mv();
-    if (mv >= 4200) return 100;
-    if (mv <= 3300) return 0;
-    return (uint8_t)((mv - 3300) * 100 / (4200 - 3300));
+    if (mv >= BOARD_BATTERY_MAX_MV) return 100;
+    if (mv <= BOARD_BATTERY_MIN_MV) return 0;
+    return (uint8_t)((mv - BOARD_BATTERY_MIN_MV) * 100 / (BOARD_BATTERY_MAX_MV - BOARD_BATTERY_MIN_MV));
 }
 
 void power_mgr_enter_deep_sleep(uint32_t sleep_seconds) {

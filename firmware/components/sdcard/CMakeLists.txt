@@ -11,4 +11,5 @@ idf_component_register(
         esp_driver_gpio
         esp_driver_sdmmc
         log
+        board_config
 )

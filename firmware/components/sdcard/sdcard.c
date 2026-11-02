@@ -8,12 +8,13 @@
 #include "sdmmc_cmd.h"
 #include "driver/sdmmc_host.h"
 #include "esp_log.h"
+#include "board_config.h"
 
 #define TAG "SDCARD"
 
-#define SDMMC_D0_PIN    GPIO_NUM_40
-#define SDMMC_CLK_PIN   GPIO_NUM_39
-#define SDMMC_CMD_PIN   GPIO_NUM_41
+#define SDMMC_D0_PIN    BOARD_SDMMC_D0_PIN
+#define SDMMC_CLK_PIN   BOARD_SDMMC_CLK_PIN
+#define SDMMC_CMD_PIN   BOARD_SDMMC_CMD_PIN
 
 static sdmmc_card_t *s_card = NULL;
 static bool s_mounted = false;

@@ -11,6 +11,7 @@ idf_component_register(
         "."
         "Fonts"
     REQUIRES
+        board_config
         driver
         esp_driver_gpio
         esp_driver_spi

@@ -1,13 +1,16 @@
 #include "button.h"
 #include "multi_button.h"
+#include "board_config.h"
 #include "driver/gpio.h"
 #include "esp_timer.h"
 #include "esp_log.h"
 
 #define TAG "BUTTON"
 
-#define BOOT_BUTTON_GPIO  GPIO_NUM_0
-#define PWR_BUTTON_GPIO   GPIO_NUM_18
+#define DOWN_BUTTON_GPIO  BOARD_BTN_DOWN_PIN
+#define UP_BUTTON_GPIO    BOARD_BTN_UP_PIN
+#define BOOT_BUTTON_GPIO  DOWN_BUTTON_GPIO
+#define PWR_BUTTON_GPIO   UP_BUTTON_GPIO
 
 static Button s_btn_boot;
 static Button s_btn_pwr;
@@ -76,7 +79,7 @@ esp_err_t button_init(QueueHandle_t *out_queue) {
     ESP_ERROR_CHECK(esp_timer_create(&timer_args, &s_timer));
     ESP_ERROR_CHECK(esp_timer_start_periodic(s_timer, 5 * 1000)); // 5ms tick matches TICKS_INTERVAL
 
-    ESP_LOGI(TAG, "Buttons initialized (BOOT: GPIO 0, PWR: GPIO 18)");
+    ESP_LOGI(TAG, "Buttons initialized (DOWN: GPIO %d, UP: GPIO %d)", DOWN_BUTTON_GPIO, UP_BUTTON_GPIO);
     return ESP_OK;
 }
 

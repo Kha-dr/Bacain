@@ -5,6 +5,7 @@ idf_component_register(
     INCLUDE_DIRS
         "."
     REQUIRES
+        board_config
         driver
         esp_driver_gpio
         esp_timer

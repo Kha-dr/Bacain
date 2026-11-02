@@ -2,6 +2,7 @@
 #include <string.h>
 #include <assert.h>
 #include "epaper_port.h"
+#include "board_config.h"
 #include "esp_err.h"
 #include "esp_log.h"
 #include "driver/gpio.h"
@@ -9,13 +10,13 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-#define EPD_DC_PIN    10
-#define EPD_CS_PIN    11
-#define EPD_SCK_PIN   12
-#define EPD_MOSI_PIN  13
-#define EPD_RST_PIN   9
-#define EPD_BUSY_PIN  8
-#define EPD_PWR_PIN   GPIO_NUM_6
+#define EPD_DC_PIN    BOARD_EPD_DC_PIN
+#define EPD_CS_PIN    BOARD_EPD_CS_PIN
+#define EPD_SCK_PIN   BOARD_EPD_SCK_PIN
+#define EPD_MOSI_PIN  BOARD_EPD_MOSI_PIN
+#define EPD_RST_PIN   BOARD_EPD_RST_PIN
+#define EPD_BUSY_PIN  BOARD_EPD_BUSY_PIN
+#define EPD_PWR_PIN   BOARD_EPD_PWR_PIN
 
 #define epaper_rst_1  gpio_set_level(EPD_RST_PIN, 1)
 #define epaper_rst_0  gpio_set_level(EPD_RST_PIN, 0)
