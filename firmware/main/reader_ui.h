@@ -29,10 +29,13 @@ typedef enum {
     MENU_ACTION_BOOK_LIST,
     MENU_ACTION_TOGGLE_FONT,
     MENU_ACTION_BLE_SYNC,
+    MENU_ACTION_TOGGLE_NAV_HINTS,
     MENU_ACTION_SLEEP,
 } menu_action_t;
 
 esp_err_t reader_ui_init(void);
+bool      reader_ui_get_show_nav_hints(void);
+void      reader_ui_set_show_nav_hints(bool show);
 void      reader_ui_render_reading(void);
 void      reader_ui_render_reading_force_full(void);
 void      reader_ui_render_menu(int selected_index);

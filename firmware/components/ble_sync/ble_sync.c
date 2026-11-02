@@ -43,6 +43,11 @@
 #include "power_mgr.h"
 #include "sdcard.h"
 #include "text_pager.h"
+#if __has_include("reader_ui.h")
+#include "reader_ui.h"
+#else
+extern void reader_ui_set_show_nav_hints(bool show);
+#endif
 
 static const char *TAG = "ble_sync";
 
@@ -118,6 +123,7 @@ typedef enum {
     CMD_FORCE_REFRESH,
     CMD_SET_SLEEP_TIMEOUT,
     CMD_TRIGGER_SLEEP,
+    CMD_SET_NAV_HINTS,
 } ble_sync_cmd_type_t;
 
 typedef struct {
@@ -649,6 +655,17 @@ static void handle_cmd_trigger_sleep(void)
     }
 }
 
+static void handle_cmd_set_nav_hints(uint8_t show)
+{
+    ESP_LOGI(TAG, "Setting nav hints: %u", (unsigned)show);
+    reader_ui_set_show_nav_hints(show != 0);
+    uint8_t resp[2] = { BLE_SYNC_OP_SET_NAV_HINTS, BLE_SYNC_STATUS_OK };
+    ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
+    if (s_event_cb) {
+        s_event_cb(BLE_SYNC_EVT_REQUEST_REFRESH, NULL, s_event_cb_arg);
+    }
+}
+
 static void ble_sync_worker_task(void *pvParameters)
 {
     ESP_LOGI(TAG, "Worker task started");
@@ -689,6 +706,9 @@ static void ble_sync_worker_task(void *pvParameters)
                 case CMD_TRIGGER_SLEEP:
                     handle_cmd_trigger_sleep();
                     break;
+                case CMD_SET_NAV_HINTS:
+                    handle_cmd_set_nav_hints(cmd.param8);
+                    break;
                 default:
                     break;
                 }
@@ -720,6 +740,9 @@ static void ble_sync_worker_task(void *pvParameters)
                     continue;
                 case CMD_TRIGGER_SLEEP:
                     handle_cmd_trigger_sleep();
+                    continue;
+                case CMD_SET_NAV_HINTS:
+                    handle_cmd_set_nav_hints(cmd.param8);
                     continue;
                 default:
                     break;
@@ -868,6 +891,17 @@ static int ble_sync_control_access_cb(uint16_t conn_handle, uint16_t attr_handle
 
     case BLE_SYNC_OP_TRIGGER_SLEEP:
         cmd.type = CMD_TRIGGER_SLEEP;
+        xQueueSend(s_cmd_queue, &cmd, pdMS_TO_TICKS(50));
+        break;
+
+    case BLE_SYNC_OP_SET_NAV_HINTS:
+        if (copied < 2) {
+            ESP_LOGE(TAG, "SET_NAV_HINTS payload too short: %u bytes", copied);
+            return BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN;
+        }
+        cmd.type = CMD_SET_NAV_HINTS;
+        cmd.param8 = (buf[1] != 0) ? 1 : 0;
+        reader_ui_set_show_nav_hints(buf[1] != 0);
         xQueueSend(s_cmd_queue, &cmd, pdMS_TO_TICKS(50));
         break;
 

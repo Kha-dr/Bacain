@@ -24,12 +24,12 @@ extern "C" {
 #define BOARD_EPD_PWR_PIN           GPIO_NUM_6
 
 // Navigation Buttons
-#define BOARD_BTN_DOWN_PIN          GPIO_NUM_0   // Tombol navigasi turun / Lanjut halaman (dulu BOOT)
-#define BOARD_BTN_UP_PIN            GPIO_NUM_18  // Tombol navigasi naik / Balik halaman (dulu PWR)
-// Aliases
-#define BOARD_BTN_BOOT_PIN          BOARD_BTN_DOWN_PIN
-#define BOARD_BTN_PWR_PIN           BOARD_BTN_UP_PIN
+#define BOARD_BTN_DOWN_PIN          GPIO_NUM_18  // Tombol navigasi naik / Balik halaman (dulu PWR)
+#define BOARD_BTN_UP_PIN            GPIO_NUM_0   // Tombol navigasi turun / Lanjut halaman (dulu BOOT)
 
+// Aliases
+#define BOARD_BTN_BOOT_PIN          BOARD_BTN_UP_PIN
+#define BOARD_BTN_PWR_PIN           BOARD_BTN_DOWN_PIN
 // MicroSD SDMMC Pinout
 #define BOARD_SDMMC_D0_PIN          GPIO_NUM_40
 #define BOARD_SDMMC_CLK_PIN         GPIO_NUM_39

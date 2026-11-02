@@ -14,8 +14,8 @@ typedef enum {
     BTN_ID_DOWN = 0,    // Navigasi Turun / Lanjut Halaman (GPIO 0)
     BTN_ID_UP   = 1,    // Navigasi Naik / Balik Halaman (GPIO 18)
     // Aliases backward-compatible
-    BTN_ID_BOOT = BTN_ID_DOWN,
-    BTN_ID_PWR  = BTN_ID_UP,
+    BTN_ID_BOOT = BTN_ID_UP,
+    BTN_ID_PWR  = BTN_ID_DOWN,
 } btn_id_t;
 
 typedef enum {

@@ -1,5 +1,6 @@
 #include "text_pager.h"
 #include "book_library.h"
+#include "board_config.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,11 +18,17 @@
 
 static const char *TAG = "text_pager";
 
+#ifndef BOARD_DISPLAY_WIDTH
+#define BOARD_DISPLAY_WIDTH    200
+#endif
+#ifndef BOARD_DISPLAY_HEIGHT
+#define BOARD_DISPLAY_HEIGHT   200
+#endif
 #ifndef DISPLAY_WIDTH
-#define DISPLAY_WIDTH          200
+#define DISPLAY_WIDTH          BOARD_DISPLAY_WIDTH
 #endif
 #ifndef DISPLAY_HEIGHT
-#define DISPLAY_HEIGHT         200
+#define DISPLAY_HEIGHT         BOARD_DISPLAY_HEIGHT
 #endif
 #ifndef UI_HEADER_HEIGHT
 #define UI_HEADER_HEIGHT       19
@@ -43,6 +50,44 @@ static text_pager_t      s_pager = {0};
 static FILE             *s_book_fp = NULL;
 static SemaphoreHandle_t s_mutex = NULL;
 static bool              s_initialized = false;
+
+static inline size_t get_max_cols(text_pager_font_size_t font_size, uint16_t disp_w) {
+    uint16_t font_w = (font_size == TEXT_PAGER_FONT_16) ? Font16.Width : Font12.Width;
+    uint16_t min_padding = (font_size == TEXT_PAGER_FONT_16) ? 10 : 8;
+    if (disp_w <= min_padding * 2 || font_w == 0) {
+        return 1;
+    }
+    uint16_t usable_w = disp_w - (min_padding * 2);
+    size_t cols = (size_t)(usable_w / font_w);
+    if (cols > TEXT_PAGER_MAX_LINE_CHARS) {
+        cols = TEXT_PAGER_MAX_LINE_CHARS;
+    }
+    return (cols > 0) ? cols : 1;
+}
+
+static inline UWORD get_margin_x(text_pager_font_size_t font_size, uint16_t disp_w) {
+    uint16_t font_w = (font_size == TEXT_PAGER_FONT_16) ? Font16.Width : Font12.Width;
+    size_t cols = get_max_cols(font_size, disp_w);
+    uint16_t total_text_w = (uint16_t)(cols * font_w);
+    if (disp_w > total_text_w) {
+        return (UWORD)((disp_w - total_text_w) / 2);
+    }
+    return 0;
+}
+
+static inline size_t get_max_lines(text_pager_font_size_t font_size, uint16_t disp_h) {
+    uint16_t line_pitch = (font_size == TEXT_PAGER_FONT_16) ? 20 : 14;
+    int32_t footer_h = (int32_t)disp_h - UI_FOOTER_Y;
+    int32_t body_area_h = (int32_t)disp_h - UI_HEADER_HEIGHT - footer_h - 4;
+    if (body_area_h <= 0 || line_pitch == 0) {
+        return 1;
+    }
+    size_t lines = (size_t)(body_area_h / line_pitch);
+    if (lines > TEXT_PAGER_MAX_LINES) {
+        lines = TEXT_PAGER_MAX_LINES;
+    }
+    return (lines > 0) ? lines : 1;
+}
 
 static inline UWORD get_color_black(void) {
     return (Paint.Scale == 4) ? EPD_1IN54G_BLACK : BLACK;
@@ -186,8 +231,10 @@ static esp_err_t parse_page_at_offset(size_t offset, text_pager_page_t *page) {
     cursor = align_utf8_forward(read_buf, cursor, bytes_read);
     page->page_start_offset = offset + cursor;
 
-    size_t max_lines = (s_pager.font_size == TEXT_PAGER_FONT_16) ? 8 : 11;
-    size_t max_cols  = (s_pager.font_size == TEXT_PAGER_FONT_16) ? 22 : 30;
+    uint16_t disp_w = (Paint.Width > 0) ? Paint.Width : BOARD_DISPLAY_WIDTH;
+    uint16_t disp_h = (Paint.Height > 0) ? Paint.Height : BOARD_DISPLAY_HEIGHT;
+    size_t max_lines = get_max_lines(s_pager.font_size, disp_h);
+    size_t max_cols  = get_max_cols(s_pager.font_size, disp_w);
 
     page->line_count = 0;
     bool force_page_break = false;
@@ -308,8 +355,10 @@ static esp_err_t parse_page_at_offset(size_t offset, text_pager_page_t *page) {
 static size_t backtrack_prev_page_offset(size_t current_offset) {
     if (current_offset == 0) return 0;
 
-    size_t max_lines = (s_pager.font_size == TEXT_PAGER_FONT_16) ? 8 : 11;
-    size_t max_cols  = (s_pager.font_size == TEXT_PAGER_FONT_16) ? 22 : 30;
+    uint16_t disp_w = (Paint.Width > 0) ? Paint.Width : BOARD_DISPLAY_WIDTH;
+    uint16_t disp_h = (Paint.Height > 0) ? Paint.Height : BOARD_DISPLAY_HEIGHT;
+    size_t max_lines = get_max_lines(s_pager.font_size, disp_h);
+    size_t max_cols  = get_max_cols(s_pager.font_size, disp_w);
     size_t avg_page_bytes = max_lines * max_cols;
 
     size_t backtrack = avg_page_bytes * 2;
@@ -334,6 +383,10 @@ static size_t backtrack_prev_page_offset(size_t current_offset) {
     }
 
     return prev_start;
+}
+
+static inline size_t calculate_prev_page_offset(size_t current_offset) {
+    return backtrack_prev_page_offset(current_offset);
 }
 
 esp_err_t text_pager_init(void) {
@@ -580,7 +633,8 @@ esp_err_t text_pager_render_page(void) {
 
     sFONT *body_font = (s_pager.font_size == TEXT_PAGER_FONT_16) ? &Font16 : &Font12;
     UWORD line_pitch = (s_pager.font_size == TEXT_PAGER_FONT_16) ? 20 : 14;
-    UWORD margin_x   = (s_pager.font_size == TEXT_PAGER_FONT_16) ? 12 : 10;
+    uint16_t disp_w  = (Paint.Width > 0) ? Paint.Width : BOARD_DISPLAY_WIDTH;
+    UWORD margin_x   = get_margin_x(s_pager.font_size, disp_w);
     UWORD body_y     = UI_BODY_Y_START;
 
     if (!s_pager.book_open || s_pager.current_page.line_count == 0) {

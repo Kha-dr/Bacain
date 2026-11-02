@@ -158,6 +158,21 @@ class DeviceSettingsModal extends HTMLElement {
               </div>
             </div>
 
+            <!-- Navigation Hints -->
+            <div class="control-card">
+              <div class="control-card-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;">
+                  <polygon points="3 11 22 2 13 21 11 13 3 11"></polygon>
+                </svg>
+                Navigation Hints
+              </div>
+              <div class="control-btn-group">
+                <button id="navHintsShowBtn" class="btn-control active" type="button"><span>Show</span></button>
+                <button id="navHintsHideBtn" class="btn-control" type="button"><span>Hide</span></button>
+              </div>
+              <div class="control-hint">Show or hide bottom navigation hints for more screen area.</div>
+            </div>
+
             <!-- Power Management -->
             <div class="control-card">
               <div class="control-inline-row" style="justify-content: space-between;">
@@ -341,6 +356,30 @@ class DeviceSettingsModal extends HTMLElement {
       });
     }
 
+    // Navigation Hints
+    const navHintsShowBtn = this.querySelector('#navHintsShowBtn');
+    const navHintsHideBtn = this.querySelector('#navHintsHideBtn');
+
+    if (navHintsShowBtn) {
+      navHintsShowBtn.addEventListener('click', () => {
+        this.dispatchEvent(new CustomEvent('nav-hints-change', {
+          detail: { show: true },
+          bubbles: true,
+          composed: true
+        }));
+      });
+    }
+
+    if (navHintsHideBtn) {
+      navHintsHideBtn.addEventListener('click', () => {
+        this.dispatchEvent(new CustomEvent('nav-hints-change', {
+          detail: { show: false },
+          bubbles: true,
+          composed: true
+        }));
+      });
+    }
+
     // Power Management
     const sleepTimeoutSelect = this.querySelector('#sleepTimeoutSelect');
     if (sleepTimeoutSelect) {
@@ -511,6 +550,19 @@ class DeviceSettingsModal extends HTMLElement {
    */
   setStorageTargetBadge(target) {
     this.setStorageTarget(target);
+  }
+
+  /**
+   * Set Navigation Hints display state
+   * @param {boolean} show
+   */
+  setNavHints(show) {
+    const isShow = Boolean(show);
+    const showBtn = this.querySelector('#navHintsShowBtn');
+    const hideBtn = this.querySelector('#navHintsHideBtn');
+
+    if (showBtn) showBtn.classList.toggle('active', isShow);
+    if (hideBtn) hideBtn.classList.toggle('active', !isShow);
   }
 
   /**

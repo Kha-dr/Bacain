@@ -18,6 +18,16 @@
 static uint8_t *s_canvas = NULL;
 static int s_reading_page_turns = 0;
 static reading_state_t s_cached_reading_state;
+static size_t s_book_list_start_idx = 0;
+static bool s_show_nav_hints = true;
+
+bool reader_ui_get_show_nav_hints(void) {
+    return s_show_nav_hints;
+}
+
+void reader_ui_set_show_nav_hints(bool show) {
+    s_show_nav_hints = show;
+}
 
 const reading_state_t *book_library_get_state(void) {
     if (book_library_get_current_state(&s_cached_reading_state) == ESP_OK) {
@@ -172,6 +182,158 @@ void reader_ui_render_reading_force_full(void) {
     epaper_port_init_partial();
 }
 
+static int break_text_lines(const char *text, int chars_per_line, int max_lines, char lines_out[][64]) {
+    if (!text || chars_per_line <= 0 || max_lines <= 0) {
+        return 0;
+    }
+    if (chars_per_line > 60) chars_per_line = 60;
+
+    const char *p = text;
+    int line_count = 0;
+
+    while (*p != '\0' && line_count < max_lines) {
+        while (*p == ' ') {
+            p++;
+        }
+        if (*p == '\0') {
+            break;
+        }
+
+        bool is_last_line = (line_count == max_lines - 1);
+        int rem_len = (int)strlen(p);
+
+        if (!is_last_line) {
+            if (rem_len <= chars_per_line) {
+                int copy_len = rem_len;
+                if (copy_len >= 63) copy_len = 63;
+                memcpy(lines_out[line_count], p, copy_len);
+                while (copy_len > 0 && lines_out[line_count][copy_len - 1] == ' ') {
+                    copy_len--;
+                }
+                lines_out[line_count][copy_len] = '\0';
+                line_count++;
+                break;
+            } else {
+                int break_pos = -1;
+                for (int i = chars_per_line; i > 0; i--) {
+                    if (p[i] == ' ') {
+                        break_pos = i;
+                        break;
+                    }
+                }
+
+                if (break_pos > 0) {
+                    int copy_len = break_pos;
+                    if (copy_len >= 63) copy_len = 63;
+                    memcpy(lines_out[line_count], p, copy_len);
+                    while (copy_len > 0 && lines_out[line_count][copy_len - 1] == ' ') {
+                        copy_len--;
+                    }
+                    lines_out[line_count][copy_len] = '\0';
+                    p += break_pos + 1;
+                } else {
+                    int copy_len = chars_per_line;
+                    if (copy_len >= 63) copy_len = 63;
+                    memcpy(lines_out[line_count], p, copy_len);
+                    while (copy_len > 0 && lines_out[line_count][copy_len - 1] == ' ') {
+                        copy_len--;
+                    }
+                    lines_out[line_count][copy_len] = '\0';
+                    p += chars_per_line;
+                }
+                line_count++;
+            }
+        } else {
+            if (rem_len <= chars_per_line) {
+                int copy_len = rem_len;
+                if (copy_len >= 63) copy_len = 63;
+                memcpy(lines_out[line_count], p, copy_len);
+                while (copy_len > 0 && lines_out[line_count][copy_len - 1] == ' ') {
+                    copy_len--;
+                }
+                lines_out[line_count][copy_len] = '\0';
+                line_count++;
+                break;
+            } else {
+                int take = chars_per_line - 3;
+                if (take < 0) take = 0;
+                if (take >= 60) take = 60;
+                memcpy(lines_out[line_count], p, take);
+                while (take > 0 && lines_out[line_count][take - 1] == ' ') {
+                    take--;
+                }
+                memcpy(lines_out[line_count] + take, "...", 4);
+                line_count++;
+                break;
+            }
+        }
+    }
+
+    return line_count;
+}
+
+static int get_wrapped_line_count(const char *text, sFONT *font, int max_width, int max_lines) {
+    if (!text || !font || font->Width == 0 || max_lines <= 0 || max_width <= 0) {
+        return 1;
+    }
+    char lines[4][64];
+    if (max_lines > 4) max_lines = 4;
+    int chars_per_line = max_width / font->Width;
+    int count = break_text_lines(text, chars_per_line, max_lines, lines);
+    return count > 0 ? count : 1;
+}
+
+static int draw_wrapped_text_clamped(UWORD x, UWORD y, const char *text, sFONT *font,
+                                     int max_width, int max_lines, UWORD fg, UWORD bg) {
+    if (!text || !font || font->Width == 0 || font->Height == 0 || max_lines <= 0 || max_width <= 0) {
+        return 0;
+    }
+    char lines[4][64];
+    if (max_lines > 4) max_lines = 4;
+    int chars_per_line = max_width / font->Width;
+    int line_count = break_text_lines(text, chars_per_line, max_lines, lines);
+    for (int i = 0; i < line_count; i++) {
+        UWORD cur_y = y + (UWORD)(i * font->Height);
+        draw_ui_string(x, cur_y, lines[i], font, fg, bg);
+    }
+    return line_count;
+}
+
+static void get_book_display_name(size_t index, char *buf, size_t buf_size) {
+    const book_info_t *book = book_library_get_book(index);
+    if (!book) {
+        buf[0] = '\0';
+        return;
+    }
+    if (book->type == LIBRARY_ENTRY_UP) {
+        snprintf(buf, buf_size, "[.. Kembali]");
+    } else if (book->type == LIBRARY_ENTRY_DIR) {
+        snprintf(buf, buf_size, "[D] %s", book->filename);
+    } else {
+        snprintf(buf, buf_size, "%s", book->filename);
+    }
+}
+
+static int get_book_item_height(size_t index, sFONT *font, int max_width, int max_lines) {
+    char name[BOOK_FILENAME_MAX_LEN + 16];
+    get_book_display_name(index, name, sizeof(name));
+    int lines = get_wrapped_line_count(name, font, max_width, max_lines);
+    return lines * font->Height;
+}
+
+static bool book_range_fits(size_t start, size_t target, sFONT *font, int max_width, int max_lines) {
+    int cur_y = 26;
+    int bottom_limit = s_show_nav_hints ? (UI_FOOTER_Y - 2) : (DISPLAY_HEIGHT - 2);
+    for (size_t i = start; i <= target; i++) {
+        int text_h = get_book_item_height(i, font, max_width, max_lines);
+        if (cur_y + text_h + 2 >= bottom_limit) {
+            return false;
+        }
+        cur_y += text_h + 8;
+    }
+    return true;
+}
+
 void reader_ui_render_menu(int selected_index) {
     if (!s_canvas) return;
 
@@ -196,9 +358,10 @@ void reader_ui_render_menu(int selected_index) {
         "Book Library",
         "Font Size: [16px]",
         "Sync Books",
+        "Nav Hints: [Show]",
         "Power Off / Sleep"
     };
-    int count = 5;
+    int count = 6;
 
     char font_str[32];
     if (text_pager_get_font_size() == TEXT_PAGER_FONT_12) {
@@ -208,20 +371,39 @@ void reader_ui_render_menu(int selected_index) {
     }
     items[2] = font_str;
 
-    int y = 30;
+    char hints_str[32];
+    if (s_show_nav_hints) {
+        snprintf(hints_str, sizeof(hints_str), "Nav Hints: [Show]");
+    } else {
+        snprintf(hints_str, sizeof(hints_str), "Nav Hints: [Hide]");
+    }
+    items[4] = hints_str;
+
+    int max_width = DISPLAY_WIDTH - 24;
+    int bottom_limit = s_show_nav_hints ? (UI_FOOTER_Y - 2) : (DISPLAY_HEIGHT - 2);
+    int y = 28;
     for (int i = 0; i < count; i++) {
+        int lines = get_wrapped_line_count(items[i], &Font12, max_width, 3);
+        int text_h = lines * Font12.Height;
+
+        if (y + text_h + 2 >= bottom_limit) {
+            break;
+        }
+
         if (i == selected_index) {
-            Paint_DrawRectangle(4, y - 2, DISPLAY_WIDTH - 4, y + 16, BLACK, DOT_PIXEL_1X1, DRAW_FILL_EMPTY);
+            Paint_DrawRectangle(4, y - 2, DISPLAY_WIDTH - 4, y + text_h + 2, BLACK, DOT_PIXEL_1X1, DRAW_FILL_EMPTY);
             Paint_DrawString_EN(8, y, ">", &Font12, BLACK, WHITE);
         }
-        Paint_DrawString_EN(22, y, items[i], &Font12, BLACK, WHITE);
-        y += 24;
+        draw_wrapped_text_clamped(22, y, items[i], &Font12, max_width, 3, BLACK, WHITE);
+        y += (lines > 1) ? (text_h + 8) : 24;
     }
 
     // Footer
-    Paint_DrawLine(0, UI_FOOTER_Y - 2, DISPLAY_WIDTH - 1, UI_FOOTER_Y - 2, BLACK, DOT_PIXEL_1X1, LINE_STYLE_SOLID);
-    draw_ui_string(6, UI_FOOTER_Y + 1, "▼ Down   ▲ Up", &Font12, BLACK, WHITE);
-    Paint_DrawString_EN(112, UI_FOOTER_Y + 1, "2xTap:Select", &Font12, BLACK, WHITE);
+    if (s_show_nav_hints) {
+        Paint_DrawLine(0, UI_FOOTER_Y - 2, DISPLAY_WIDTH - 1, UI_FOOTER_Y - 2, BLACK, DOT_PIXEL_1X1, LINE_STYLE_SOLID);
+        draw_ui_string(6, UI_FOOTER_Y + 1, "▼ Down   ▲ Up", &Font12, BLACK, WHITE);
+        Paint_DrawString_EN(112, UI_FOOTER_Y + 1, "2xTap:Select", &Font12, BLACK, WHITE);
+    }
 
     epaper_port_display_part(s_canvas);
 }
@@ -248,6 +430,7 @@ void reader_ui_render_book_list(int selected_index) {
 
     size_t count = book_library_get_count();
     if (count == 0) {
+        s_book_list_start_idx = 0;
         Paint_DrawString_EN(20, 80, "No books in folder!", &Font12, BLACK, WHITE);
         Paint_DrawString_EN(20, 100, "Open BacaIn Web to add", &Font12, BLACK, WHITE);
     } else {
@@ -257,48 +440,49 @@ void reader_ui_render_book_list(int selected_index) {
             selected_index = (int)count - 1;
         }
 
-        size_t start_idx = 0;
-        if (count > 6) {
-            if (selected_index >= 5) {
-                start_idx = (size_t)(selected_index - 4);
-            }
-            if (start_idx + 6 > count) {
-                start_idx = count - 6;
-            }
+        text_pager_font_size_t font_size = text_pager_get_font_size();
+        sFONT *font = (font_size == TEXT_PAGER_FONT_16) ? &Font16 : &Font12;
+        int max_lines = (font_size == TEXT_PAGER_FONT_16) ? 2 : 3;
+        int max_width = DISPLAY_WIDTH - 24;
+
+        if (s_book_list_start_idx >= count) {
+            s_book_list_start_idx = 0;
+        }
+        if ((size_t)selected_index < s_book_list_start_idx) {
+            s_book_list_start_idx = (size_t)selected_index;
+        }
+        while (s_book_list_start_idx < (size_t)selected_index &&
+               !book_range_fits(s_book_list_start_idx, (size_t)selected_index, font, max_width, max_lines)) {
+            s_book_list_start_idx++;
         }
 
-        size_t end_idx = start_idx + 6;
-        if (end_idx > count) {
-            end_idx = count;
-        }
+        int bottom_limit = s_show_nav_hints ? (UI_FOOTER_Y - 2) : (DISPLAY_HEIGHT - 2);
+        int y = 26;
+        for (size_t i = s_book_list_start_idx; i < count; i++) {
+            char display_name[BOOK_FILENAME_MAX_LEN + 16];
+            get_book_display_name(i, display_name, sizeof(display_name));
 
-        int y = 28;
-        for (size_t i = start_idx; i < end_idx; i++) {
-            const book_info_t *book = book_library_get_book(i);
-            if (!book) continue;
+            int text_h = get_book_item_height(i, font, max_width, max_lines);
+            if (y + text_h + 2 >= bottom_limit) {
+                break;
+            }
 
             if ((int)i == selected_index) {
-                Paint_DrawRectangle(4, y - 2, DISPLAY_WIDTH - 4, y + 16, BLACK, DOT_PIXEL_1X1, DRAW_FILL_EMPTY);
-                Paint_DrawString_EN(8, y, ">", &Font12, BLACK, WHITE);
+                Paint_DrawRectangle(4, y - 2, DISPLAY_WIDTH - 4, y + text_h + 2, BLACK, DOT_PIXEL_1X1, DRAW_FILL_EMPTY);
+                Paint_DrawString_EN(8, y, ">", font, BLACK, WHITE);
             }
 
-            char display_name[32];
-            if (book->type == LIBRARY_ENTRY_UP) {
-                snprintf(display_name, sizeof(display_name), "[.. Kembali]");
-            } else if (book->type == LIBRARY_ENTRY_DIR) {
-                snprintf(display_name, sizeof(display_name), "[D] %.18s", book->filename);
-            } else {
-                snprintf(display_name, sizeof(display_name), "%.22s", book->filename);
-            }
-            Paint_DrawString_EN(22, y, display_name, &Font12, BLACK, WHITE);
-            y += 24;
+            draw_wrapped_text_clamped(22, y, display_name, font, max_width, max_lines, BLACK, WHITE);
+            y += text_h + 8;
         }
     }
 
     // Footer
-    Paint_DrawLine(0, UI_FOOTER_Y - 2, DISPLAY_WIDTH - 1, UI_FOOTER_Y - 2, BLACK, DOT_PIXEL_1X1, LINE_STYLE_SOLID);
-    draw_ui_string(6, UI_FOOTER_Y + 1, "▼ Down   ▲ Up", &Font12, BLACK, WHITE);
-    Paint_DrawString_EN(112, UI_FOOTER_Y + 1, "2xTap:Open", &Font12, BLACK, WHITE);
+    if (s_show_nav_hints) {
+        Paint_DrawLine(0, UI_FOOTER_Y - 2, DISPLAY_WIDTH - 1, UI_FOOTER_Y - 2, BLACK, DOT_PIXEL_1X1, LINE_STYLE_SOLID);
+        draw_ui_string(6, UI_FOOTER_Y + 1, "▼ Down   ▲ Up", &Font12, BLACK, WHITE);
+        Paint_DrawString_EN(112, UI_FOOTER_Y + 1, "2xTap:Open", &Font12, BLACK, WHITE);
+    }
 
     epaper_port_display_part(s_canvas);
 }
@@ -362,10 +546,12 @@ void reader_ui_render_bookmarks(int selected_index) {
     }
 
     // Footer
-    Paint_DrawLine(0, UI_FOOTER_Y - 2, DISPLAY_WIDTH - 1, UI_FOOTER_Y - 2, BLACK, DOT_PIXEL_1X1, LINE_STYLE_SOLID);
-    draw_ui_string(6, UI_FOOTER_Y + 1, "▼ Down", &Font12, BLACK, WHITE);
-    draw_ui_string(72, UI_FOOTER_Y + 1, "▲ Jump", &Font12, BLACK, WHITE);
-    draw_ui_string(132, UI_FOOTER_Y + 1, "Hold ▼ Exit", &Font12, BLACK, WHITE);
+    if (s_show_nav_hints) {
+        Paint_DrawLine(0, UI_FOOTER_Y - 2, DISPLAY_WIDTH - 1, UI_FOOTER_Y - 2, BLACK, DOT_PIXEL_1X1, LINE_STYLE_SOLID);
+        draw_ui_string(6, UI_FOOTER_Y + 1, "▼ Down", &Font12, BLACK, WHITE);
+        draw_ui_string(72, UI_FOOTER_Y + 1, "▲ Jump", &Font12, BLACK, WHITE);
+        draw_ui_string(132, UI_FOOTER_Y + 1, "Hold ▼ Exit", &Font12, BLACK, WHITE);
+    }
 
     epaper_port_display_part(s_canvas);
 }

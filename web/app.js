@@ -24,8 +24,10 @@ const OPCODES = appConfig?.ble?.opcodes || {
   SET_FONT: 0x10,
   FORCE_REFRESH: 0x12,
   SET_SLEEP_TIMEOUT: 0x13,
-  TRIGGER_SLEEP: 0x14
+  TRIGGER_SLEEP: 0x14,
+  SET_NAV_HINTS: 0x15
 };
+OPCODES.SET_NAV_HINTS = OPCODES.SET_NAV_HINTS || 0x15;
 
 const CHUNK_SIZE = appConfig?.ble?.chunkSize || 506;
 const CHUNK_DELAY_MS = appConfig?.ble?.chunkDelayMs || 6;
@@ -1405,6 +1407,27 @@ async function triggerSleep() {
 }
 const sendTriggerSleep = triggerSleep;
 
+async function setNavHints(show) {
+  if (!isConnected || !controlChar) {
+    showToast('Connect device first', 'warning');
+    return;
+  }
+  try {
+    log(`Setting navigation hints to ${show ? 'show' : 'hide'} (OpCode 0x15)...`, 'info');
+    const packet = new Uint8Array([OPCODES.SET_NAV_HINTS, show ? 1 : 0]);
+    await controlChar.writeValueWithResponse(packet);
+    const modal = document.getElementById('deviceSettingsModal') || document.getElementById('settingsModal');
+    if (modal && typeof modal.setNavHints === 'function') {
+      modal.setNavHints(show);
+    }
+    showToast('Navigation hints ' + (show ? 'shown' : 'hidden'), 'success');
+  } catch (err) {
+    log(`Failed to set navigation hints: ${err.message}`, 'error');
+    showToast('Failed to update navigation hints', 'error');
+  }
+}
+const sendSetNavHints = setNavHints;
+
 // ============================================================================
 // Event Listeners Initialization
 // ============================================================================
@@ -1586,6 +1609,12 @@ function initEventListeners() {
 
   document.addEventListener('force-refresh', () => {
     forceRefresh();
+  });
+
+  document.addEventListener('nav-hints-change', (e) => {
+    if (e.detail) {
+      setNavHints(e.detail.show);
+    }
   });
 
   document.addEventListener('sleep-timeout-change', (e) => {

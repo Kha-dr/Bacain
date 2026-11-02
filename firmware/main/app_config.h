@@ -1,9 +1,11 @@
 #ifndef APP_CONFIG_H
 #define APP_CONFIG_H
 
-#define DISPLAY_WIDTH          200
-#define DISPLAY_HEIGHT         200
-#define DISPLAY_BUFFER_SIZE    (DISPLAY_WIDTH * DISPLAY_HEIGHT / 8) // 5,000 bytes
+#include "board_config.h"
+
+#define DISPLAY_WIDTH          BOARD_DISPLAY_WIDTH
+#define DISPLAY_HEIGHT         BOARD_DISPLAY_HEIGHT
+#define DISPLAY_BUFFER_SIZE    BOARD_DISPLAY_BUFFER_SIZE
 
 // UI Layout Coordinates
 #define UI_HEADER_HEIGHT       19

@@ -41,6 +41,7 @@ typedef enum {
 #define BLE_SYNC_OP_FORCE_REFRESH        0x12
 #define BLE_SYNC_OP_SET_SLEEP_TIMEOUT    0x13
 #define BLE_SYNC_OP_TRIGGER_SLEEP        0x14
+#define BLE_SYNC_OP_SET_NAV_HINTS        0x15
 /* Control Response Status Codes */
 #define BLE_SYNC_STATUS_OK               0x00
 #define BLE_SYNC_STATUS_ERROR            0x01

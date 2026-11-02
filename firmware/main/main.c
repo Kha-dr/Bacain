@@ -174,6 +174,10 @@ void app_main(void) {
                     reader_ui_render_ble_sync(ble_sync_is_connected(), ble_sync_get_bytes_received());
                 } else if (s_current_view == VIEW_BOOKMARKS) {
                     reader_ui_render_bookmarks(s_bookmark_index);
+                } else if (s_current_view == VIEW_MENU) {
+                    reader_ui_render_menu(s_menu_index);
+                } else if (s_current_view == VIEW_BOOK_LIST) {
+                    reader_ui_render_book_list(s_book_index);
                 }
                 continue;
             }
@@ -222,10 +226,10 @@ void app_main(void) {
                 case VIEW_MENU:
                     if (evt.type == BTN_CLICK) {
                         if (evt.button == BTN_ID_BOOT) {
-                            s_menu_index = (s_menu_index + 1) % 5;
+                            s_menu_index = (s_menu_index + 1) % 6;
                             reader_ui_render_menu(s_menu_index);
                         } else if (evt.button == BTN_ID_PWR) {
-                            s_menu_index = (s_menu_index - 1 + 5) % 5;
+                            s_menu_index = (s_menu_index - 1 + 6) % 6;
                             reader_ui_render_menu(s_menu_index);
                         }
                     } else if (evt.type == BTN_DOUBLE_CLICK) {
@@ -244,7 +248,10 @@ void app_main(void) {
                             s_current_view = VIEW_BLE_SYNC;
                             ble_sync_start();
                             reader_ui_render_ble_sync(ble_sync_is_connected(), ble_sync_get_bytes_received());
-                        } else if (s_menu_index == 4) { // Power Off / Sleep
+                        } else if (s_menu_index == 4) { // Nav Hints Toggle
+                            reader_ui_set_show_nav_hints(!reader_ui_get_show_nav_hints());
+                            reader_ui_render_menu(s_menu_index);
+                        } else if (s_menu_index == 5) { // Power Off / Sleep
                             reader_ui_render_sleeping();
                             book_library_update_offset(text_pager_get_current_offset());
                             book_library_flush_state();
