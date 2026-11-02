@@ -4,6 +4,7 @@ BacaIn - Firmware Packaging Tool
 Merges ESP32-S3 binaries into a single factory binary and generates manifest.json.
 """
 
+import argparse
 import json
 from pathlib import Path
 import shutil
@@ -28,11 +29,51 @@ def get_esptool_cmd() -> list:
     return [sys.executable, "-m", "esptool"]
 
 
-def main() -> int:
-    build_arg = sys.argv[1] if len(sys.argv) > 1 else "build"
-    build_dir = Path(build_arg)
-    if not build_dir.is_dir() and (Path(__file__).parent / build_arg).is_dir():
-        build_dir = Path(__file__).parent / build_arg
+def parse_args(argv: list | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Merge ESP binary files into a factory binary and generate manifest.json"
+    )
+    parser.add_argument(
+        "build_dir",
+        nargs="?",
+        default="build",
+        help="Direktori build output (default: 'build')",
+    )
+    parser.add_argument(
+        "-o",
+        "--output",
+        default="bacain_factory.bin",
+        help="Nama file factory binary (default: 'bacain_factory.bin')",
+    )
+    parser.add_argument(
+        "--chip",
+        default="esp32s3",
+        help="Tipe chip ESP (default: 'esp32s3')",
+    )
+    parser.add_argument(
+        "--flash-size",
+        default="8MB",
+        help="Ukuran flash (default: '8MB')",
+    )
+    parser.add_argument(
+        "--name",
+        default="BacaIn Firmware",
+        help="Nama firmware dalam manifest (default: 'BacaIn Firmware')",
+    )
+    parser.add_argument(
+        "--board",
+        default="Waveshare ESP32-S3-ePaper-1.54",
+        help="Nama board profil dalam manifest (default: 'Waveshare ESP32-S3-ePaper-1.54')",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: list | None = None) -> int:
+    args = parse_args(argv)
+
+    build_dir = Path(args.build_dir)
+    if not build_dir.is_dir() and (Path(__file__).parent / args.build_dir).is_dir():
+        build_dir = Path(__file__).parent / args.build_dir
     build_dir = build_dir.resolve()
 
     if not build_dir.is_dir():
@@ -43,13 +84,13 @@ def main() -> int:
     partition_table = find_bin(build_dir, "partition_table/partition-table.bin", "partition-table.bin")
     app_bin = find_bin(build_dir, "bacain.bin", "reader_firmware.bin", "mini_e_reader.bin")
 
-    factory_bin = build_dir / "bacain_factory.bin"
+    factory_bin = build_dir / args.output
     cmd = get_esptool_cmd() + [
-        "--chip", "esp32s3",
+        "--chip", args.chip,
         "merge_bin",
         "-o", str(factory_bin),
         "--flash_mode", "keep",
-        "--flash_size", "8MB",
+        "--flash_size", args.flash_size,
         "0x0", str(bootloader),
         "0x8000", str(partition_table),
         "0x20000", str(app_bin),
@@ -59,12 +100,13 @@ def main() -> int:
     subprocess.run(cmd, check=True)
 
     manifest = {
-        "name": "BacaIn Firmware",
-        "chip": "ESP32-S3",
-        "target": "ESP32-S3",
-        "flash_size": "8MB",
+        "name": args.name,
+        "board": args.board,
+        "chip": args.chip,
+        "target": args.chip,
+        "flash_size": args.flash_size,
         "build_date": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "factory_bin": factory_bin.name,
+        "factory_bin": args.output,
         "parts": [
             {"name": "bootloader", "offset": "0x0", "path": bootloader.name},
             {"name": "partition_table", "offset": "0x8000", "path": partition_table.name},

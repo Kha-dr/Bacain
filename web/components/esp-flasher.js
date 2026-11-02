@@ -69,6 +69,12 @@ class EspWebFlasher extends HTMLElement {
       }
     ];
 
+    // GitHub Release options
+    this.releaseRepo = 'khad1r/Mini-E-Reader';
+    this.releaseTag = '';
+    this.isFetchingRelease = false;
+    this.showCustomRepo = false;
+
     // Terminal log records
     this.terminalLogs = [];
 
@@ -184,19 +190,46 @@ class EspWebFlasher extends HTMLElement {
 
     const fileInput = this.querySelector('#firmwareFileInput');
     if (fileInput) {
-      fileInput.disabled = this.isFlashing;
+      fileInput.disabled = this.isFlashing || this.isFetchingRelease;
     }
 
     const eraseCheck = this.querySelector('#eraseBeforeFlashCheck');
     if (eraseCheck) {
-      eraseCheck.disabled = this.isFlashing;
+      eraseCheck.disabled = this.isFlashing || this.isFetchingRelease;
+    }
+
+    // GitHub Release Controls
+    const fetchReleaseBtn = this.querySelector('#fetchReleaseBtn');
+    if (fetchReleaseBtn) {
+      fetchReleaseBtn.disabled = this.isFlashing || this.isFetchingRelease;
+      const releaseBtnText = this.querySelector('#fetchReleaseBtnText');
+      if (releaseBtnText) {
+        releaseBtnText.textContent = this.isFetchingRelease
+          ? 'Mengunduh Firmware...'
+          : 'Unduh Firmware Terbaru dari GitHub Release';
+      }
+    }
+
+    const customContainer = this.querySelector('#customReleaseContainer');
+    if (customContainer) {
+      customContainer.style.display = this.showCustomRepo ? 'block' : 'none';
+    }
+
+    const toggleCustomBtn = this.querySelector('#toggleCustomReleaseBtn');
+    if (toggleCustomBtn) {
+      toggleCustomBtn.textContent = this.showCustomRepo ? 'Tutup Pengaturan Repo' : 'Custom Repo / Tag';
+    }
+
+    const fetchCustomBtn = this.querySelector('#fetchCustomReleaseBtn');
+    if (fetchCustomBtn) {
+      fetchCustomBtn.disabled = this.isFlashing || this.isFetchingRelease;
     }
 
     // Flash Action Button
     const startFlashBtn = this.querySelector('#startFlashBtn');
     if (startFlashBtn) {
       const hasFiles = this.hasValidFirmware();
-      startFlashBtn.disabled = this.isFlashing || !hasFiles;
+      startFlashBtn.disabled = this.isFlashing || this.isFetchingRelease || !hasFiles;
       const flashLabel = this.querySelector('#startFlashBtnText');
       if (flashLabel) {
         flashLabel.textContent = this.isFlashing ? 'Writing to ESP32 Flash...' : 'Flash Firmware';
@@ -259,10 +292,48 @@ class EspWebFlasher extends HTMLElement {
 
           <!-- Bagian 2: Pilih Firmware -->
           <div class="flasher-section flasher-section-firmware" style="margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
-            <div style="font-weight: 600; font-size: 0.95rem; margin-bottom: 0.5rem;">Firmware</div>
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.6rem;">
+              <span style="font-weight: 600; font-size: 0.95rem;">Firmware</span>
+              <button id="toggleCustomReleaseBtn" type="button" class="btn-sm btn-secondary" style="font-size: 0.75rem; cursor: pointer;">
+                ${this.showCustomRepo ? 'Tutup Pengaturan Repo' : 'Custom Repo / Tag'}
+              </button>
+            </div>
+
+            <!-- GitHub Release Action -->
+            <div style="margin-bottom: 0.75rem;">
+              <button id="fetchReleaseBtn" type="button" class="btn-primary" style="padding: 0.5rem 0.85rem; font-size: 0.82rem; display: inline-flex; align-items: center; justify-content: center; gap: 0.45rem; cursor: pointer; width: 100%; border-radius: var(--radius-sm);" ${this.isFlashing || this.isFetchingRelease ? 'disabled' : ''}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 15px; height: 15px;">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                  <polyline points="7 10 12 15 17 10"></polyline>
+                  <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+                <span id="fetchReleaseBtnText">${this.isFetchingRelease ? 'Mengunduh Firmware...' : 'Unduh Firmware Terbaru dari GitHub Release'}</span>
+              </button>
+
+              <!-- Custom Repo & Tag Input Form -->
+              <div id="customReleaseContainer" style="display: ${this.showCustomRepo ? 'block' : 'none'}; margin-top: 0.6rem; padding: 0.65rem 0.75rem; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+                <div style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.4rem;">
+                  GitHub Repository & Release Tag:
+                </div>
+                <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                  <input type="text" id="customReleaseRepoInput" placeholder="khad1r/Mini-E-Reader" value="${this.escapeHtml(this.releaseRepo)}" style="flex: 1; min-width: 170px; padding: 0.4rem 0.6rem; font-size: 0.8rem; background: var(--bg-input); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: var(--radius-sm); outline: none;">
+                  <input type="text" id="customReleaseTagInput" placeholder="Tag (kosong = latest)" value="${this.escapeHtml(this.releaseTag)}" style="width: 130px; padding: 0.4rem 0.6rem; font-size: 0.8rem; background: var(--bg-input); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: var(--radius-sm); outline: none;">
+                  <button id="fetchCustomReleaseBtn" type="button" class="btn-sm btn-primary" style="padding: 0.4rem 0.75rem; font-size: 0.8rem; cursor: pointer;" ${this.isFlashing || this.isFetchingRelease ? 'disabled' : ''}>
+                    Ambil
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Divider -->
+            <div style="display: flex; align-items: center; gap: 0.6rem; margin: 0.85rem 0 0.65rem 0; color: var(--text-muted); font-size: 0.76rem;">
+              <span style="flex: 1; height: 1px; background: var(--border-color);"></span>
+              <span>atau upload file lokal</span>
+              <span style="flex: 1; height: 1px; background: var(--border-color);"></span>
+            </div>
 
             <div class="file-picker-wrapper dropzone" id="fileDropzone" style="padding: 1.25rem 1rem; text-align: center; cursor: pointer; position: relative;">
-              <input type="file" id="firmwareFileInput" class="file-picker-input" accept=".bin,application/octet-stream" ${this.isFlashing ? 'disabled' : ''}>
+              <input type="file" id="firmwareFileInput" class="file-picker-input" accept=".bin,application/octet-stream" ${this.isFlashing || this.isFetchingRelease ? 'disabled' : ''}>
               <div id="fileDropzoneContent">
                 ${this.renderDropzoneContent()}
               </div>
@@ -270,7 +341,7 @@ class EspWebFlasher extends HTMLElement {
 
             <div style="margin-top: 0.6rem; display: flex; justify-content: flex-end;">
               <label class="checkbox-label">
-                <input type="checkbox" id="eraseBeforeFlashCheck" ${this.eraseBeforeFlash ? 'checked' : ''} ${this.isFlashing ? 'disabled' : ''}>
+                <input type="checkbox" id="eraseBeforeFlashCheck" ${this.eraseBeforeFlash ? 'checked' : ''} ${this.isFlashing || this.isFetchingRelease ? 'disabled' : ''}>
                 <span>Erase flash sebelum menulis</span>
               </label>
             </div>
@@ -373,7 +444,7 @@ class EspWebFlasher extends HTMLElement {
       dropzone.addEventListener('drop', async (e) => {
         e.preventDefault();
         dropzone.classList.remove('dragover');
-        if (this.isFlashing) return;
+        if (this.isFlashing || this.isFetchingRelease) return;
 
         const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
         if (file) {
@@ -381,6 +452,58 @@ class EspWebFlasher extends HTMLElement {
         }
       });
     }
+
+    // GitHub Release Fetch button
+    const fetchReleaseBtn = this.querySelector('#fetchReleaseBtn');
+    if (fetchReleaseBtn) {
+      fetchReleaseBtn.addEventListener('click', async () => {
+        try {
+          await this.fetchLatestFirmwareFromRelease(this.releaseRepo);
+        } catch (err) {
+          // Handled and logged to terminal
+        }
+      });
+    }
+
+    // Toggle custom repo/tag settings
+    const toggleCustomBtn = this.querySelector('#toggleCustomReleaseBtn');
+    if (toggleCustomBtn) {
+      toggleCustomBtn.addEventListener('click', () => {
+        this.showCustomRepo = !this.showCustomRepo;
+        this.updateUI();
+      });
+    }
+
+    // Fetch custom repo/tag button
+    const fetchCustomBtn = this.querySelector('#fetchCustomReleaseBtn');
+    if (fetchCustomBtn) {
+      fetchCustomBtn.addEventListener('click', async () => {
+        const repoInput = this.querySelector('#customReleaseRepoInput');
+        const tagInput = this.querySelector('#customReleaseTagInput');
+        const customRepo = repoInput ? repoInput.value.trim() : '';
+        const customTag = tagInput ? tagInput.value.trim() : '';
+        if (customRepo) {
+          this.releaseRepo = customRepo;
+        }
+        this.releaseTag = customTag;
+        try {
+          await this.fetchLatestFirmwareFromRelease(this.releaseRepo, this.releaseTag || null);
+        } catch (err) {
+          // Handled and logged to terminal
+        }
+      });
+    }
+
+    const repoInput = this.querySelector('#customReleaseRepoInput');
+    const tagInput = this.querySelector('#customReleaseTagInput');
+    const onEnter = (e) => {
+      if (e.key === 'Enter') {
+        const btn = this.querySelector('#fetchCustomReleaseBtn');
+        if (btn) btn.click();
+      }
+    };
+    if (repoInput) repoInput.addEventListener('keydown', onEnter);
+    if (tagInput) tagInput.addEventListener('keydown', onEnter);
 
     // Listen for unexpected device disconnect
     if ('serial' in navigator) {
@@ -408,6 +531,79 @@ class EspWebFlasher extends HTMLElement {
       this.updateUI();
     } catch (err) {
       this.appendTerminal(`Failed to read file ${file.name}: ${err.message}\n`, 'error');
+    }
+  }
+
+  // ==========================================================================
+  // GitHub Release Firmware Operations
+  // ==========================================================================
+  async fetchLatestFirmwareFromRelease(repo = 'khad1r/Mini-E-Reader', tag = null) {
+    const targetRepo = (repo && repo.trim()) || 'khad1r/Mini-E-Reader';
+    const targetTag = (typeof tag === 'string' && tag.trim().length > 0) ? tag.trim() : null;
+
+    this.isFetchingRelease = true;
+    this.updateUI();
+
+    try {
+      if (targetTag) {
+        this.appendTerminal(`Mengambil informasi rilis ${targetTag} dari GitHub (${targetRepo})...\n`, 'info');
+      } else {
+        this.appendTerminal(`Mengambil informasi rilis terbaru dari GitHub (${targetRepo})...\n`, 'info');
+      }
+
+      const releaseUrl = targetTag
+        ? `https://api.github.com/repos/${targetRepo}/releases/tags/${encodeURIComponent(targetTag)}`
+        : `https://api.github.com/repos/${targetRepo}/releases/latest`;
+
+      const releaseRes = await fetch(releaseUrl);
+      if (!releaseRes.ok) {
+        if (releaseRes.status === 404) {
+          throw new Error(`Rilis GitHub tidak ditemukan untuk repository '${targetRepo}'.`);
+        } else if (releaseRes.status === 403) {
+          throw new Error('GitHub API rate limit terlampaui atau akses dibatasi (HTTP 403).');
+        } else {
+          throw new Error(`Gagal mengambil data release dari GitHub (HTTP ${releaseRes.status}: ${releaseRes.statusText}).`);
+        }
+      }
+
+      const releaseData = await releaseRes.json();
+      const assets = Array.isArray(releaseData.assets) ? releaseData.assets : [];
+
+      let asset = assets.find(a => a && a.name === 'bacain_factory.bin');
+      if (!asset) {
+        asset = assets.find(a => a && typeof a.name === 'string' && a.name.endsWith('.bin'));
+      }
+
+      if (!asset || !asset.browser_download_url) {
+        throw new Error('Asset firmware .bin tidak ditemukan pada rilis terbaru.');
+      }
+
+      this.appendTerminal(`Mengunduh firmware asset: ${asset.name} (${this.formatBytes(asset.size || 0)})...\n`, 'info');
+
+      const downloadRes = await fetch(asset.browser_download_url);
+      if (!downloadRes.ok) {
+        throw new Error(`Gagal mengunduh file binary firmware dari GitHub (HTTP ${downloadRes.status}: ${downloadRes.statusText}).`);
+      }
+
+      const buffer = await downloadRes.arrayBuffer();
+
+      this.fileSlots[0] = {
+        id: 'slot_factory',
+        offset: '0x0',
+        fileData: new Uint8Array(buffer),
+        fileName: asset.name,
+        fileSize: buffer.byteLength
+      };
+
+      this.appendTerminal(`[GitHub Release] Firmware ${asset.name} (${this.formatBytes(buffer.byteLength)}) berhasil dimuat. Siap di-flash.\n`, 'success');
+      this.updateUI();
+      return this.fileSlots[0];
+    } catch (err) {
+      this.appendTerminal(`[GitHub Release Error] ${err.message}\n`, 'error');
+      throw err;
+    } finally {
+      this.isFetchingRelease = false;
+      this.updateUI();
     }
   }
 

@@ -1,0 +1,146 @@
+menu "Board & Hardware Configuration"
+
+    config BOARD_DISPLAY_WIDTH
+        int "Display width in pixels"
+        default 200
+        range 64 1024
+        help
+            Width of the E-Paper display in pixels.
+            Default: 200 (Waveshare ESP32-S3-ePaper-1.54).
+
+    config BOARD_DISPLAY_HEIGHT
+        int "Display height in pixels"
+        default 200
+        range 64 1024
+        help
+            Height of the E-Paper display in pixels.
+            Default: 200 (Waveshare ESP32-S3-ePaper-1.54).
+
+    config BOARD_DISPLAY_ROTATION
+        int "Display rotation (0: upright portrait, 1: 90 deg, 2: 180 deg, 3: 270 deg)"
+        default 0
+        range 0 3
+        help
+            Default display orientation.
+            Default: 0 (Waveshare ESP32-S3-ePaper-1.54).
+
+    config BOARD_EPD_DC_PIN
+        int "E-Paper DC GPIO pin"
+        default 10
+        help
+            GPIO pin for E-Paper Data/Command selection.
+            Default: 10 (Waveshare ESP32-S3-ePaper-1.54).
+
+    config BOARD_EPD_CS_PIN
+        int "E-Paper CS GPIO pin"
+        default 11
+        help
+            GPIO pin for E-Paper SPI Chip Select.
+            Default: 11 (Waveshare ESP32-S3-ePaper-1.54).
+
+    config BOARD_EPD_SCK_PIN
+        int "E-Paper SCK GPIO pin"
+        default 12
+        help
+            GPIO pin for E-Paper SPI Clock.
+            Default: 12 (Waveshare ESP32-S3-ePaper-1.54).
+
+    config BOARD_EPD_MOSI_PIN
+        int "E-Paper MOSI GPIO pin"
+        default 13
+        help
+            GPIO pin for E-Paper SPI MOSI.
+            Default: 13 (Waveshare ESP32-S3-ePaper-1.54).
+
+    config BOARD_EPD_RST_PIN
+        int "E-Paper Reset GPIO pin"
+        default 9
+        help
+            GPIO pin for E-Paper Reset.
+            Default: 9 (Waveshare ESP32-S3-ePaper-1.54).
+
+    config BOARD_EPD_BUSY_PIN
+        int "E-Paper Busy GPIO pin"
+        default 8
+        help
+            GPIO pin for E-Paper Busy status.
+            Default: 8 (Waveshare ESP32-S3-ePaper-1.54).
+
+    config BOARD_EPD_PWR_PIN
+        int "E-Paper Power Control GPIO pin"
+        default 6
+        help
+            GPIO pin to control E-Paper power rail.
+            Default: 6 (Waveshare ESP32-S3-ePaper-1.54).
+
+    config BOARD_BTN_DOWN_PIN
+        int "Navigation Down / Prev Button GPIO pin"
+        default 0
+        help
+            GPIO pin for navigation down button.
+            Default: 0 (Waveshare ESP32-S3-ePaper-1.54).
+
+    config BOARD_BTN_UP_PIN
+        int "Navigation Up / Next Button GPIO pin"
+        default 18
+        help
+            GPIO pin for navigation up button.
+            Default: 18 (Waveshare ESP32-S3-ePaper-1.54).
+
+    config BOARD_SDMMC_D0_PIN
+        int "MicroSD SDMMC D0 GPIO pin"
+        default 40
+        help
+            GPIO pin for SDMMC Data 0.
+            Default: 40 (Waveshare ESP32-S3-ePaper-1.54).
+
+    config BOARD_SDMMC_CLK_PIN
+        int "MicroSD SDMMC CLK GPIO pin"
+        default 39
+        help
+            GPIO pin for SDMMC Clock.
+            Default: 39 (Waveshare ESP32-S3-ePaper-1.54).
+
+    config BOARD_SDMMC_CMD_PIN
+        int "MicroSD SDMMC CMD GPIO pin"
+        default 41
+        help
+            GPIO pin for SDMMC Command.
+            Default: 41 (Waveshare ESP32-S3-ePaper-1.54).
+
+    config BOARD_VBAT_PWR_HOLD_PIN
+        int "VBAT Power Hold GPIO pin"
+        default 17
+        help
+            GPIO pin to maintain battery power.
+            Default: 17 (Waveshare ESP32-S3-ePaper-1.54).
+
+    config BOARD_AUDIO_PWR_PIN
+        int "Audio Power Control GPIO pin"
+        default 42
+        help
+            GPIO pin for Audio power switch.
+            Default: 42 (Waveshare ESP32-S3-ePaper-1.54).
+
+    config BOARD_AUDIO_PA_PIN
+        int "Audio Power Amplifier GPIO pin"
+        default 46
+        help
+            GPIO pin for Audio Power Amplifier enable.
+            Default: 46 (Waveshare ESP32-S3-ePaper-1.54).
+
+    config BOARD_LED_GREEN_PIN
+        int "Status LED GPIO pin"
+        default 3
+        help
+            GPIO pin for green status LED.
+            Default: 3 (Waveshare ESP32-S3-ePaper-1.54).
+
+    config BOARD_BATTERY_ADC_CHANNEL
+        int "Battery ADC Channel (ADC1)"
+        default 3
+        help
+            ADC1 channel used for battery voltage sensing.
+            Default: 3 (Waveshare ESP32-S3-ePaper-1.54).
+
+endmenu
