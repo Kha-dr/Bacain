@@ -139,6 +139,18 @@ const el = {
   triggerSleepBtn: document.getElementById('triggerSleepBtn')
 };
 
+function refreshDomElements() {
+  for (const key of Object.keys(el)) {
+    el[key] = document.getElementById(key) || el[key];
+  }
+  if (!el.booksList) {
+    el.booksList = document.getElementById('booksListContainer') || document.getElementById('booksList');
+  }
+  if (!el.logBody) {
+    el.logBody = document.getElementById('activityLog') || document.getElementById('logBody');
+  }
+}
+
 // ============================================================================
 // Utilities: Formatting & Logging
 // ============================================================================
@@ -157,6 +169,15 @@ function formatKb(kb) {
 
 let logCount = 0;
 function log(msg, type = 'info') {
+  const modalComponent = document.getElementById('settingsModal');
+  if (modalComponent && typeof modalComponent.appendLog === 'function') {
+    modalComponent.appendLog(msg, type);
+    return;
+  }
+
+  const logBody = el.logBody || document.getElementById('activityLog') || document.getElementById('logBody');
+  if (!logBody) return;
+
   const now = new Date();
   const timestamp = now.toTimeString().split(' ')[0] + '.' + String(now.getMilliseconds()).padStart(3, '0');
 
@@ -174,16 +195,17 @@ function log(msg, type = 'info') {
   entry.appendChild(timeSpan);
   entry.appendChild(msgSpan);
 
-  el.logBody.appendChild(entry);
+  logBody.appendChild(entry);
   logCount++;
-  el.logCountBadge.textContent = logCount;
+  const badge = el.logCountBadge || document.getElementById('logCountBadge');
+  if (badge) badge.textContent = logCount;
 
   // Auto-scroll to bottom
-  el.logBody.scrollTop = el.logBody.scrollHeight;
+  logBody.scrollTop = logBody.scrollHeight;
 
   // Limit entries
-  while (el.logBody.childElementCount > 250) {
-    el.logBody.removeChild(el.logBody.firstChild);
+  while (logBody.childElementCount > 250) {
+    logBody.removeChild(logBody.firstChild);
   }
 }
 
@@ -368,31 +390,60 @@ function onDisconnected() {
 }
 
 function updateConnectionUI(state) {
+  const statusDashboard = document.getElementById('statusDashboard');
+  const bookLibrary = document.getElementById('bookLibrary');
+
   if (state === 'connected') {
-    el.statusDot.className = 'status-dot connected';
-    el.connectBtn.className = 'btn-connect connected';
-    el.connectBtnText.textContent = 'Disconnect';
-    el.deviceStateBadge.className = 'card-badge badge-success';
-    el.deviceStateBadge.textContent = 'Connected';
-    el.deviceNameText.textContent = bleDevice?.name || 'BacaIn';
-    el.refreshBooksBtn.disabled = false;
-    el.refreshStatusBtn.disabled = false;
+    if (el.statusDot) el.statusDot.className = 'status-dot connected';
+    if (el.connectBtn) {
+      el.connectBtn.className = 'btn-connect connected';
+      if (el.connectBtnText) el.connectBtnText.textContent = 'Disconnect';
+    }
+    if (el.deviceStateBadge) {
+      el.deviceStateBadge.className = 'card-badge badge-success';
+      el.deviceStateBadge.textContent = 'Connected';
+    }
+    if (el.deviceNameText) el.deviceNameText.textContent = bleDevice?.name || 'BacaIn';
+    if (el.refreshBooksBtn) el.refreshBooksBtn.disabled = false;
+    if (el.refreshStatusBtn) el.refreshStatusBtn.disabled = false;
+
+    if (statusDashboard && typeof statusDashboard.updateDeviceStatus === 'function') {
+      statusDashboard.updateDeviceStatus({
+        state: true,
+        name: bleDevice?.name || 'BacaIn'
+      });
+    }
+    if (bookLibrary && typeof bookLibrary.setDeviceConnected === 'function') {
+      bookLibrary.setDeviceConnected(true);
+    }
   } else if (state === 'connecting') {
-    el.statusDot.className = 'status-dot connecting';
-    el.connectBtn.className = 'btn-connect';
-    el.connectBtnText.textContent = 'Connecting...';
-    el.deviceStateBadge.className = 'card-badge badge-muted';
-    el.deviceStateBadge.textContent = 'Connecting';
-    el.refreshBooksBtn.disabled = true;
-    el.refreshStatusBtn.disabled = true;
+    if (el.statusDot) el.statusDot.className = 'status-dot connecting';
+    if (el.connectBtn) {
+      el.connectBtn.className = 'btn-connect';
+      if (el.connectBtnText) el.connectBtnText.textContent = 'Connecting...';
+    }
+    if (el.deviceStateBadge) {
+      el.deviceStateBadge.className = 'card-badge badge-muted';
+      el.deviceStateBadge.textContent = 'Connecting';
+    }
+    if (el.refreshBooksBtn) el.refreshBooksBtn.disabled = true;
+    if (el.refreshStatusBtn) el.refreshStatusBtn.disabled = true;
+
+    if (statusDashboard && typeof statusDashboard.updateDeviceStatus === 'function') {
+      statusDashboard.updateDeviceStatus({ state: 'Connecting' });
+    }
   } else {
-    el.statusDot.className = 'status-dot disconnected';
-    el.connectBtn.className = 'btn-connect';
-    el.connectBtnText.textContent = 'Connect BacaIn';
-    el.deviceStateBadge.className = 'card-badge badge-muted';
-    el.deviceStateBadge.textContent = 'Disconnected';
-    el.refreshBooksBtn.disabled = true;
-    el.refreshStatusBtn.disabled = true;
+    if (el.statusDot) el.statusDot.className = 'status-dot disconnected';
+    if (el.connectBtn) {
+      el.connectBtn.className = 'btn-connect';
+      if (el.connectBtnText) el.connectBtnText.textContent = 'Connect BacaIn';
+    }
+    if (el.deviceStateBadge) {
+      el.deviceStateBadge.className = 'card-badge badge-muted';
+      el.deviceStateBadge.textContent = 'Disconnected';
+    }
+    if (el.refreshBooksBtn) el.refreshBooksBtn.disabled = true;
+    if (el.refreshStatusBtn) el.refreshStatusBtn.disabled = true;
 
     // Reset status indicators to placeholder
     if (el.batteryPctText) el.batteryPctText.textContent = '—%';
@@ -412,6 +463,25 @@ function updateConnectionUI(state) {
       el.storageBadge.textContent = currentStorageTarget === 0 ? 'MicroSD' : 'Internal Flash';
     }
     if (el.storageMeterFill) el.storageMeterFill.style.width = '0%';
+
+    if (statusDashboard) {
+      if (typeof statusDashboard.updateDeviceStatus === 'function') {
+        statusDashboard.updateDeviceStatus({ state: false });
+      }
+      if (typeof statusDashboard.updateBattery === 'function') {
+        statusDashboard.updateBattery({ pct: 0, isCharging: false, mv: 0, desc: 'Awaiting connection' });
+      }
+      if (typeof statusDashboard.updateFlashStorage === 'function') {
+        statusDashboard.updateFlashStorage({ freeKb: 0, totalKb: 0, isActive: currentStorageTarget === 1 });
+      }
+      if (typeof statusDashboard.updateSdStorage === 'function') {
+        statusDashboard.updateSdStorage({ freeKb: 0, totalKb: 0, isMounted: false, isActive: currentStorageTarget === 0 });
+      }
+    }
+
+    if (bookLibrary && typeof bookLibrary.setDeviceConnected === 'function') {
+      bookLibrary.setDeviceConnected(false);
+    }
 
     remoteBooks = [];
     renderBooksList();
@@ -498,6 +568,48 @@ function parseStatusValue(dataView) {
   }
   if (el.storageMeterFill) {
     el.storageMeterFill.style.width = `${Math.min(100, Math.max(0, usedPct))}%`;
+  }
+
+  // Perbarui status dashboard untuk Flash dan MicroSD
+  const statusDashboard = document.getElementById('statusDashboard');
+  if (statusDashboard) {
+    if (typeof statusDashboard.updateBattery === 'function') {
+      statusDashboard.updateBattery({
+        pct: batteryPct,
+        isCharging,
+        mv: batteryMv,
+        desc: isCharging ? 'Charging via USB' : 'Operating on battery'
+      });
+    }
+
+    if (currentStorageTarget === 1) {
+      if (typeof statusDashboard.updateFlashStorage === 'function') {
+        statusDashboard.updateFlashStorage({
+          freeKb,
+          totalKb,
+          isActive: true
+        });
+      }
+      if (typeof statusDashboard.updateSdStorage === 'function') {
+        statusDashboard.updateSdStorage({
+          isActive: false
+        });
+      }
+    } else {
+      if (typeof statusDashboard.updateSdStorage === 'function') {
+        statusDashboard.updateSdStorage({
+          freeKb,
+          totalKb,
+          isMounted: totalKb > 0,
+          isActive: true
+        });
+      }
+      if (typeof statusDashboard.updateFlashStorage === 'function') {
+        statusDashboard.updateFlashStorage({
+          isActive: false
+        });
+      }
+    }
   }
 
   log(`Status Update: Battery ${batteryPct}% (${(batteryMv/1000).toFixed(2)}V), Storage Free: ${formatKb(freeKb)} / ${formatKb(totalKb)} (${usedPct}% used)`, 'info');
@@ -644,6 +756,16 @@ function renderBooksList() {
   const searchTerm = el.bookSearchInput ? el.bookSearchInput.value.trim().toLowerCase() : '';
   const filtered = remoteBooks.filter(b => b.name.toLowerCase().includes(searchTerm));
 
+  const bookLibrary = document.getElementById('bookLibrary');
+  if (bookLibrary && typeof bookLibrary.renderBooks === 'function') {
+    bookLibrary.setDeviceConnected(isConnected);
+    const booksWithProgress = remoteBooks.map(b => ({
+      ...b,
+      progress: b.progress !== undefined ? b.progress : getBookReadingProgress(b.name)
+    }));
+    bookLibrary.renderBooks(booksWithProgress, currentStorageTarget === 0 ? '/sdcard/books/' : '/spiflash/books/');
+  }
+
   if (el.booksCountBadge) {
     el.booksCountBadge.textContent = `${remoteBooks.length} ${remoteBooks.length === 1 ? 'book' : 'books'}`;
   }
@@ -756,14 +878,20 @@ function renderBooksList() {
 
 // Settings Modal Dialog Helpers
 function openSettingsModal() {
-  if (el.settingsModal) {
+  const modalComponent = document.getElementById('settingsModal');
+  if (modalComponent && typeof modalComponent.open === 'function') {
+    modalComponent.open();
+  } else if (el.settingsModal) {
     el.settingsModal.classList.add('active');
     el.settingsModal.setAttribute('aria-hidden', 'false');
   }
 }
 
 function closeSettingsModal() {
-  if (el.settingsModal) {
+  const modalComponent = document.getElementById('settingsModal');
+  if (modalComponent && typeof modalComponent.close === 'function') {
+    modalComponent.close();
+  } else if (el.settingsModal) {
     el.settingsModal.classList.remove('active');
     el.settingsModal.setAttribute('aria-hidden', 'true');
   }
@@ -986,18 +1114,28 @@ async function executeFileUpload(file) {
 }
 
 function showUploadActiveCard(fileName) {
-  el.uploadingFileName.textContent = fileName;
-  el.uploadProgressFill.style.width = '0%';
-  el.uploadPctStat.textContent = '0.0%';
-  el.uploadSpeedStat.textContent = '0.0 KB/s';
-  el.uploadSeqStat.textContent = '#0 / 0';
-  el.uploadEtaStat.textContent = 'Calculating...';
-  el.uploadActiveCard.classList.add('visible');
+  if (el.uploadingFileName) el.uploadingFileName.textContent = fileName;
+  if (el.uploadProgressFill) el.uploadProgressFill.style.width = '0%';
+  if (el.uploadPctStat) el.uploadPctStat.textContent = '0.0%';
+  if (el.uploadSpeedStat) el.uploadSpeedStat.textContent = '0.0 KB/s';
+  if (el.uploadSeqStat) el.uploadSeqStat.textContent = '#0 / 0';
+  if (el.uploadEtaStat) el.uploadEtaStat.textContent = 'Calculating...';
+  if (el.uploadActiveCard) el.uploadActiveCard.classList.add('visible');
+
+  const bookUploader = document.getElementById('bookUploader');
+  if (bookUploader && typeof bookUploader.showProgress === 'function') {
+    bookUploader.showProgress(fileName);
+  }
 }
 
 function hideUploadActiveCard() {
-  el.uploadActiveCard.classList.remove('visible');
-  el.fileInput.value = '';
+  if (el.uploadActiveCard) el.uploadActiveCard.classList.remove('visible');
+  if (el.fileInput) el.fileInput.value = '';
+
+  const bookUploader = document.getElementById('bookUploader');
+  if (bookUploader && typeof bookUploader.reset === 'function') {
+    bookUploader.reset();
+  }
 }
 
 function updateUploadStats(bytesSent, totalBytes, seqId, totalChunks, startTime) {
@@ -1007,11 +1145,22 @@ function updateUploadStats(bytesSent, totalBytes, seqId, totalChunks, startTime)
   const remainingBytes = totalBytes - bytesSent;
   const etaSec = speedKBps > 0 ? Math.ceil((remainingBytes / 1024) / speedKBps) : 0;
 
-  el.uploadProgressFill.style.width = `${pct}%`;
-  el.uploadPctStat.textContent = `${pct}%`;
-  el.uploadSpeedStat.textContent = `${speedKBps.toFixed(1)} KB/s`;
-  el.uploadSeqStat.textContent = `#${seqId} / ${totalChunks}`;
-  el.uploadEtaStat.textContent = `${etaSec}s`;
+  if (el.uploadProgressFill) el.uploadProgressFill.style.width = `${pct}%`;
+  if (el.uploadPctStat) el.uploadPctStat.textContent = `${pct}%`;
+  if (el.uploadSpeedStat) el.uploadSpeedStat.textContent = `${speedKBps.toFixed(1)} KB/s`;
+  if (el.uploadSeqStat) el.uploadSeqStat.textContent = `#${seqId} / ${totalChunks}`;
+  if (el.uploadEtaStat) el.uploadEtaStat.textContent = `${etaSec}s`;
+
+  const bookUploader = document.getElementById('bookUploader');
+  if (bookUploader && typeof bookUploader.setProgress === 'function') {
+    bookUploader.setProgress({
+      pct: Number(pct),
+      speedKbps: speedKBps,
+      currentSeq: seqId,
+      totalSeq: totalChunks,
+      etaSec
+    });
+  }
 }
 
 // ============================================================================
@@ -1034,7 +1183,7 @@ function registerServiceWorker() {
 // ============================================================================
 // Live Hardware Controls Logic (Storage, Typography, Refresh, Power)
 // ============================================================================
-let currentStorageTarget = 0; // 0: MicroSD (/sdcard), 1: Internal Flash (/spiflash)
+let currentStorageTarget = 1; // 1: Internal Flash (/spiflash) default, 0: MicroSD (/sdcard)
 let currentFontSize = 0; // 0: Font16, 1: Font12
 
 function updateStorageTargetUI(target) {
@@ -1054,6 +1203,23 @@ function updateStorageTargetUI(target) {
   if (el.storageBadge && !isConnected) {
     el.storageBadge.textContent = target === 0 ? 'MicroSD' : 'Internal Flash';
     el.storageBadge.className = 'card-badge badge-muted';
+  }
+
+  // Update StatusDashboard Web Component
+  const statusDashboard = document.getElementById('statusDashboard');
+  if (statusDashboard) {
+    if (typeof statusDashboard.updateFlashStorage === 'function') {
+      statusDashboard.updateFlashStorage({ isActive: target === 1 });
+    }
+    if (typeof statusDashboard.updateSdStorage === 'function') {
+      statusDashboard.updateSdStorage({ isActive: target === 0 });
+    }
+  }
+
+  // Update BookLibrary Web Component
+  const bookLibrary = document.getElementById('bookLibrary');
+  if (bookLibrary && typeof bookLibrary.setStorageTargetBadge === 'function') {
+    bookLibrary.setStorageTargetBadge(target);
   }
 }
 
@@ -1298,16 +1464,72 @@ function initEventListeners() {
   if (el.triggerSleepBtn) {
     el.triggerSleepBtn.addEventListener('click', () => triggerSleep());
   }
+
+  // Web Components Event Listeners
+  document.addEventListener('storage-target-change', (e) => {
+    if (e.detail && e.detail.target !== undefined) {
+      setStorageTarget(e.detail.target);
+    }
+  });
+
+  document.addEventListener('refresh-books', () => {
+    queryBooksList();
+  });
+
+  document.addEventListener('refresh-status', () => {
+    readDeviceStatus();
+  });
+
+  document.addEventListener('delete-book', (e) => {
+    if (e.detail) {
+      openDeleteModal(e.detail.book || { name: e.detail.name, size: e.detail.size, path: e.detail.path });
+    }
+  });
+
+  document.addEventListener('file-select', (e) => {
+    if (e.detail && e.detail.files) {
+      handleFilesSelected(e.detail.files);
+    }
+  });
+
+  document.addEventListener('cancel-upload', () => {
+    if (isUploading) {
+      cancelUploadRequested = true;
+      log('User requested upload cancellation.', 'warning');
+      showToast('Cancelling upload...', 'warning');
+    }
+  });
+
+  document.addEventListener('font-change', (e) => {
+    if (e.detail && e.detail.font !== undefined) {
+      setFont(e.detail.font);
+    }
+  });
+
+  document.addEventListener('force-refresh', () => {
+    forceRefresh();
+  });
+
+  document.addEventListener('sleep-timeout-change', (e) => {
+    if (e.detail && e.detail.timeout !== undefined) {
+      setSleepTimeout(e.detail.timeout);
+    }
+  });
+
+  document.addEventListener('trigger-sleep', () => {
+    triggerSleep();
+  });
 }
 
 // ============================================================================
 // App Bootstrap
 // ============================================================================
 function init() {
+  refreshDomElements();
   initTheme();
   checkBluetoothCompatibility();
   initEventListeners();
-  updateStorageTargetUI(0);
+  updateStorageTargetUI(1);
   registerServiceWorker();
   log('BacaIn Web Bluetooth PWA initialized.', 'info');
 }

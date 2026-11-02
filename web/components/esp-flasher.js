@@ -44,7 +44,7 @@ class EspWebFlasher extends HTMLElement {
     this.transport = null;
     this.esploader = null;
 
-    this.isConnected = false;
+    this.isDeviceConnected = false;
     this.isConnecting = false;
     this.isFlashing = false;
     this.isErasing = false;
@@ -117,7 +117,7 @@ class EspWebFlasher extends HTMLElement {
   }
 
   renderDeviceInfo() {
-    if (!this.isConnected) return '';
+    if (!this.isDeviceConnected) return '';
     return `
       <div class="flasher-device-info-grid">
         <div class="info-pill">
@@ -144,31 +144,31 @@ class EspWebFlasher extends HTMLElement {
     // Status Badge
     const badge = this.querySelector('#flasherStatusBadge');
     if (badge) {
-      badge.className = `card-badge ${this.isConnected ? 'badge-success' : 'badge-muted'}`;
-      badge.textContent = this.isConnected ? 'Connected' : (this.isConnecting ? 'Connecting...' : 'Disconnected');
+      badge.className = `card-badge ${this.isDeviceConnected ? 'badge-success' : 'badge-muted'}`;
+      badge.textContent = this.isDeviceConnected ? 'Connected' : (this.isConnecting ? 'Connecting...' : 'Disconnected');
     }
 
     // Connect Button
     const connectBtn = this.querySelector('#flasherConnectBtn');
     if (connectBtn) {
-      connectBtn.className = `btn-connect ${this.isConnected ? 'connected' : ''}`;
+      connectBtn.className = `btn-connect ${this.isDeviceConnected ? 'connected' : ''}`;
       connectBtn.disabled = !('serial' in navigator) || this.isConnecting || this.isFlashing;
       const dot = connectBtn.querySelector('.status-dot');
       if (dot) {
-        dot.className = `status-dot ${this.isConnected ? 'connected' : (this.isConnecting ? 'connecting' : 'disconnected')}`;
+        dot.className = `status-dot ${this.isDeviceConnected ? 'connected' : (this.isConnecting ? 'connecting' : 'disconnected')}`;
       }
       const label = this.querySelector('#flasherConnectBtnText');
       if (label) {
-        label.textContent = this.isConnected ? 'Disconnect Serial' : (this.isConnecting ? 'Handshaking...' : 'Connect Serial Port');
+        label.textContent = this.isDeviceConnected ? 'Disconnect Serial' : (this.isConnecting ? 'Handshaking...' : 'Connect Serial Port');
       }
     }
 
     // Secondary Action Buttons
     const resetBtn = this.querySelector('#flasherResetBtn');
-    if (resetBtn) resetBtn.disabled = !this.isConnected || this.isFlashing;
+    if (resetBtn) resetBtn.disabled = !this.isDeviceConnected || this.isFlashing;
 
     const eraseBtn = this.querySelector('#flasherEraseBtn');
-    if (eraseBtn) eraseBtn.disabled = !this.isConnected || this.isFlashing;
+    if (eraseBtn) eraseBtn.disabled = !this.isDeviceConnected || this.isFlashing;
 
     const baudSelect = this.querySelector('#flasherBaudSelect');
     if (baudSelect) baudSelect.disabled = this.isFlashing;
@@ -188,7 +188,7 @@ class EspWebFlasher extends HTMLElement {
       if (flashLabel) {
         if (this.isFlashing) {
           flashLabel.textContent = 'Writing to ESP32 Flash...';
-        } else if (!this.isConnected) {
+        } else if (!this.isDeviceConnected) {
           flashLabel.textContent = 'Connect & Flash Firmware';
         } else {
           flashLabel.textContent = 'Flash Firmware Now';
@@ -249,16 +249,16 @@ class EspWebFlasher extends HTMLElement {
               </svg>
               Serial Connection (ESP32-S3)
             </span>
-            <span id="flasherStatusBadge" class="card-badge ${this.isConnected ? 'badge-success' : 'badge-muted'}">
-              ${this.isConnected ? 'Connected' : (this.isConnecting ? 'Connecting...' : 'Disconnected')}
+            <span id="flasherStatusBadge" class="card-badge ${this.isDeviceConnected ? 'badge-success' : 'badge-muted'}">
+              ${this.isDeviceConnected ? 'Connected' : (this.isConnecting ? 'Connecting...' : 'Disconnected')}
             </span>
           </div>
 
           <div class="flasher-connection-row">
             <div class="connection-actions">
-              <button id="flasherConnectBtn" class="btn-connect ${this.isConnected ? 'connected' : ''}" ${this.isConnecting || this.isFlashing ? 'disabled' : ''}>
-                <span class="status-dot ${this.isConnected ? 'connected' : (this.isConnecting ? 'connecting' : 'disconnected')}"></span>
-                <span id="flasherConnectBtnText">${this.isConnected ? 'Disconnect Serial' : (this.isConnecting ? 'Handshaking...' : 'Connect Serial Port')}</span>
+              <button id="flasherConnectBtn" class="btn-connect ${this.isDeviceConnected ? 'connected' : ''}" ${this.isConnecting || this.isFlashing ? 'disabled' : ''}>
+                <span class="status-dot ${this.isDeviceConnected ? 'connected' : (this.isConnecting ? 'connecting' : 'disconnected')}"></span>
+                <span id="flasherConnectBtnText">${this.isDeviceConnected ? 'Disconnect Serial' : (this.isConnecting ? 'Handshaking...' : 'Connect Serial Port')}</span>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;">
                   <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
                   <polyline points="15 3 21 3 21 9"></polyline>
@@ -266,7 +266,7 @@ class EspWebFlasher extends HTMLElement {
                 </svg>
               </button>
 
-              <button id="flasherResetBtn" class="btn-secondary" ${!this.isConnected || this.isFlashing ? 'disabled' : ''} title="Trigger hardware reset to reboot device into app">
+              <button id="flasherResetBtn" class="btn-secondary" ${!this.isDeviceConnected || this.isFlashing ? 'disabled' : ''} title="Trigger hardware reset to reboot device into app">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <polyline points="23 4 23 10 17 10"></polyline>
                   <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
@@ -274,7 +274,7 @@ class EspWebFlasher extends HTMLElement {
                 <span>Reboot Device</span>
               </button>
 
-              <button id="flasherEraseBtn" class="btn-secondary btn-danger-text" ${!this.isConnected || this.isFlashing ? 'disabled' : ''} title="Completely erase SPI flash memory">
+              <button id="flasherEraseBtn" class="btn-secondary btn-danger-text" ${!this.isDeviceConnected || this.isFlashing ? 'disabled' : ''} title="Completely erase SPI flash memory">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <polyline points="3 6 5 6 21 6"></polyline>
                   <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
@@ -453,7 +453,7 @@ class EspWebFlasher extends HTMLElement {
     const connectBtn = this.querySelector('#flasherConnectBtn');
     if (connectBtn) {
       connectBtn.addEventListener('click', () => {
-        if (this.isConnected) {
+        if (this.isDeviceConnected) {
           this.disconnect();
         } else {
           this.connect();
@@ -880,12 +880,12 @@ class EspWebFlasher extends HTMLElement {
         // Non-fatal
       }
 
-      this.isConnected = true;
+      this.isDeviceConnected = true;
       this.isConnecting = false;
       this.render();
 
     } catch (err) {
-      this.isConnected = false;
+      this.isDeviceConnected = false;
       this.isConnecting = false;
       this.appendTerminal(`Serial Connection Error: ${err.message}\n`, 'error');
       await this.cleanUpConnection();
@@ -896,7 +896,7 @@ class EspWebFlasher extends HTMLElement {
   async disconnect() {
     this.appendTerminal('Disconnecting from serial port...\n', 'info');
     await this.cleanUpConnection();
-    this.isConnected = false;
+    this.isDeviceConnected = false;
     this.isConnecting = false;
     this.isFlashing = false;
     this.appendTerminal('Disconnected from device.\n', 'info');
@@ -969,10 +969,10 @@ class EspWebFlasher extends HTMLElement {
   // Flash Firmware Execution (Zero Mock - Pure Real Progress)
   // ==========================================================================
   async startFlashProcess() {
-    if (!this.isConnected || !this.esploader) {
+    if (!this.isDeviceConnected || !this.esploader) {
       this.appendTerminal('Device not connected. Opening serial port selection dialog...\n', 'info');
       await this.connect();
-      if (!this.isConnected || !this.esploader) {
+      if (!this.isDeviceConnected || !this.esploader) {
         this.appendTerminal('Flashing cancelled: serial connection not established.\n', 'warning');
         return;
       }

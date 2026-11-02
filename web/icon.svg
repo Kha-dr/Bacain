@@ -1,60 +1,32 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
-  <defs>
-    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#18181b" />
-      <stop offset="100%" stop-color="#09090b" />
-    </linearGradient>
-    <linearGradient id="spineGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#38bdf8" />
-      <stop offset="100%" stop-color="#2563eb" />
-    </linearGradient>
-    <linearGradient id="pageGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#ffffff" />
-      <stop offset="100%" stop-color="#f1f5f9" />
-    </linearGradient>
-  </defs>
+  <!-- App Canvas Frame -->
+  <rect width="512" height="512" rx="112" fill="#121212" />
+  <rect width="510" height="510" x="1" y="1" rx="111" fill="none" stroke="#27272a" stroke-width="2" />
 
-  <!-- Background squircle -->
-  <rect width="512" height="512" rx="112" fill="url(#bgGrad)" />
-  <rect x="2" y="2" width="508" height="508" rx="110" fill="none" stroke="#27272a" stroke-width="4" />
+  <!-- Left Open Book Page (Scaled Up) -->
+  <path d="M 234 136
+           C 152 102, 68 124, 68 124
+           L 68 368
+           C 68 368, 152 346, 234 380
+           Z" fill="#e2e8f0" />
 
-  <!-- Monogram B + Open Book Spine -->
-  <!-- Left Spine (Vertical Book Spine / Reading Bookmark) -->
-  <rect x="120" y="112" width="44" height="288" rx="22" fill="url(#spineGrad)" />
+  <!-- Right Open Book Page (Scaled Up) -->
+  <path d="M 278 136
+           C 360 102, 444 124, 444 124
+           L 444 368
+           C 444 368, 360 346, 278 380
+           Z" fill="#e2e8f0" />
 
-  <!-- Upper Page Spread (Top Lobe) -->
-  <path d="M 188 112 
-           H 300 
-           C 354 112 388 142 388 184 
-           C 388 224 356 246 304 246 
-           H 188 
-           C 176 246 168 238 168 226 
-           V 132 
-           C 168 120 176 112 188 112 Z
-           M 224 150
-           V 210
-           H 296
-           C 324 210 344 200 344 182
-           C 344 164 324 150 296 150
-           Z" 
-        fill="url(#pageGrad)" 
-        fill-rule="evenodd" />
+  <!-- Center Floating Bookmark Ribbon -->
+  <path d="M 238 100
+           L 274 100
+           L 274 430
+           L 256 410
+           L 238 430
+           Z" fill="#38bdf8" />
 
-  <!-- Lower Page Spread (Bottom Lobe) -->
-  <path d="M 188 266 
-           H 310 
-           C 364 266 396 296 396 340 
-           C 396 384 362 400 310 400 
-           H 188 
-           C 176 400 168 392 168 380 
-           V 286 
-           C 168 274 176 266 188 266 Z
-           M 224 302
-           V 364
-           H 304
-           C 334 364 354 352 354 336
-           C 354 320 334 302 304 302
-           Z" 
-        fill="url(#pageGrad)" 
-        fill-rule="evenodd" />
+  <!-- Base Page Layers / Book Thickness -->
+  <path d="M 83 386 C 148 366, 206 394, 234 404" stroke="#475569" stroke-width="4" stroke-linecap="round" fill="none" />
+  <path d="M 429 386 C 364 366, 306 394, 278 404" stroke="#475569" stroke-width="4" stroke-linecap="round"
+    fill="none" />
 </svg>
