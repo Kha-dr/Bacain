@@ -1,5 +1,5 @@
 /**
- * Mini E-Reader Web Bluetooth PWA
+ * BacaIn Web Bluetooth PWA
  * Application Logic & BLE Synchronization Engine
  */
 
@@ -270,6 +270,9 @@ async function connectDevice() {
     bleDevice = await navigator.bluetooth.requestDevice({
       filters: [
         { services: [SERVICE_UUID] },
+        { name: 'BacaIn' },
+        { namePrefix: 'BacaIn' },
+        { namePrefix: 'Mini-E-Reader' },
         { namePrefix: 'Mini-E' }
       ],
       optionalServices: [SERVICE_UUID]
@@ -281,7 +284,7 @@ async function connectDevice() {
     log('Connecting to GATT server...', 'info');
     gattServer = await bleDevice.gatt.connect();
 
-    log('Discovering E-Reader Sync service...', 'info');
+    log('Discovering BacaIn Sync service...', 'info');
     const service = await gattServer.getPrimaryService(SERVICE_UUID);
 
     log('Binding GATT characteristics...', 'info');
@@ -301,7 +304,7 @@ async function connectDevice() {
     isConnected = true;
     isConnecting = false;
     updateConnectionUI('connected');
-    showToast(`Connected to ${bleDevice.name || 'Mini-E-Reader'}`, 'success');
+    showToast(`Connected to ${bleDevice.name || 'BacaIn'}`, 'success');
     log('Connection established successfully.', 'success');
 
     // Read initial status
@@ -335,7 +338,7 @@ function disconnectDevice() {
 
 function onDisconnected() {
   log('Bluetooth device disconnected.', 'warning');
-  showToast('Disconnected from Mini-E-Reader', 'warning');
+  showToast('Disconnected from BacaIn', 'warning');
 
   isConnected = false;
   isConnecting = false;
@@ -359,7 +362,7 @@ function updateConnectionUI(state) {
     el.connectBtnText.textContent = 'Disconnect';
     el.deviceStateBadge.className = 'card-badge badge-success';
     el.deviceStateBadge.textContent = 'Connected';
-    el.deviceNameText.textContent = bleDevice?.name || 'Mini-E-Reader';
+    el.deviceNameText.textContent = bleDevice?.name || 'BacaIn';
     el.refreshBooksBtn.disabled = false;
     el.refreshStatusBtn.disabled = false;
   } else if (state === 'connecting') {
@@ -373,7 +376,7 @@ function updateConnectionUI(state) {
   } else {
     el.statusDot.className = 'status-dot disconnected';
     el.connectBtn.className = 'btn-connect';
-    el.connectBtnText.textContent = 'Connect E-Reader';
+    el.connectBtnText.textContent = 'Connect BacaIn';
     el.deviceStateBadge.className = 'card-badge badge-muted';
     el.deviceStateBadge.textContent = 'Disconnected';
     el.refreshBooksBtn.disabled = true;
@@ -517,7 +520,7 @@ function waitForControlResponse(opcode, timeoutMs = 8000) {
 // ============================================================================
 async function queryBooksList() {
   if (!controlChar) {
-    showToast('Not connected to E-Reader', 'warning');
+    showToast('Not connected to BacaIn', 'warning');
     return;
   }
 
@@ -608,7 +611,7 @@ function renderBooksList() {
           <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
           <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
         </svg>
-        <p>Connect your Mini E-Reader to view and manage books.</p>
+        <p>Connect your BacaIn to view and manage books.</p>
       </div>`;
     return;
   }
@@ -738,7 +741,7 @@ function handleFilesSelected(files) {
   if (!files || files.length === 0) return;
 
   if (!isConnected) {
-    showToast('Please connect to your Mini E-Reader before uploading files', 'warning');
+    showToast('Please connect to your BacaIn before uploading files', 'warning');
     return;
   }
 
@@ -958,7 +961,7 @@ function updateFontUI(fontId) {
 
 async function sendSetStorageTarget(target) {
   if (!isConnected || !controlChar) {
-    showToast('Connect E-Reader first', 'warning');
+    showToast('Connect BacaIn first', 'warning');
     return;
   }
   try {
@@ -977,7 +980,7 @@ async function sendSetStorageTarget(target) {
 
 async function sendSetFont(fontId) {
   if (!isConnected || !controlChar) {
-    showToast('Connect E-Reader first', 'warning');
+    showToast('Connect BacaIn first', 'warning');
     return;
   }
   try {
@@ -994,7 +997,7 @@ async function sendSetFont(fontId) {
 
 async function sendForceRefresh() {
   if (!isConnected || !controlChar) {
-    showToast('Connect E-Reader first', 'warning');
+    showToast('Connect BacaIn first', 'warning');
     return;
   }
   try {
@@ -1010,7 +1013,7 @@ async function sendForceRefresh() {
 
 async function sendSetSleepTimeout(seconds) {
   if (!isConnected || !controlChar) {
-    showToast('Connect E-Reader first', 'warning');
+    showToast('Connect BacaIn first', 'warning');
     return;
   }
   try {
@@ -1026,7 +1029,7 @@ async function sendSetSleepTimeout(seconds) {
 
 async function sendTriggerSleep() {
   if (!isConnected || !controlChar) {
-    showToast('Connect E-Reader first', 'warning');
+    showToast('Connect BacaIn first', 'warning');
     return;
   }
   try {
@@ -1143,7 +1146,7 @@ function init() {
   initEventListeners();
   updateStorageTargetUI(1);
   registerServiceWorker();
-  log('Mini E-Reader Web Bluetooth PWA initialized.', 'info');
+  log('BacaIn Web Bluetooth PWA initialized.', 'info');
 }
 
 document.addEventListener('DOMContentLoaded', init);

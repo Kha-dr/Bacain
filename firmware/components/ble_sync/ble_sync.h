@@ -1,6 +1,6 @@
 /**
  * @file ble_sync.h
- * @brief NimBLE GATT Server for Mini-E-Reader Book Synchronization
+ * @brief NimBLE GATT Server for BacaIn Book Synchronization
  */
 
 #ifndef BLE_SYNC_H
@@ -20,7 +20,7 @@ extern "C" {
 #define BLE_SYNC_CHR_DATA_UUID_STR       "0000fe62-0000-1000-8000-00805f9b34fb"
 #define BLE_SYNC_CHR_STATUS_UUID_STR     "0000fe63-0000-1000-8000-00805f9b34fb"
 
-#define BLE_SYNC_DEVICE_NAME             "Mini-E-Reader"
+#define BLE_SYNC_DEVICE_NAME             "BacaIn"
 
 #ifndef STORAGE_TARGET_T_DEFINED
 #define STORAGE_TARGET_T_DEFINED
@@ -79,7 +79,7 @@ typedef void (*ble_sync_event_cb_t)(ble_sync_event_t event, const void *param, v
  * @brief Initialize and start the NimBLE GATT server and advertise book sync service.
  *
  * Configures NimBLE stack, registers service 0000fe60-..., sets preferred MTU to 512,
- * and advertises as "Mini-E-Reader".
+ * and advertises as "BacaIn".
  *
  * @return ESP_OK on success, error code otherwise.
  */

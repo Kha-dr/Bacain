@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Mini-E-Reader - Firmware Packaging Tool
+BacaIn - Firmware Packaging Tool
 Merges ESP32-S3 binaries (bootloader, partition-table, app) into a single factory binary,
 generates manifest.json metadata, and optionally copies artifacts to the web firmware directory.
 
@@ -68,7 +68,7 @@ def resolve_esptool_command() -> list:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Package Mini-E-Reader ESP32-S3 firmware binaries into factory binary and manifest."
+        description="Package BacaIn ESP32-S3 firmware binaries into factory binary and manifest."
     )
     parser.add_argument(
         "--build-dir",
@@ -79,7 +79,7 @@ def main() -> int:
         "-o",
         "--output",
         default=None,
-        help="Path for output factory binary (default: <build-dir>/mini_e_reader_factory.bin)",
+        help="Path for output factory binary (default: <build-dir>/bacain_factory.bin)",
     )
     parser.add_argument(
         "--manifest",
@@ -155,8 +155,9 @@ def main() -> int:
     app_bin = find_binary(
         build_dir,
         [
-            "reader_firmware.bin",
+            "bacain.bin",
             "mini_e_reader.bin",
+            "reader_firmware.bin",
         ],
     )
 
@@ -168,7 +169,7 @@ def main() -> int:
             "partition table binary (expected: build/partition_table/partition-table.bin)"
         )
     if not app_bin:
-        missing.append("app binary (expected: build/reader_firmware.bin or build/mini_e_reader.bin)")
+        missing.append("app binary (expected: build/bacain.bin, build/mini_e_reader.bin, or build/reader_firmware.bin)")
 
     if missing:
         sys.stderr.write(
@@ -195,7 +196,7 @@ def main() -> int:
     if args.output:
         output_bin = Path(args.output).resolve()
     else:
-        output_bin = build_dir / "mini_e_reader_factory.bin"
+        output_bin = build_dir / "bacain_factory.bin"
 
     output_bin.parent.mkdir(parents=True, exist_ok=True)
 
@@ -269,6 +270,7 @@ def main() -> int:
     # Generate manifest.json
     build_date = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     manifest_data = {
+        "name": "BacaIn Firmware",
         "chip": args.chip,
         "target": args.chip,
         "flash_size": args.flash_size,

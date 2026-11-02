@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Mini E-Reader Manager</title>
-  <meta name="description" content="Web Bluetooth book sync and file manager for ESP32-S3 Mini E-Reader">
+  <title>BacaIn Manager</title>
+  <meta name="description" content="Web Bluetooth book sync and file manager for ESP32-S3 BacaIn">
   <meta name="theme-color" content="#2563eb">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="E-Reader">
+  <meta name="apple-mobile-web-app-title" content="BacaIn">
   <link rel="icon" type="image/svg+xml" href="icon.svg">
   <link rel="apple-touch-icon" href="icon.svg">
   <link rel="manifest" href="manifest.json">
@@ -21,9 +21,9 @@
     <!-- Header Section -->
     <header class="app-header">
       <div class="brand-section">
-        <img src="icon.svg" alt="Mini E-Reader Logo" class="brand-logo">
+        <img src="icon.svg" alt="BacaIn Logo" class="brand-logo">
         <div class="brand-text">
-          <h1>Mini E-Reader <span class="brand-badge">Sync</span></h1>
+          <h1>BacaIn <span class="brand-badge">Sync</span></h1>
           <p>ESP32-S3 E-Paper Web Bluetooth & Firmware Manager</p>
         </div>
       </div>
@@ -52,7 +52,7 @@
         <!-- BLE Connection Button -->
         <button id="connectBtn" class="btn-connect">
           <span id="statusDot" class="status-dot disconnected"></span>
-          <span id="connectBtnText">Connect E-Reader</span>
+          <span id="connectBtnText">Connect BacaIn</span>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;">
             <path d="M6.5 6.5l11 11L12 23V1l5.5 5.5-11 11"></path>
           </svg>
@@ -112,7 +112,7 @@
               <polyline points="17 8 12 3 7 8"></polyline>
               <line x1="12" y1="3" x2="12" y2="15"></line>
             </svg>
-            <h2>Send Books to E-Reader</h2>
+            <h2>Send Books to BacaIn</h2>
           </div>
         </div>
 
@@ -170,7 +170,7 @@
               <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path>
               <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path>
             </svg>
-            <h2>Books on E-Reader</h2>
+            <h2>Books on BacaIn</h2>
             <span id="booksCountBadge" class="card-badge badge-muted">0 books</span>
           </div>
         </div>
@@ -209,7 +209,7 @@
               <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
               <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
             </svg>
-            <p>Connect your Mini E-Reader to view and manage books.</p>
+            <p>Connect your BacaIn to view and manage books.</p>
           </div>
         </div>
       </section>
@@ -231,7 +231,7 @@
             </span>
             <span id="deviceStateBadge" class="card-badge badge-muted">Disconnected</span>
           </div>
-          <div id="deviceNameText" class="stat-value">Mini-E-Reader</div>
+          <div id="deviceNameText" class="stat-value">BacaIn</div>
           <div class="stat-sub">
             <span id="deviceUuidText">UUID: 0000fe60</span>
             <span id="deviceMtuText">MTU: 512B</span>
@@ -386,7 +386,7 @@
                   <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
                   <line x1="12" y1="2" x2="12" y2="12"></line>
                 </svg>
-                Put Reader to Sleep Now
+                Put BacaIn to Sleep Now
               </button>
             </div>
           </div>
@@ -453,7 +453,7 @@
   <div id="deleteModal" class="modal-backdrop">
     <div class="modal-card">
       <h3 class="modal-title">Delete Book</h3>
-      <p id="deleteModalText" class="modal-desc">Are you sure you want to delete this book from your E-Reader?</p>
+      <p id="deleteModalText" class="modal-desc">Are you sure you want to delete this book from your BacaIn?</p>
       <div class="modal-actions">
         <button id="cancelDeleteBtn" class="btn-secondary">Cancel</button>
         <button id="confirmDeleteBtn" class="btn-danger">Delete</button>

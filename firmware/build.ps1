@@ -1,7 +1,7 @@
-# Mini-E-Reader Clean Build & Package Helper (Windows PowerShell)
+# BacaIn Clean Build & Package Helper (Windows PowerShell)
 $ErrorActionPreference = "Stop"
 
-Write-Host "=== Building Mini-E-Reader Firmware (ESP32-S3) ===" -ForegroundColor Cyan
+Write-Host "=== Building BacaIn Firmware (ESP32-S3) ===" -ForegroundColor Cyan
 
 # 1. Lock Target to ESP32-S3 in Environment
 $env:IDF_TARGET = "esp32s3"

@@ -1,6 +1,6 @@
 /**
  * @file ble_sync.c
- * @brief NimBLE GATT Server Implementation for Mini-E-Reader Book Synchronization
+ * @brief NimBLE GATT Server Implementation for BacaIn Book Synchronization
  */
 
 #include "ble_sync.h"

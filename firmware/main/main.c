@@ -71,7 +71,7 @@ void app_main(void) {
     }
     ESP_ERROR_CHECK(ret);
 
-    ESP_LOGI(TAG, "Starting Mini-E-Reader firmware...");
+    ESP_LOGI(TAG, "Starting BacaIn firmware...");
 
     // 3. Initialize Peripherals
     esp_err_t flash_ret = flash_storage_init();

@@ -202,7 +202,7 @@ void reader_ui_render_ble_sync(bool is_connected, uint32_t bytes_received) {
     Paint_DrawString_EN(12, 50, "Chrome / Edge:", &Font12, BLACK, WHITE);
 
     Paint_DrawRectangle(10, 70, 190, 95, BLACK, DOT_PIXEL_1X1, DRAW_FILL_EMPTY);
-    Paint_DrawString_EN(16, 76, "Mini-E-Reader", &Font16, BLACK, WHITE);
+    Paint_DrawString_EN(16, 76, "BacaIn", &Font16, BLACK, WHITE);
 
     if (is_connected) {
         Paint_DrawString_EN(12, 110, "Status: CONNECTED", &Font12, BLACK, WHITE);
@@ -247,7 +247,7 @@ void reader_ui_render_sleeping(void) {
     Paint_Clear(WHITE);
 
     Paint_DrawRectangle(10, 40, 190, 160, BLACK, DOT_PIXEL_2X2, DRAW_FILL_EMPTY);
-    Paint_DrawString_EN(20, 60, "Mini-E-Reader", &Font16, BLACK, WHITE);
+    Paint_DrawString_EN(20, 60, "BacaIn", &Font16, BLACK, WHITE);
     Paint_DrawString_EN(30, 95, "SLEEPING...", &Font16, BLACK, WHITE);
     Paint_DrawString_EN(18, 130, "Press [PWR] to Wake", &Font12, BLACK, WHITE);
 
