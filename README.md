@@ -21,8 +21,8 @@ An ultra-low-power, pocket-sized E-Reader built for the **Waveshare ESP32-S3-ePa
 ```text
 .
 ├── firmware/                      # Production ESP-IDF BacaIn firmware
-│   ├── Dockerfile                 # ESP-IDF v5.3.1 reproducible build container
-│   ├── build.ps1                  # Docker-first build runner for Windows
+│   ├── docker-compose.yml         # Docker Compose build service (espressif/idf:v5.3.1)
+│   ├── README.md                  # Comprehensive firmware build & flash guide
 │   ├── package_firmware.py        # Factory binary merger & web manifest generator
 │   ├── CMakeLists.txt             # Project CMake build definition
 │   ├── partitions.csv             # 8MB Flash partition layout
@@ -86,25 +86,21 @@ _Note: In Reading View, after 60 seconds of inactivity, the reader automatically
 
 ### 2. Building & Flashing Firmware
 
-#### Method A: Build via Docker (Recommended - Zero Toolchain Setup)
+#### Method A: Build via Docker Compose (Recommended - Zero Toolchain Setup)
 
-No local ESP-IDF or Python toolchains required. The build runs in an isolated official `espressif/idf:v5.3.1` container and automatically merges binaries and synchronizes outputs to `web/firmware/`.
+No local ESP-IDF or Python toolchains required. The build runs in an isolated official `espressif/idf:v5.3.1` container and outputs all compiled and packaged binaries directly to root `.\build`:
 
-**Windows PowerShell:**
-```powershell
-.\firmware\build.ps1
+**Docker Compose:**
+```bash
+cd firmware
+docker compose up
 ```
+*(Or `docker compose run --rm firmware`)*
 
 **Docker One-Liner (Linux / macOS / Windows):**
 ```bash
 docker run --rm -v "${PWD}:/project" -w /project/firmware espressif/idf:v5.3.1 \
-  bash -c "idf.py set-target esp32s3 && idf.py build && python3 package_firmware.py --web-dir ../web/firmware"
-```
-
-**Or using `firmware/Dockerfile`:**
-```bash
-docker build -t bacain-firmware firmware/
-docker run --rm -v "${PWD}:/project" bacain-firmware
+  bash -c "idf.py -B /project/build set-target esp32s3 && idf.py -B /project/build build && python3 package_firmware.py --build-dir /project/build --no-web-copy"
 ```
 
 #### Method B: Native ESP-IDF Build (Local Environment)

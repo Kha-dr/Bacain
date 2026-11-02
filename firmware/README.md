@@ -1,73 +1,91 @@
-# BacaIn Firmware
+# BacaIn Firmware (ESP32-S3)
 
-ESP-IDF (C/C++) firmware untuk perangkat **BacaIn** (ESP32-S3 + E-Paper 1.54" V2 + SPI Flash + Web Bluetooth).
+Direktori ini berisi kode sumber firmware ESP-IDF untuk perangkat e-reader **BacaIn** berbasis modul **Waveshare ESP32-S3-ePaper-1.54G** (ESP32-S3-WROOM-1-N8R8, 8MB Quad SPI Flash, 8MB Octal PSRAM).
 
 ---
 
-## 🚀 Panduan Build (Docker-First)
+## 1. Build Firmware via Docker Compose (Recommended)
 
-Anda **tidak perlu menginstal ESP-IDF atau Python di komputer Anda**. Build dijalankan sepenuhnya di dalam kontainer Docker resmi `espressif/idf:v5.3.1`.
+Membangun firmware menggunakan Docker Compose memastikan lingkungan build yang reproducible dan terisolasi tanpa perlu menginstal ESP-IDF toolchain atau Python dependencies secara manual di komputer host.
 
-### Opsi 1: Menggunakan Skrip Runner (PowerShell di Windows)
+Pastikan Docker Desktop sudah terpasang dan service Docker telah berjalan.
 
-Cukup masuk ke folder `firmware` lalu jalankan skrip helper:
+### Cara 1: Menggunakan Docker Compose (Paling Mudah)
 
-```powershell
+Masuk ke folder `firmware/` lalu jalankan:
+
+```bash
 cd firmware
-.\build.ps1
+docker compose up
 ```
+*(Atau `docker compose run --rm firmware` jika ingin container otomatis dihapus setelah selesai)*
 
-Skrip ini akan:
-1. Memverifikasi Docker daemon aktif.
-2. Menjalankan kontainer `espressif/idf:v5.3.1` untuk build ESP-IDF target `esp32s3`.
-3. Menjalankan `package_firmware.py` untuk menggabungkan binary menjadi single factory file (`bacain_factory.bin`) dan membuat `manifest.json`.
-4. Otomatis menyinkronkan binary hasil build ke folder [`../web/firmware/`](../web/firmware/).
+Docker Compose akan:
+1. Menjalankan kontainer resmi `espressif/idf:v5.3.1`.
+2. Melakukan targetting ke `esp32s3` dan mengompilasi firmware ke root **`.\build`** (`idf.py -B /project/build build`).
+3. Menjalankan `package_firmware.py` untuk menggabungkan factory binary (**`build/bacain_factory.bin`**) dan membuat **`build/manifest.json`**.
+4. Semua artefak kompilasi tersimpan rapi di satu tempat (**`.\build`**) yang diabaikan oleh `.gitignore`.
 
----
+### Cara 2: Menggunakan Perintah One-Liner Docker Langsung
 
-### Opsi 2: One-Liner Docker Langsung (Terminal / Bash / PowerShell)
-
-Dari root proyek:
-
-```powershell
-docker run --rm -v "${PWD}:/project" -w /project/firmware espressif/idf:v5.3.1 bash -c "idf.py set-target esp32s3 && idf.py build && python3 package_firmware.py"
-```
-
----
-
-### Opsi 3: Menggunakan `Dockerfile`
-
-Jika Anda ingin membangun image container sendiri:
-
-```powershell
-cd firmware
-docker build -t bacain-firmware .
+Dari root repositori:
+```bash
+docker run --rm -v "${PWD}:/project" -w /project/firmware espressif/idf:v5.3.1 bash -c "idf.py -B /project/build set-target esp32s3 && idf.py -B /project/build build && python3 package_firmware.py --build-dir /project/build --no-web-copy"
 ```
 
 ---
 
-## 📦 Alur Binary & Web Flasher
+## 2. Alur Output Binary & Packaging
 
-1. **Hasil Kompilasi**: Berada di folder lokal `firmware/build/`:
-   - `bootloader/bootloader.bin` (offset `0x0`)
-   - `partition_table/partition-table.bin` (offset `0x8000`)
-   - `bacain.bin` (offset `0x20000`)
-2. **Factory Merged Binary**:
-   - `package_firmware.py` menggabungkan ketiga binary di atas menjadi satu file tunggal: `firmware/build/bacain_factory.bin`.
-   - File ini bersama `manifest.json` otomatis disalin ke [`web/firmware/`](../web/firmware/).
-3. **Flashing ke Board via Browser**:
-   - Buka [`web/index.html`](../web/index.html) di browser Chrome / Edge.
-   - Buka tab **Web Serial Flasher**.
-   - Hubungkan perangkat ESP32-S3 via kabel USB ke PC.
-   - Klik **Flash BacaIn** (Web Serial API akan memprogram flash secara langsung tanpa memerlukan driver atau tool tambahan).
+Seluruh hasil kompilasi dan pengemasan firmware tersimpan di root **`.\build`**:
+
+1. **Hasil Kompilasi ESP-IDF (`build/`)**:
+   - `build/bootloader/bootloader.bin` (Bootloader ESP32-S3, offset `0x0000`)
+   - `build/partition_table/partition-table.bin` (Tabel partisi 8MB, offset `0x8000`)
+   - `build/bacain.bin` (Aplikasi utama BacaIn, offset `0x20000`)
+
+2. **Pengemasan Otomatis (`package_firmware.py`)**:
+   - Menjalankan `esptool merge_bin` untuk menggabungkan ketiga berkas biner di atas menjadi satu file biner pabrik tunggal:
+     **`build/bacain_factory.bin`** (offset awal `0x0000`, ukuran flash 8MB).
+   - Menghasilkan berkas metadata **`build/manifest.json`** yang memuat checksum, offset partisi, dan timestamp kompilasi.
+
+> [!NOTE]
+> Seluruh isi folder `.\build` diabaikan oleh Git (`.gitignore`). Folder `firmware/` dan `web/` sepenuhnya bersih hanya berisi kode sumber tanpa tercampur artefak biner.
 
 ---
 
-## ⚡ Flashing via CLI (Opsional)
+## 3. Flashing ke Hardware via Web Serial PWA
 
-Jika Anda ingin flash langsung lewat terminal USB serial menggunakan Docker:
+Anda dapat melakukan flashing firmware ke hardware ESP32-S3 langsung dari peramban web modern tanpa instalasi driver khusus atau CLI ESP-IDF.
 
-```powershell
-# Flash file tunggal factory binary pada offset 0x0
-esptool.py -p COM6 -b 460800 write_flash 0x0 build/bacain_factory.bin
+1. **Hubungkan Hardware**:
+   - Sambungkan port USB-C board ESP32-S3 ke komputer.
+   - *(Jika board belum pernah di-flash atau gagal boot: tekan dan tahan tombol **BOOT**, hubungkan kabel USB, lalu lepaskan tombol BOOT untuk masuk ke mode ROM Download).*
+
+2. **Jalankan Web Server Lokal**:
+   Web Serial API memerlukan konteks aman (`http://localhost` atau `https://`).
+   ```bash
+   cd ../web
+   npx serve .
+   ```
+   Buka alamat yang tampil di terminal (misal: `http://localhost:3000`) menggunakan Google Chrome atau Microsoft Edge.
+
+3. **Lakukan Flash Melalui PWA**:
+   - Buka tab **Firmware Flasher (Web Serial)** pada panel navigasi atas.
+   - Klik tombol **Connect & Flash Firmware**.
+   - Pilih port serial ESP32-S3 yang terdeteksi pada dialog pop-up browser.
+   - Web flasher akan membaca berkas `web/firmware/manifest.json`, menulis binary ke flash chip ESP32-S3, dan melakukan restart perangkat otomatis saat proses selesai 100%.
+
+---
+
+## 4. Opsi Alternatif: Flash Manual via CLI
+
+Jika ingin mem-flash secara manual menggunakan ESP-IDF atau esptool di terminal host:
+
+```bash
+# Opsi A: Flash langsung via idf.py (membutuhkan local ESP-IDF)
+idf.py -p COM3 flash monitor
+
+# Opsi B: Flash single binary factory menggunakan esptool
+esptool.py --chip esp32s3 -p COM3 -b 460800 write_flash 0x0 web/firmware/bacain_factory.bin
 ```

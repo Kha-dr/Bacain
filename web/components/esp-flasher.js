@@ -680,21 +680,16 @@ class EspWebFlasher extends HTMLElement {
 
     // 1. Try reading manifest.json from candidate paths
     const manifestCandidates = [
+      'build/manifest.json',
+      '../build/manifest.json',
+      './build/manifest.json',
+      '/build/manifest.json',
+      'firmware/build/manifest.json',
+      '../firmware/build/manifest.json',
       'firmware/manifest.json',
       './firmware/manifest.json',
       '../firmware/manifest.json',
-      '/firmware/manifest.json',
-      'web/firmware/manifest.json',
-      './web/firmware/manifest.json',
-      '/web/firmware/manifest.json',
-      '../web/firmware/manifest.json',
-      'pwa/firmware/manifest.json',
-      './pwa/firmware/manifest.json',
-      '/pwa/firmware/manifest.json',
-      '../pwa/firmware/manifest.json',
-      '../Firmware/manifest.json',
-      '/Firmware/manifest.json',
-      'Firmware/manifest.json'
+      '/firmware/manifest.json'
     ];
 
     for (const mPath of manifestCandidates) {
@@ -745,33 +740,16 @@ class EspWebFlasher extends HTMLElement {
 
     // Add robust candidate paths covering various hosting structures
     binaryCandidates.push(
-      'firmware/01_factory.bin',
-      './firmware/01_factory.bin',
-      '../Firmware/01_factory.bin',
-      '../firmware/01_factory.bin',
-      '/firmware/01_factory.bin',
-      '/Firmware/01_factory.bin',
-      'Firmware/01_factory.bin',
-      'web/firmware/01_factory.bin',
-      './web/firmware/01_factory.bin',
-      '/web/firmware/01_factory.bin',
-      '../web/firmware/01_factory.bin',
-      'pwa/firmware/01_factory.bin',
-      './pwa/firmware/01_factory.bin',
-      '/pwa/firmware/01_factory.bin',
-      'firmware/mini_e_reader_factory.bin',
-      './firmware/mini_e_reader_factory.bin',
-      '../Firmware/mini_e_reader_factory.bin',
-      '../firmware/mini_e_reader_factory.bin',
-      '/firmware/mini_e_reader_factory.bin',
-      '/Firmware/mini_e_reader_factory.bin',
-      'Firmware/mini_e_reader_factory.bin',
-      'web/firmware/mini_e_reader_factory.bin',
-      './web/firmware/mini_e_reader_factory.bin',
-      '/web/firmware/mini_e_reader_factory.bin',
-      '../web/firmware/mini_e_reader_factory.bin',
-      'pwa/firmware/mini_e_reader_factory.bin',
-      '/pwa/firmware/mini_e_reader_factory.bin'
+      'build/bacain_factory.bin',
+      '../build/bacain_factory.bin',
+      './build/bacain_factory.bin',
+      '/build/bacain_factory.bin',
+      'build/mini_e_reader_factory.bin',
+      '../build/mini_e_reader_factory.bin',
+      'firmware/build/bacain_factory.bin',
+      '../firmware/build/bacain_factory.bin',
+      'firmware/bacain_factory.bin',
+      '../firmware/bacain_factory.bin'
     );
 
     const uniqueCandidates = [...new Set(binaryCandidates)];
