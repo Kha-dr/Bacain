@@ -22,15 +22,29 @@ extern "C" {
 
 #define BLE_SYNC_DEVICE_NAME             "Mini-E-Reader"
 
+#ifndef STORAGE_TARGET_T_DEFINED
+#define STORAGE_TARGET_T_DEFINED
+typedef enum {
+    STORAGE_TARGET_SDCARD = 0,
+    STORAGE_TARGET_FLASH  = 1,
+} storage_target_t;
+#endif
+
 /* Control Characteristic OpCodes */
 #define BLE_SYNC_OP_LIST_BOOKS           0x01
 #define BLE_SYNC_OP_START_UPLOAD         0x02
 #define BLE_SYNC_OP_FINISH_UPLOAD        0x03
 #define BLE_SYNC_OP_DELETE_BOOK          0x04
 #define BLE_SYNC_OP_ABORT_UPLOAD         0x05
+#define BLE_SYNC_OP_SET_STORAGE_TARGET   0x06
+#define BLE_SYNC_OP_SET_FONT             0x10
+#define BLE_SYNC_OP_FORCE_REFRESH        0x12
+#define BLE_SYNC_OP_SET_SLEEP_TIMEOUT    0x13
+#define BLE_SYNC_OP_TRIGGER_SLEEP        0x14
 /* Control Response Status Codes */
 #define BLE_SYNC_STATUS_OK               0x00
 #define BLE_SYNC_STATUS_ERROR            0x01
+#define BLE_SYNC_STATUS_STORAGE_ERR      0x07
 
 /**
  * @brief Status Characteristic 12-byte packed binary payload layout
@@ -55,6 +69,8 @@ typedef enum {
     BLE_SYNC_EVT_UPLOAD_COMPLETE,
     BLE_SYNC_EVT_UPLOAD_ABORTED,
     BLE_SYNC_EVT_FILE_DELETED,
+    BLE_SYNC_EVT_REQUEST_REFRESH,
+    BLE_SYNC_EVT_REQUEST_SLEEP,
 } ble_sync_event_t;
 
 typedef void (*ble_sync_event_cb_t)(ble_sync_event_t event, const void *param, void *user_data);
@@ -96,6 +112,35 @@ uint32_t ble_sync_get_bytes_received(void);
  * @return ESP_OK on success, error code otherwise.
  */
 esp_err_t ble_sync_notify_status(void);
+
+/**
+ * @brief Set current storage target for book sync operations (SD card or SPI flash).
+ *
+ * @param target Storage target (STORAGE_TARGET_SDCARD or STORAGE_TARGET_FLASH).
+ * @return ESP_OK on success, or ESP_ERR_INVALID_STATE if target media is not mounted/ready.
+ */
+esp_err_t ble_sync_set_storage_target(storage_target_t target);
+
+/**
+ * @brief Get current storage target.
+ *
+ * @return Current storage target.
+ */
+storage_target_t ble_sync_get_storage_target(void);
+
+/**
+ * @brief Get current sleep inactivity timeout in seconds.
+ *
+ * @return Inactivity timeout in seconds (0 = disabled).
+ */
+uint16_t ble_sync_get_sleep_timeout(void);
+
+/**
+ * @brief Set sleep inactivity timeout in seconds.
+ *
+ * @param sec Inactivity timeout in seconds (0 = disabled).
+ */
+void ble_sync_set_sleep_timeout(uint16_t sec);
 
 /**
  * @brief Register an optional callback for BLE synchronization events.

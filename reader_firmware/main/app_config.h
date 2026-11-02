@@ -3,7 +3,7 @@
 
 #define DISPLAY_WIDTH          200
 #define DISPLAY_HEIGHT         200
-#define DISPLAY_BUFFER_SIZE    (DISPLAY_WIDTH * DISPLAY_HEIGHT / 4) // 10,000 bytes
+#define DISPLAY_BUFFER_SIZE    (DISPLAY_WIDTH * DISPLAY_HEIGHT / 8) // 5,000 bytes
 
 // UI Layout Coordinates
 #define UI_HEADER_HEIGHT       19

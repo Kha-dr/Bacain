@@ -58,15 +58,15 @@ esp_err_t button_init(QueueHandle_t *out_queue) {
     ESP_ERROR_CHECK(gpio_config(&conf));
 
     button_init_struct(&s_btn_boot, read_button_gpio, 0, BTN_ID_BOOT);
-    button_attach(&s_btn_boot, SINGLE_CLICK, on_boot_click);
-    button_attach(&s_btn_boot, DOUBLE_CLICK, on_boot_double_click);
-    button_attach(&s_btn_boot, LONG_PRESS_START, on_boot_long_press);
+    button_attach(&s_btn_boot, MBTN_SINGLE_CLICK, on_boot_click);
+    button_attach(&s_btn_boot, MBTN_DOUBLE_CLICK, on_boot_double_click);
+    button_attach(&s_btn_boot, MBTN_LONG_PRESS_START, on_boot_long_press);
     button_start(&s_btn_boot);
 
     button_init_struct(&s_btn_pwr, read_button_gpio, 0, BTN_ID_PWR);
-    button_attach(&s_btn_pwr, SINGLE_CLICK, on_pwr_click);
-    button_attach(&s_btn_pwr, DOUBLE_CLICK, on_pwr_double_click);
-    button_attach(&s_btn_pwr, LONG_PRESS_START, on_pwr_long_press);
+    button_attach(&s_btn_pwr, MBTN_SINGLE_CLICK, on_pwr_click);
+    button_attach(&s_btn_pwr, MBTN_DOUBLE_CLICK, on_pwr_double_click);
+    button_attach(&s_btn_pwr, MBTN_LONG_PRESS_START, on_pwr_long_press);
     button_start(&s_btn_pwr);
 
     esp_timer_create_args_t timer_args = {
@@ -74,7 +74,7 @@ esp_err_t button_init(QueueHandle_t *out_queue) {
         .name = "btn_timer"
     };
     ESP_ERROR_CHECK(esp_timer_create(&timer_args, &s_timer));
-    ESP_ERROR_CHECK(esp_timer_start_periodic(s_timer, 20 * 1000)); // 20ms
+    ESP_ERROR_CHECK(esp_timer_start_periodic(s_timer, 5 * 1000)); // 5ms tick matches TICKS_INTERVAL
 
     ESP_LOGI(TAG, "Buttons initialized (BOOT: GPIO 0, PWR: GPIO 18)");
     return ESP_OK;

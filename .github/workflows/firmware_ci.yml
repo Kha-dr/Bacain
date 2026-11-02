@@ -1,0 +1,98 @@
+name: Firmware CI/CD
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build & Package ESP32-S3 Firmware
+    runs-on: ubuntu-latest
+    container:
+      image: espressif/idf:release-v5.2
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set Git Safe Directory
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Build Firmware
+        working-directory: reader_firmware
+        run: |
+          if [ -f "$IDF_PATH/export.sh" ]; then
+            . "$IDF_PATH/export.sh"
+          fi
+          idf.py set-target esp32s3
+          idf.py build
+
+      - name: Merge Factory Binary
+        working-directory: reader_firmware
+        run: |
+          if [ -f "$IDF_PATH/export.sh" ]; then
+            . "$IDF_PATH/export.sh"
+          fi
+
+          # Standardize binary paths from ESP-IDF build output
+          if [ -f build/mini_e_reader.bin ] && [ ! -f build/reader_firmware.bin ]; then
+            cp build/mini_e_reader.bin build/reader_firmware.bin
+          fi
+
+          if [ -f build/bootloader/bootloader.bin ] && [ ! -f build/bootloader.bin ]; then
+            cp build/bootloader/bootloader.bin build/bootloader.bin
+          fi
+
+          if [ -f build/partition_table/partition-table.bin ]; then
+            cp build/partition_table/partition-table.bin build/partition-table.bin
+            mkdir -p build/partition-table
+            cp build/partition_table/partition-table.bin build/partition-table/partition-table.bin
+          fi
+
+          # Merge binaries using esptool.py
+          esptool.py --chip esp32s3 merge_bin \
+            -o build/mini_e_reader_factory.bin \
+            --flash_mode keep \
+            --flash_size 8MB \
+            0x0000 build/bootloader/bootloader.bin \
+            0x8000 build/partition-table/partition-table.bin \
+            0x20000 build/reader_firmware.bin
+
+          # Run packaging script to generate manifest.json and verify artifacts
+          python3 package_firmware.py
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: mini-e-reader-firmware
+          path: |
+            reader_firmware/build/mini_e_reader_factory.bin
+            reader_firmware/build/reader_firmware.bin
+            reader_firmware/build/bootloader.bin
+            reader_firmware/build/partition-table.bin
+            reader_firmware/build/manifest.json
+          if-no-files-found: error
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            reader_firmware/build/mini_e_reader_factory.bin
+            reader_firmware/build/reader_firmware.bin
+            reader_firmware/build/bootloader.bin
+            reader_firmware/build/partition-table.bin
+            reader_firmware/build/manifest.json
+          generate_release_notes: true

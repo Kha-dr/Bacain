@@ -9,6 +9,7 @@ idf_component_register(
         freertos
         esp_timer
         log
+        esp_driver_gpio
         power_mgr
         sdcard
         button

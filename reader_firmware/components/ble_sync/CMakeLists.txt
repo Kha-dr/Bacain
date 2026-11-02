@@ -6,8 +6,10 @@ idf_component_register(
     REQUIRES
         bt
         freertos
+        esp_ringbuf
         power_mgr
         sdcard
+        reader_core
         fatfs
         vfs
         log

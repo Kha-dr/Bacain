@@ -10,8 +10,22 @@
 extern "C" {
 #endif
 
-#define BOOK_LIBRARY_BOOKS_DIR     "/sdcard/books"
-#define BOOK_LIBRARY_STATE_DIR     "/sdcard/.reader"
+#ifndef STORAGE_TARGET_T_DEFINED
+#define STORAGE_TARGET_T_DEFINED
+typedef enum {
+    STORAGE_TARGET_SDCARD = 0,
+    STORAGE_TARGET_FLASH  = 1,
+} storage_target_t;
+#endif
+
+#define BOOK_LIBRARY_SDCARD_BOOKS_DIR     "/sdcard/books"
+#define BOOK_LIBRARY_SDCARD_STATE_DIR     "/sdcard/.reader"
+#define BOOK_LIBRARY_FLASH_BOOKS_DIR      "/spiflash/books"
+#define BOOK_LIBRARY_FLASH_STATE_DIR      "/spiflash/.reader"
+
+/* Legacy definitions for backward compatibility */
+#define BOOK_LIBRARY_BOOKS_DIR     BOOK_LIBRARY_SDCARD_BOOKS_DIR
+#define BOOK_LIBRARY_STATE_DIR     BOOK_LIBRARY_SDCARD_STATE_DIR
 #define BOOK_LIBRARY_STATE_FILE    "/sdcard/.reader/state.json"
 
 #define BOOK_FILENAME_MAX_LEN      128
@@ -45,7 +59,22 @@ esp_err_t book_library_init(void);
 void book_library_deinit(void);
 
 /**
- * @brief Scan /sdcard/books/ for .txt files.
+ * @brief Set the storage target for the book library (SD card or SPI flash).
+ *
+ * @param target Storage target (STORAGE_TARGET_SDCARD or STORAGE_TARGET_FLASH).
+ * @return ESP_OK on success, or ESP_ERR_INVALID_STATE if target media is not mounted.
+ */
+esp_err_t book_library_set_storage_target(storage_target_t target);
+
+/**
+ * @brief Get current storage target used by the book library.
+ *
+ * @return Current storage target.
+ */
+storage_target_t book_library_get_storage_target(void);
+
+/**
+ * @brief Scan active books directory for .txt files.
  * @return ESP_OK on success, or an esp_err_t error code.
  */
 esp_err_t book_library_scan(void);
@@ -65,24 +94,30 @@ const book_info_t *book_library_get_book(size_t index);
 
 /**
  * @brief Find book by filename or path.
- * @param filename_or_path Filename (e.g. "alice.txt") or full path (e.g. "/sdcard/books/alice.txt").
+ * @param filename_or_path Filename (e.g. "alice.txt") or full path.
  * @return Pointer to book_info_t, or NULL if not found.
  */
 const book_info_t *book_library_find_book(const char *filename_or_path);
 
 /**
- * @brief Load reading progress state from /sdcard/.reader/state.json.
+ * @brief Load reading progress state from state file in active storage.
  * @param state Pointer to reading_state_t structure to fill.
  * @return ESP_OK on success, or an esp_err_t error code.
  */
 esp_err_t book_library_load_state(reading_state_t *state);
 
 /**
- * @brief Save reading progress state to /sdcard/.reader/state.json.
+ * @brief Save reading progress state to state file in active storage.
  * @param state Pointer to reading_state_t structure to save.
  * @return ESP_OK on success, or an esp_err_t error code.
  */
 esp_err_t book_library_save_state(const reading_state_t *state);
+
+/**
+ * @brief Flush in-memory reading state to storage if dirty.
+ * @return ESP_OK on success, or an esp_err_t error code.
+ */
+esp_err_t book_library_flush_state(void);
 
 /**
  * @brief Get copy of current in-memory reading state.
@@ -100,7 +135,7 @@ esp_err_t book_library_get_current_state(reading_state_t *state);
 esp_err_t book_library_set_active_book(const char *book_path, bool reset_offset);
 
 /**
- * @brief Update the byte offset of the active book and persist to state.json.
+ * @brief Update the byte offset of the active book in memory and mark dirty.
  * @param offset New byte offset.
  * @return ESP_OK on success.
  */

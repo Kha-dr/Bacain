@@ -23,12 +23,12 @@ static inline uint8_t button_read_level(Button* handle);
   * @param  button_id: the button id
   * @retval None
   */
-void button_init(Button* handle, uint8_t(*pin_level)(uint8_t), uint8_t active_level, uint8_t button_id)
+void button_init_struct(Button* handle, uint8_t(*pin_level)(uint8_t), uint8_t active_level, uint8_t button_id)
 {
 	if (!handle || !pin_level) return;  // parameter validation
 	
 	memset(handle, 0, sizeof(Button));
-	handle->event = (uint8_t)BTN_NONE_PRESS;
+	handle->event = (uint8_t)MBTN_NONE_PRESS;
 	handle->hal_button_level = pin_level;
 	handle->button_level = !active_level;  // initialize to opposite of active level
 	handle->active_level = active_level;
@@ -45,7 +45,7 @@ void button_init(Button* handle, uint8_t(*pin_level)(uint8_t), uint8_t active_le
   */
 void button_attach(Button* handle, ButtonEvent event, BtnCallback cb)
 {
-	if (!handle || event >= BTN_EVENT_COUNT) return;  // parameter validation
+	if (!handle || event >= MBTN_EVENT_COUNT) return;  // parameter validation
 	handle->cb[event] = cb;
 }
 
@@ -57,7 +57,7 @@ void button_attach(Button* handle, ButtonEvent event, BtnCallback cb)
   */
 void button_detach(Button* handle, ButtonEvent event)
 {
-	if (!handle || event >= BTN_EVENT_COUNT) return;  // parameter validation
+	if (!handle || event >= MBTN_EVENT_COUNT) return;  // parameter validation
 	handle->cb[event] = NULL;
 }
 
@@ -68,7 +68,7 @@ void button_detach(Button* handle, ButtonEvent event)
   */
 ButtonEvent button_get_event(Button* handle)
 {
-	if (!handle) return BTN_NONE_PRESS;
+	if (!handle) return MBTN_NONE_PRESS;
 	return (ButtonEvent)(handle->event);
 }
 
@@ -94,7 +94,7 @@ void button_reset(Button* handle)
 	handle->state = BTN_STATE_IDLE;
 	handle->ticks = 0;
 	handle->repeat = 0;
-	handle->event = (uint8_t)BTN_NONE_PRESS;
+	handle->event = (uint8_t)MBTN_NONE_PRESS;
 	handle->debounce_cnt = 0;
 }
 
@@ -150,27 +150,27 @@ static void button_handler(Button* handle)
 	case BTN_STATE_IDLE:
 		if (handle->button_level == handle->active_level) {
 			// Button press detected
-			handle->event = (uint8_t)BTN_PRESS_DOWN;
-			EVENT_CB(BTN_PRESS_DOWN);
+			handle->event = (uint8_t)MBTN_PRESS_DOWN;
+			EVENT_CB(MBTN_PRESS_DOWN);
 			handle->ticks = 0;
 			handle->repeat = 1;
 			handle->state = BTN_STATE_PRESS;
 		} else {
-			handle->event = (uint8_t)BTN_NONE_PRESS;
+			handle->event = (uint8_t)MBTN_NONE_PRESS;
 		}
 		break;
 
 	case BTN_STATE_PRESS:
 		if (handle->button_level != handle->active_level) {
 			// Button released
-			handle->event = (uint8_t)BTN_PRESS_UP;
-			EVENT_CB(BTN_PRESS_UP);
+			handle->event = (uint8_t)MBTN_PRESS_UP;
+			EVENT_CB(MBTN_PRESS_UP);
 			handle->ticks = 0;
 			handle->state = BTN_STATE_RELEASE;
 		} else if (handle->ticks > LONG_TICKS) {
 			// Long press detected
-			handle->event = (uint8_t)BTN_LONG_PRESS_START;
-			EVENT_CB(BTN_LONG_PRESS_START);
+			handle->event = (uint8_t)MBTN_LONG_PRESS_START;
+			EVENT_CB(MBTN_LONG_PRESS_START);
 			handle->state = BTN_STATE_LONG_HOLD;
 		}
 		break;
@@ -178,22 +178,22 @@ static void button_handler(Button* handle)
 	case BTN_STATE_RELEASE:
 		if (handle->button_level == handle->active_level) {
 			// Button pressed again
-			handle->event = (uint8_t)BTN_PRESS_DOWN;
-			EVENT_CB(BTN_PRESS_DOWN);
+			handle->event = (uint8_t)MBTN_PRESS_DOWN;
+			EVENT_CB(MBTN_PRESS_DOWN);
 			if (handle->repeat < PRESS_REPEAT_MAX_NUM) {
 				handle->repeat++;
 			}
-			EVENT_CB(BTN_PRESS_REPEAT);
+			EVENT_CB(MBTN_PRESS_REPEAT);
 			handle->ticks = 0;
 			handle->state = BTN_STATE_REPEAT;
 		} else if (handle->ticks > SHORT_TICKS) {
 			// Timeout reached, determine click type
 			if (handle->repeat == 1) {
-				handle->event = (uint8_t)BTN_SINGLE_CLICK;
-				EVENT_CB(BTN_SINGLE_CLICK);
+				handle->event = (uint8_t)MBTN_SINGLE_CLICK;
+				EVENT_CB(MBTN_SINGLE_CLICK);
 			} else if (handle->repeat == 2) {
-				handle->event = (uint8_t)BTN_DOUBLE_CLICK;
-				EVENT_CB(BTN_DOUBLE_CLICK);
+				handle->event = (uint8_t)MBTN_DOUBLE_CLICK;
+				EVENT_CB(MBTN_DOUBLE_CLICK);
 			}
 			handle->state = BTN_STATE_IDLE;
 		}
@@ -202,14 +202,11 @@ static void button_handler(Button* handle)
 	case BTN_STATE_REPEAT:
 		if (handle->button_level != handle->active_level) {
 			// Button released
-			handle->event = (uint8_t)BTN_PRESS_UP;
-			EVENT_CB(BTN_PRESS_UP);
-			if (handle->ticks < SHORT_TICKS) {
-				handle->ticks = 0;
-				handle->state = BTN_STATE_RELEASE;  // Continue waiting for more presses
-			} else {
-				handle->state = BTN_STATE_IDLE;  // End of sequence
-			}
+			handle->event = (uint8_t)MBTN_PRESS_UP;
+			EVENT_CB(MBTN_PRESS_UP);
+			handle->event = (uint8_t)MBTN_DOUBLE_CLICK;
+			EVENT_CB(MBTN_DOUBLE_CLICK);
+			handle->state = BTN_STATE_IDLE;
 		} else if (handle->ticks > SHORT_TICKS) {
 			// Held down too long, treat as normal press
 			handle->state = BTN_STATE_PRESS;
@@ -219,12 +216,12 @@ static void button_handler(Button* handle)
 	case BTN_STATE_LONG_HOLD:
 		if (handle->button_level == handle->active_level) {
 			// Continue holding
-			handle->event = (uint8_t)BTN_LONG_PRESS_HOLD;
-			EVENT_CB(BTN_LONG_PRESS_HOLD);
+			handle->event = (uint8_t)MBTN_LONG_PRESS_HOLD;
+			EVENT_CB(MBTN_LONG_PRESS_HOLD);
 		} else {
 			// Released from long press
-			handle->event = (uint8_t)BTN_PRESS_UP;
-			EVENT_CB(BTN_PRESS_UP);
+			handle->event = (uint8_t)MBTN_PRESS_UP;
+			EVENT_CB(MBTN_PRESS_UP);
 			handle->state = BTN_STATE_IDLE;
 		}
 		break;

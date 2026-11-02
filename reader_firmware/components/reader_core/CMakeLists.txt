@@ -7,7 +7,6 @@ idf_component_register(
     REQUIRES
         epaper
         sdcard
-        json
         log
         freertos
 )

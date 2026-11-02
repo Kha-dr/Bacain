@@ -68,7 +68,7 @@
 *
 * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-* FITNESS OR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 * LIABILITY WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
@@ -159,8 +159,7 @@ void Paint_SetMirroring(UBYTE mirror)
         ESP_LOGI(TAG,"mirror image x:%s, y:%s",(mirror & 0x01)? "mirror":"none", ((mirror >> 1) & 0x01)? "mirror":"none");
         Paint.Mirror = mirror;
     } else {
-        ESP_LOGI(TAG,"mirror should be MIRROR_NONE, MIRROR_HORIZONTAL, \
-        MIRROR_VERTICAL or MIRROR_ORIGIN");
+        ESP_LOGI(TAG, "mirror should be MIRROR_NONE, MIRROR_HORIZONTAL, MIRROR_VERTICAL or MIRROR_ORIGIN");
     }    
 }
 
@@ -191,8 +190,11 @@ parameter:
 ******************************************************************************/
 void Paint_SetPixel(UWORD Xpoint, UWORD Ypoint, UWORD Color)
 {
-    if(Xpoint > Paint.Width || Ypoint > Paint.Height){
-        ESP_LOGI(TAG,"Exceeding display boundaries");
+    if (Paint.Image == NULL) {
+        return;
+    }
+    if(Xpoint >= Paint.Width || Ypoint >= Paint.Height){
+        ESP_LOGD(TAG,"Exceeding display boundaries");
         return;
     }      
     UWORD X, Y;
@@ -234,8 +236,8 @@ void Paint_SetPixel(UWORD Xpoint, UWORD Ypoint, UWORD Color)
         return;
     }
 
-    if(X > Paint.WidthMemory || Y > Paint.HeightMemory){
-        ESP_LOGI(TAG,"Exceeding display boundaries");
+    if(X >= Paint.WidthMemory || Y >= Paint.HeightMemory){
+        ESP_LOGD(TAG,"Exceeding display boundaries");
         return;
     }
     
@@ -303,9 +305,18 @@ parameter:
 ******************************************************************************/
 void Paint_ClearWindows(UWORD Xstart, UWORD Ystart, UWORD Xend, UWORD Yend, UWORD Color)
 {
+    if (Xstart >= Paint.Width || Ystart >= Paint.Height) {
+        return;
+    }
+    if (Xend > Paint.Width) {
+        Xend = Paint.Width;
+    }
+    if (Yend > Paint.Height) {
+        Yend = Paint.Height;
+    }
     UWORD X, Y;
     for (Y = Ystart; Y < Yend; Y++) {
-        for (X = Xstart; X < Xend; X++) {//8 pixel =  1 byte
+        for (X = Xstart; X < Xend; X++) {
             Paint_SetPixel(X, Y, Color);
         }
     }
@@ -323,25 +334,33 @@ parameter:
 void Paint_DrawPoint(UWORD Xpoint, UWORD Ypoint, UWORD Color,
                      DOT_PIXEL Dot_Pixel, DOT_STYLE Dot_Style)
 {
-    if (Xpoint > Paint.Width || Ypoint > Paint.Height) {
-        ESP_LOGI(TAG,"Paint_DrawPoint Input exceeds the normal display range");
+    if (Xpoint >= Paint.Width || Ypoint >= Paint.Height) {
+        ESP_LOGD(TAG, "Paint_DrawPoint Input exceeds the normal display range");
         return;
     }
 
-    int16_t XDir_Num , YDir_Num;
+    int16_t XDir_Num, YDir_Num;
     if (Dot_Style == DOT_FILL_AROUND) {
+        int32_t offset = (int32_t)Dot_Pixel - 1;
         for (XDir_Num = 0; XDir_Num < 2 * Dot_Pixel - 1; XDir_Num++) {
             for (YDir_Num = 0; YDir_Num < 2 * Dot_Pixel - 1; YDir_Num++) {
-                if(Xpoint + XDir_Num - Dot_Pixel < 0 || Ypoint + YDir_Num - Dot_Pixel < 0)
-                    break;
-                // printf("x = %d, y = %d\r\n", Xpoint + XDir_Num - Dot_Pixel, Ypoint + YDir_Num - Dot_Pixel);
-                Paint_SetPixel(Xpoint + XDir_Num - Dot_Pixel, Ypoint + YDir_Num - Dot_Pixel, Color);
+                int32_t px = (int32_t)Xpoint + XDir_Num - offset;
+                int32_t py = (int32_t)Ypoint + YDir_Num - offset;
+                if (px < 0 || py < 0 || px >= (int32_t)Paint.Width || py >= (int32_t)Paint.Height) {
+                    continue;
+                }
+                Paint_SetPixel((UWORD)px, (UWORD)py, Color);
             }
         }
     } else {
-        for (XDir_Num = 0; XDir_Num <  Dot_Pixel; XDir_Num++) {
-            for (YDir_Num = 0; YDir_Num <  Dot_Pixel; YDir_Num++) {
-                Paint_SetPixel(Xpoint + XDir_Num - 1, Ypoint + YDir_Num - 1, Color);
+        for (XDir_Num = 0; XDir_Num < Dot_Pixel; XDir_Num++) {
+            for (YDir_Num = 0; YDir_Num < Dot_Pixel; YDir_Num++) {
+                int32_t px = (int32_t)Xpoint + XDir_Num;
+                int32_t py = (int32_t)Ypoint + YDir_Num;
+                if (px < 0 || py < 0 || px >= (int32_t)Paint.Width || py >= (int32_t)Paint.Height) {
+                    continue;
+                }
+                Paint_SetPixel((UWORD)px, (UWORD)py, Color);
             }
         }
     }
@@ -361,16 +380,16 @@ parameter:
 void Paint_DrawLine(UWORD Xstart, UWORD Ystart, UWORD Xend, UWORD Yend,
                     UWORD Color, DOT_PIXEL Line_width, LINE_STYLE Line_Style)
 {
-    if (Xstart > Paint.Width || Ystart > Paint.Height ||
-        Xend > Paint.Width || Yend > Paint.Height) {
-        ESP_LOGI(TAG,"Paint_DrawLine Input exceeds the normal display range");
+    if (Xstart >= Paint.Width || Ystart >= Paint.Height ||
+        Xend >= Paint.Width || Yend >= Paint.Height) {
+        ESP_LOGD(TAG, "Paint_DrawLine Input exceeds the normal display range");
         return;
     }
 
     UWORD Xpoint = Xstart;
     UWORD Ypoint = Ystart;
-    int dx = (int)Xend - (int)Xstart >= 0 ? Xend - Xstart : Xstart - Xend;
-    int dy = (int)Yend - (int)Ystart <= 0 ? Yend - Ystart : Ystart - Yend;
+    int dx = (int)Xend - (int)Xstart >= 0 ? (int)Xend - (int)Xstart : (int)Xstart - (int)Xend;
+    int dy = (int)Yend - (int)Ystart <= 0 ? (int)Yend - (int)Ystart : (int)Ystart - (int)Yend;
 
     // Increment direction, 1 is positive, -1 is counter;
     int XAddway = Xstart < Xend ? 1 : -1;
@@ -410,7 +429,7 @@ parameter:
     Xstart ：Rectangular  Starting Xpoint point coordinates
     Ystart ：Rectangular  Starting Xpoint point coordinates
     Xend   ：Rectangular  End point Xpoint coordinate
-    Yend   ：Rectangular  End point Ypoint coordinate
+    Yend   ：End point Ypoint coordinate
     Color  ：The color of the Rectangular segment
     Line_width: Line width
     Draw_Fill : Whether to fill the inside of the rectangle
@@ -418,15 +437,20 @@ parameter:
 void Paint_DrawRectangle(UWORD Xstart, UWORD Ystart, UWORD Xend, UWORD Yend,
                          UWORD Color, DOT_PIXEL Line_width, DRAW_FILL Draw_Fill)
 {
-    if (Xstart > Paint.Width || Ystart > Paint.Height ||
-        Xend > Paint.Width || Yend > Paint.Height) {
-        ESP_LOGI(TAG,"Input exceeds the normal display range");
+    if (Xstart >= Paint.Width || Ystart >= Paint.Height) {
+        ESP_LOGD(TAG, "Input exceeds the normal display range");
         return;
+    }
+    if (Xend >= Paint.Width) {
+        Xend = Paint.Width - 1;
+    }
+    if (Yend >= Paint.Height) {
+        Yend = Paint.Height - 1;
     }
 
     if (Draw_Fill) {
         UWORD Ypoint;
-        for(Ypoint = Ystart; Ypoint < Yend; Ypoint++) {
+        for(Ypoint = Ystart; Ypoint <= Yend; Ypoint++) {
             Paint_DrawLine(Xstart, Ypoint, Xend, Ypoint, Color , Line_width, LINE_STYLE_SOLID);
         }
     } else {
@@ -451,8 +475,8 @@ parameter:
 void Paint_DrawCircle(UWORD X_Center, UWORD Y_Center, UWORD Radius,
                       UWORD Color, DOT_PIXEL Line_width, DRAW_FILL Draw_Fill)
 {
-    if (X_Center > Paint.Width || Y_Center >= Paint.Height) {
-        ESP_LOGI(TAG,"Paint_DrawCircle Input exceeds the normal display range");
+    if (X_Center >= Paint.Width || Y_Center >= Paint.Height) {
+        ESP_LOGD(TAG, "Paint_DrawCircle Input exceeds the normal display range");
         return;
     }
 
@@ -522,10 +546,12 @@ void Paint_DrawChar(UWORD Xpoint, UWORD Ypoint, const char Acsii_Char,
 {
     UWORD Page, Column;
 
-    if (Xpoint > Paint.Width || Ypoint > Paint.Height) {
-        ESP_LOGI(TAG,"Paint_DrawChar Input exceeds the normal display range");
+    if (Xpoint >= Paint.Width || Ypoint >= Paint.Height) {
+        ESP_LOGD(TAG, "Paint_DrawChar Input exceeds the normal display range");
         return;
     }
+
+    if (Acsii_Char < ' ' || Acsii_Char > '~') return;
 
     uint32_t Char_Offset = (Acsii_Char - ' ') * Font->Height * (Font->Width / 8 + (Font->Width % 8 ? 1 : 0));
     const unsigned char *ptr = &Font->table[Char_Offset];
@@ -572,8 +598,8 @@ void Paint_DrawString_EN(UWORD Xstart, UWORD Ystart, const char * pString,
     UWORD Xpoint = Xstart;
     UWORD Ypoint = Ystart;
 
-    if (Xstart > Paint.Width || Ystart > Paint.Height) {
-        ESP_LOGI(TAG,"Paint_DrawString_EN Input exceeds the normal display range");
+    if (Xstart >= Paint.Width || Ystart >= Paint.Height) {
+        ESP_LOGD(TAG, "Paint_DrawString_EN Input exceeds the normal display range");
         return;
     }
 
@@ -589,7 +615,7 @@ void Paint_DrawString_EN(UWORD Xstart, UWORD Ystart, const char * pString,
             Xpoint = Xstart;
             Ypoint = Ystart;
         }
-        Paint_DrawChar(Xpoint, Ypoint, * pString, Font, Color_Background, Color_Foreground);
+        Paint_DrawChar(Xpoint, Ypoint, * pString, Font, Color_Foreground, Color_Background);
 
         //The next character of the address
         pString ++;
@@ -614,29 +640,26 @@ parameter:
 void Paint_DrawString_CN(UWORD Xstart, UWORD Ystart, const char * pString, cFONT* font,
                         UWORD Color_Foreground, UWORD Color_Background)
 {
-    const char* p_text = pString;
+    const uint8_t* p_text = (const uint8_t*)pString;
     int x = Xstart, y = Ystart;
-    int i, j,Num;
+    int i, j, Num;
     /* Send the string character by character on EPD */
     while (*p_text != 0) {
-        if(*p_text <= 0xE0) {  //ASCII < 126
+        if (*p_text < 0x80) {  // ASCII < 128
             for(Num = 0; Num < font->size; Num++) {
-                if(*p_text== font->table[Num].index[0]) {
+                if(*p_text == (uint8_t)font->table[Num].index[0]) {
                     const char* ptr =  (const char*)&font->table[Num].matrix[0];
                     for (j = 0; j < font->Height; j++) {
                         for (i = 0; i < font->Width; i++) {
                             if (FONT_BACKGROUND == Color_Background) { //this process is to speed up the scan
                                 if (*ptr & (0x80 >> (i % 8))) {
                                     Paint_SetPixel(x + i, y + j, Color_Foreground);
-                                    // Paint_DrawPoint(x + i, y + j, Color_Foreground, DOT_PIXEL_DFT, DOT_STYLE_DFT);
                                 }
                             } else {
                                 if (*ptr & (0x80 >> (i % 8))) {
                                     Paint_SetPixel(x + i, y + j, Color_Foreground);
-                                    // Paint_DrawPoint(x + i, y + j, Color_Foreground, DOT_PIXEL_DFT, DOT_STYLE_DFT);
                                 } else {
                                     Paint_SetPixel(x + i, y + j, Color_Background);
-                                    // Paint_DrawPoint(x + i, y + j, Color_Background, DOT_PIXEL_DFT, DOT_STYLE_DFT);
                                 }
                             }
                             if (i % 8 == 7) {
@@ -652,11 +675,13 @@ void Paint_DrawString_CN(UWORD Xstart, UWORD Ystart, const char * pString, cFONT
             }
             /* Point on the next character */
             p_text += 1;
-            /* Decrement the column position by 16 */
+            /* Advance the column position */
             x += font->ASCII_Width;
-        } else {        //Chinese
+        } else {        // Multi-byte Chinese UTF-8
             for(Num = 0; Num < font->size; Num++) {
-                if((*p_text== font->table[Num].index[0]) && (*(p_text+1) == font->table[Num].index[1])  && (*(p_text+2) == font->table[Num].index[2])) {
+                if((*p_text == (uint8_t)font->table[Num].index[0]) &&
+                   (*(p_text+1) == (uint8_t)font->table[Num].index[1]) &&
+                   (*(p_text+2) == (uint8_t)font->table[Num].index[2])) {
                     const char* ptr = (const char*)&font->table[Num].matrix[0];
 
                     for (j = 0; j < font->Height; j++) {
@@ -664,15 +689,12 @@ void Paint_DrawString_CN(UWORD Xstart, UWORD Ystart, const char * pString, cFONT
                             if (FONT_BACKGROUND == Color_Background) { //this process is to speed up the scan
                                 if (*ptr & (0x80 >> (i % 8))) {
                                     Paint_SetPixel(x + i, y + j, Color_Foreground);
-                                    // Paint_DrawPoint(x + i, y + j, Color_Foreground, DOT_PIXEL_DFT, DOT_STYLE_DFT);
                                 }
                             } else {
                                 if (*ptr & (0x80 >> (i % 8))) {
                                     Paint_SetPixel(x + i, y + j, Color_Foreground);
-                                    // Paint_DrawPoint(x + i, y + j, Color_Foreground, DOT_PIXEL_DFT, DOT_STYLE_DFT);
                                 } else {
                                     Paint_SetPixel(x + i, y + j, Color_Background);
-                                    // Paint_DrawPoint(x + i, y + j, Color_Background, DOT_PIXEL_DFT, DOT_STYLE_DFT);
                                 }
                             }
                             if (i % 8 == 7) {
@@ -687,8 +709,12 @@ void Paint_DrawString_CN(UWORD Xstart, UWORD Ystart, const char * pString, cFONT
                 }
             }
             /* Point on the next character */
-            p_text += 3;
-            /* Decrement the column position by 16 */
+            if (*(p_text + 1) != 0 && *(p_text + 2) != 0) {
+                p_text += 3;
+            } else {
+                p_text += 1;
+            }
+            /* Advance the column position */
             x += font->Width;
         }
     }
@@ -713,8 +739,8 @@ void Paint_DrawNum(UWORD Xpoint, UWORD Ypoint, int32_t Nummber,
     uint8_t Str_Array[ARRAY_LEN] = {0}, Num_Array[ARRAY_LEN] = {0};
     uint8_t *pStr = Str_Array;
 
-    if (Xpoint > Paint.Width || Ypoint > Paint.Height) {
-        ESP_LOGI(TAG,"Paint_DisNum Input exceeds the normal display range");
+    if (Xpoint >= Paint.Width || Ypoint >= Paint.Height) {
+        ESP_LOGD(TAG, "Paint_DisNum Input exceeds the normal display range");
         return;
     }
 
@@ -757,8 +783,8 @@ void Paint_DrawNumDecimals(UWORD Xpoint, UWORD Ypoint, double Nummber,
 	int temp = Nummber;
 	float decimals;
 	uint8_t i;
-    if (Xpoint > Paint.Width || Ypoint > Paint.Height) {
-        ESP_LOGI(TAG,"Paint_DisNum Input exceeds the normal display range");
+    if (Xpoint >= Paint.Width || Ypoint >= Paint.Height) {
+        ESP_LOGD(TAG, "Paint_DisNum Input exceeds the normal display range");
         return;
     }
 

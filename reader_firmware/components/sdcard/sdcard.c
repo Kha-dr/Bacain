@@ -4,6 +4,7 @@
 #include <sys/unistd.h>
 #include <sys/stat.h>
 #include "esp_vfs_fat.h"
+#include "wear_levelling.h"
 #include "sdmmc_cmd.h"
 #include "driver/sdmmc_host.h"
 #include "esp_log.h"
@@ -16,6 +17,9 @@
 
 static sdmmc_card_t *s_card = NULL;
 static bool s_mounted = false;
+
+static wl_handle_t s_wl_handle = WL_INVALID_HANDLE;
+static bool s_flash_mounted = false;
 
 esp_err_t sdcard_init(void) {
     if (s_mounted) {
@@ -86,4 +90,85 @@ uint64_t sdcard_get_free_bytes(void) {
     DWORD fre_clust;
     if (f_getfree("0:", &fre_clust, &fs) != FR_OK) return 0;
     return ((uint64_t)fre_clust) * fs->csize * 512;
+}
+
+/* ========================================================================= */
+/* SPI Flash FAT Storage Implementation                                      */
+/* ========================================================================= */
+
+esp_err_t flash_storage_init(void) {
+    if (s_flash_mounted) {
+        return ESP_OK;
+    }
+
+    ESP_LOGI(TAG, "Initializing SPI flash FAT storage...");
+
+    const esp_vfs_fat_mount_config_t mount_config = {
+        .format_if_mount_failed = true,
+        .max_files = 8,
+        .allocation_unit_size = 4096
+    };
+
+    esp_err_t ret = esp_vfs_fat_spiflash_mount_rw_wl(FLASH_MOUNT_POINT, "storage", &mount_config, &s_wl_handle);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to mount SPI flash FAT storage (err 0x%x)", ret);
+        s_flash_mounted = false;
+        s_wl_handle = WL_INVALID_HANDLE;
+        return ret;
+    }
+
+    s_flash_mounted = true;
+    ESP_LOGI(TAG, "SPI flash FAT storage mounted successfully at %s", FLASH_MOUNT_POINT);
+
+    // Ensure standard directories exist
+    mkdir(FLASH_MOUNT_POINT "/books", 0777);
+    mkdir(FLASH_MOUNT_POINT "/.reader", 0777);
+
+    return ESP_OK;
+}
+
+void flash_storage_deinit(void) {
+    if (!s_flash_mounted) {
+        return;
+    }
+
+    esp_err_t ret = esp_vfs_fat_spiflash_unmount_rw_wl(FLASH_MOUNT_POINT, s_wl_handle);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to unmount SPI flash FAT storage (err 0x%x)", ret);
+    }
+    s_flash_mounted = false;
+    s_wl_handle = WL_INVALID_HANDLE;
+    ESP_LOGI(TAG, "SPI flash FAT storage unmounted.");
+}
+
+bool flash_storage_is_mounted(void) {
+    return s_flash_mounted;
+}
+
+uint64_t flash_storage_get_total_bytes(void) {
+    if (!s_flash_mounted) {
+        return 0;
+    }
+    uint64_t total_bytes = 0;
+    uint64_t free_bytes = 0;
+    esp_err_t ret = esp_vfs_fat_info(FLASH_MOUNT_POINT, &total_bytes, &free_bytes);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to get flash storage info (0x%x)", ret);
+        return 0;
+    }
+    return total_bytes;
+}
+
+uint64_t flash_storage_get_free_bytes(void) {
+    if (!s_flash_mounted) {
+        return 0;
+    }
+    uint64_t total_bytes = 0;
+    uint64_t free_bytes = 0;
+    esp_err_t ret = esp_vfs_fat_info(FLASH_MOUNT_POINT, &total_bytes, &free_bytes);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to get flash storage info (0x%x)", ret);
+        return 0;
+    }
+    return free_bytes;
 }

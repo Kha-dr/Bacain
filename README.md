@@ -1,7 +1,5 @@
 # Mini-E-Reader (Waveshare ESP32-S3-ePaper-1.54G)
 
-[中文文档](README_ZH.md)
-
 An ultra-low-power, pocket-sized E-Reader built for the **Waveshare ESP32-S3-ePaper-1.54G** development board, featuring a 1.54-inch 4-color e-paper display, UTF-8 `.txt` book pagination, intelligent deep sleep, and wireless book syncing via a **Web Bluetooth Progressive Web App (PWA)**.
 
 <img src="assets/ESP32-S3-ePaper-1.54G-1.jpg" alt="Waveshare ESP32-S3-ePaper-1.54G" width="450">
@@ -34,13 +32,17 @@ An ultra-low-power, pocket-sized E-Reader built for the **Waveshare ESP32-S3-ePa
 │       ├── power_mgr/             # GPIO 17 latch, ADC battery monitor, deep sleep
 │       ├── reader_core/           # Text pager, UTF-8 parser, book library & bookmarks
 │       └── ble_sync/              # NimBLE GATT service for high-speed file transfer
-├── pwa/                           # Progressive Web App for Web Bluetooth book syncing
+├── pwa/                           # Progressive Web App for Web Bluetooth sync & Web Serial flasher
 │   ├── index.html                 # Modern responsive dashboard & upload UI
 │   ├── app.js                     # Web Bluetooth GATT client (0xfe60 profile)
 │   ├── style.css                  # Dark/light theme styles
 │   ├── manifest.json              # PWA manifest
 │   ├── sw.js                      # Offline service worker
-│   └── icon.svg                   # Device vector icon
+│   ├── icon.svg                   # Device vector icon
+│   ├── firmware/                  # Firmware distribution manifest
+│   │   └── manifest.json          # Web flasher partition metadata
+│   └── components/                # Modular web components
+│       └── esp-flasher.js         # ESP32-S3 Web Serial flasher (esptool-js)
 ├── sdcard_template/               # Initial SD card folder structure and sample books
 │   └── books/
 │       ├── alice_in_wonderland.txt
@@ -56,33 +58,35 @@ An ultra-low-power, pocket-sized E-Reader built for the **Waveshare ESP32-S3-ePa
 
 The board features two hardware buttons: **BOOT (GPIO 0)** and **PWR (GPIO 18)**.
 
-| Screen Context | Action | Button | Function |
-| :--- | :--- | :--- | :--- |
-| **Reading View** | Single Click | **BOOT (GPIO 0)** | **Next Page** |
-| | Single Click | **PWR (GPIO 18)** | **Previous Page** |
-| | Double Click | **BOOT (GPIO 0)** | **Toggle Bookmark** |
-| | Long Press (>1.2s) | **BOOT (GPIO 0)** | **Open Reader Menu** |
-| | Long Press (>1.2s) | **PWR (GPIO 18)** | **Deep Sleep / Power Off** |
-| **Menu View** | Single Click | **BOOT (GPIO 0)** | **Move Selection Down** ($\downarrow$) |
-| | Single Click | **PWR (GPIO 18)** | **Confirm Selection** ($\checkmark$) |
-| | Long Press (>1.2s) | **BOOT (GPIO 0)** | **Back to Reading View** |
-| **Book Library** | Single Click | **BOOT (GPIO 0)** | **Next Book** |
-| | Single Click | **PWR (GPIO 18)** | **Open Book** |
-| | Long Press (>1.2s) | **BOOT (GPIO 0)** | **Back to Menu** |
-| **BLE Sync View** | Long Press (>1.2s) | **BOOT (GPIO 0)** | **Exit Sync & Return to Reading** |
+| Screen Context    | Action             | Button            | Function                               |
+| :---------------- | :----------------- | :---------------- | :------------------------------------- |
+| **Reading View**  | Single Click       | **BOOT (GPIO 0)** | **Next Page**                          |
+|                   | Single Click       | **PWR (GPIO 18)** | **Previous Page**                      |
+|                   | Double Click       | **BOOT (GPIO 0)** | **Toggle Bookmark**                    |
+|                   | Long Press (>1.2s) | **BOOT (GPIO 0)** | **Open Reader Menu**                   |
+|                   | Long Press (>1.2s) | **PWR (GPIO 18)** | **Deep Sleep / Power Off**             |
+| **Menu View**     | Single Click       | **BOOT (GPIO 0)** | **Move Selection Down** ($\downarrow$) |
+|                   | Single Click       | **PWR (GPIO 18)** | **Confirm Selection** ($\checkmark$)   |
+|                   | Long Press (>1.2s) | **BOOT (GPIO 0)** | **Back to Reading View**               |
+| **Book Library**  | Single Click       | **BOOT (GPIO 0)** | **Next Book**                          |
+|                   | Single Click       | **PWR (GPIO 18)** | **Open Book**                          |
+|                   | Long Press (>1.2s) | **BOOT (GPIO 0)** | **Back to Menu**                       |
+| **BLE Sync View** | Long Press (>1.2s) | **BOOT (GPIO 0)** | **Exit Sync & Return to Reading**      |
 
-*Note: In Reading View, after 60 seconds of inactivity, the reader automatically persists the current byte offset and enters deep sleep to preserve battery.*
+_Note: In Reading View, after 60 seconds of inactivity, the reader automatically persists the current byte offset and enters deep sleep to preserve battery._
 
 ---
 
 ## Quick Start & Build Instructions
 
 ### 1. Hardware Preparation
+
 1. Format a MicroSD card as FAT32.
 2. Copy the contents of `sdcard_template/` (`books/` directory with `.txt` files) to the root of the MicroSD card.
 3. Insert the card into the MicroSD slot on the ESP32-S3-ePaper board.
 
 ### 2. Building & Flashing Firmware
+
 Prerequisites: ESP-IDF v5.2 or later configured in your environment.
 
 ```bash
@@ -99,6 +103,7 @@ idf.py -p /dev/ttyUSB0 flash monitor
 ```
 
 ### 3. Syncing Books Wirelessly via Web Bluetooth PWA
+
 1. On the reader, open the menu (long press **BOOT**) and select **Sync Books (BLE)**.
 2. Open `pwa/index.html` in any browser supporting Web Bluetooth (Google Chrome, Microsoft Edge, or Bluefy on iOS). You can also serve it via:
    ```bash
@@ -111,13 +116,74 @@ idf.py -p /dev/ttyUSB0 flash monitor
 
 ---
 
+## Firmware Shipping & Distribution
+
+The Mini-E-Reader project provides automated, zero-toolchain firmware installation methods alongside reproducible CI/CD pipelines and manual partition flashing references.
+
+### 1. 1-Click Flashing via PWA Web Serial
+
+Flashing can be performed directly from modern desktop web browsers (Google Chrome, Microsoft Edge, Opera) without installing Python, ESP-IDF, or USB drivers:
+
+1. Connect the ESP32-S3 board to your computer via USB-C.
+2. Open the PWA dashboard at `pwa/index.html` (e.g., served locally via `npx serve pwa` or hosted via GitHub Pages).
+3. Navigate to the **Firmware Flasher** tab.
+4. The flasher automatically checks `pwa/firmware/manifest.json` and loads the bundled unified factory image (`01_factory.bin`) at offset `0x0`.
+5. Click **Connect & Flash Firmware** (or **Flash Firmware Now** if already connected), select your ESP32-S3 serial port in the browser prompt, and monitor real-time progress and serial logs in the console terminal.
+
+### 2. GitHub Actions CI/CD Pipeline & GitHub Releases
+
+Continuous integration and automated shipping are configured via `.github/workflows/firmware_ci.yml`:
+
+- **Triggers**: Automated on pushes/PRs to `main` and version release tags (`v*.*.*`).
+- **Build Environment**: Ubuntu runner with Espressif ESP-IDF v5.2+ Docker environment.
+- **Artifact Generation**: Compiles bootloader, partition table, and application binaries for the `esp32s3` target with 8MB Flash and Octal PSRAM configurations.
+- **Factory Image Packaging**: Merges artifacts into a unified `01_factory.bin` image and synchronizes `pwa/firmware/manifest.json`.
+- **Release Publishing**: Tagged releases automatically generate GitHub Release entries with binary assets (`01_factory.bin`, `bootloader.bin`, `partition-table.bin`, `reader_firmware.bin`) attached for direct download.
+
+### 3. Local Packaging Script (`reader_firmware/package_firmware.py`)
+
+Developers can locally combine ESP-IDF build outputs into a single flashable binary:
+
+```bash
+# Execute local packaging helper
+python reader_firmware/package_firmware.py
+```
+
+Alternatively, invoke `esptool.py` directly:
+
+```bash
+esptool.py --chip esp32s3 merge_bin \
+  -o Firmware/01_factory.bin \
+  --flash_mode dio \
+  --flash_size 8MB \
+  0x0 reader_firmware/build/bootloader/bootloader.bin \
+  0x8000 reader_firmware/build/partition_table/partition-table.bin \
+  0x20000 reader_firmware/build/reader_firmware.bin
+```
+
+### 4. Flash Memory Partition Offset Table (Manual Reference)
+
+Standard ESP32-S3 partition offsets for 8MB (64Mb) Quad/Octal SPI Flash:
+
+| Partition / Region | Start Offset | Size | Type / SubType | Description |
+| :----------------- | :----------- | :--- | :------------- | :---------- |
+| **Bootloader** | `0x0000` | 32 KB (`0x8000`) | System | ESP-IDF 2nd stage bootloader (`bootloader.bin`) |
+| **Partition Table** | `0x8000` | 4 KB (`0x1000`) | System | Partition map definitions (`partition-table.bin`) |
+| **NVS Partition** | `0x9000` | 24 KB (`0x6000`) | `data, nvs` | Non-volatile storage (WiFi/BLE keys, configs) |
+| **PHY Init** | `0xF000` | 4 KB (`0x1000`) | `data, phy` | RF calibration and physical layer parameters |
+| **Factory App** | `0x20000` | 2.0 MB (`0x200000`) | `app, factory` | Mini-E-Reader firmware binary (`reader_firmware.bin`) |
+| **Storage (FatFS)** | `0x220000` | 5.81 MB (`0x5D0000`) | `data, fat` | Flash filesystem storage partition |
+| **Unified Factory Image** | `0x0000` | ~3.84 MB | Unified Image | Complete pre-merged binary (`01_factory.bin`) |
+
+---
+
 ## Hardware Pinout Reference
 
-| Pin Name | GPIO | Function |
-| :--- | :--- | :--- |
-| `EPD_MOSI` / `SCK` / `CS` / `DC` | 13, 12, 11, 10 | SPI2 Host E-Paper Display |
-| `EPD_RST` / `BUSY` / `PWR` | 9, 8, 6 | Display reset, busy line, and power switch |
-| `SD_CLK` / `SD_CMD` / `SD_D0` | 39, 41, 40 | 1-line SDMMC MicroSD card interface |
-| `BOOT_KEY` / `PWR_KEY` | 0, 18 | User input buttons (Ext1 wakeups) |
-| `POWER_HOLD` | 17 | Board power latch (must be kept HIGH) |
-| `BATTERY_ADC` | 1 | Battery voltage monitoring via ADC1_CH0 |
+| Pin Name                         | GPIO           | Function                                   |
+| :------------------------------- | :------------- | :----------------------------------------- |
+| `EPD_MOSI` / `SCK` / `CS` / `DC` | 13, 12, 11, 10 | SPI2 Host E-Paper Display                  |
+| `EPD_RST` / `BUSY` / `PWR`       | 9, 8, 6        | Display reset, busy line, and power switch |
+| `SD_CLK` / `SD_CMD` / `SD_D0`    | 39, 41, 40     | 1-line SDMMC MicroSD card interface        |
+| `BOOT_KEY` / `PWR_KEY`           | 0, 18          | User input buttons (Ext1 wakeups)          |
+| `POWER_HOLD`                     | 17             | Board power latch (must be kept HIGH)      |
+| `BATTERY_ADC`                    | 1              | Battery voltage monitoring via ADC1_CH0    |

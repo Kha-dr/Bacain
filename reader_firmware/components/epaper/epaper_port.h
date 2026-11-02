@@ -1,50 +1,42 @@
 #ifndef EPAPER_PORT_H
 #define EPAPER_PORT_H
 
-
-/**********************************
-Color Index
-**********************************/
-#define EPD_1IN54G_BLACK   0x0 
-#define EPD_1IN54G_WHITE   0x1 
-#define EPD_1IN54G_YELLOW  0x2 
-#define EPD_1IN54G_RED     0x3 
-// #define EPD_1IN54G_ORANGE  0x4 
-#define EPD_1IN54G_BLUE    0x5 
-#define EPD_1IN54G_GREEN   0x6 
-
+#include <stdint.h>
+#include <stdbool.h>
 
 #define EXAMPLE_LCD_WIDTH  200
 #define EXAMPLE_LCD_HEIGHT 200
 
-
 /**********************************
-Color Index
+ Color Definitions (1-bit monochrome)
 **********************************/
-#define EPD_1IN54G_BLACK   0x0   /// 000
-#define EPD_1IN54G_WHITE   0x1   /// 001
-#define EPD_1IN54G_YELLOW  0x2   /// 010
-#define EPD_1IN54G_RED     0x3   /// 011
-// #define EPD_1IN54G_ORANGE  0x4   /// 100
-#define EPD_1IN54G_BLUE    0x5   /// 101
-#define EPD_1IN54G_GREEN   0x6   /// 110
+#define EPD_COLOR_BLACK    0x00
+#define EPD_COLOR_WHITE    0xFF
+
+// Backward-compatible color aliases
+#define EPD_1IN54G_BLACK   0x00
+#define EPD_1IN54G_WHITE   0xFF
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+/* Waveshare Official V2 Look-Up Tables (159 bytes each) */
+extern const uint8_t WF_Full_1IN54[159];
+extern const uint8_t WF_PARTIAL_1IN54_0[159];
 
 void epaper_port_init(void);
+void epaper_port_init_partial(void);
 void epaper_port_clear(uint8_t color);
 void epaper_port_display(const uint8_t *Image);
+void epaper_port_display_part(const uint8_t *Image);
+void epaper_port_display_full(const uint8_t *Image);
 void epaper_port_sleep(void);
 void epaper_power_on(void);
 void epaper_power_off(void);
 
-
 #ifdef __cplusplus
 }
 #endif
-
 
 #endif // !EPAPER_PORT_H

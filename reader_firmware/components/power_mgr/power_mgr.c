@@ -35,10 +35,8 @@ void power_mgr_early_init(void) {
     gpio_config(&pwr_conf);
     gpio_set_level(VBAT_PWR_HOLD_PIN, 1);
 
-    // 2. Release any hold from prior deep sleep now that pin is driven HIGH
-    gpio_hold_dis(VBAT_PWR_HOLD_PIN);
-    gpio_deep_sleep_hold_dis();
-    // 3. Disable audio amplifier rails (active-low PMOS: 1 = OFF) to prevent power waste
+    // 2. Disable audio amplifier rails (active-low PMOS: 1 = OFF) and LED to prevent power waste
+    gpio_reset_pin(LED_GREEN_PIN);
     gpio_config_t audio_conf = {
         .pin_bit_mask = (1ULL << AUDIO_PWR_PIN) | (1ULL << AUDIO_PA_PIN) | (1ULL << LED_GREEN_PIN),
         .mode = GPIO_MODE_OUTPUT,
@@ -49,7 +47,14 @@ void power_mgr_early_init(void) {
     gpio_config(&audio_conf);
     gpio_set_level(AUDIO_PWR_PIN, 1); // 1 = OFF
     gpio_set_level(AUDIO_PA_PIN, 0);  // 0 = Mute
-    gpio_set_level(LED_GREEN_PIN, 1); // 1 = OFF for active low LED
+    gpio_set_level(LED_GREEN_PIN, 1); // 1 = OFF (Active-Low)
+
+    // 3. Release any hold from prior deep sleep now that pins are driven HIGH
+    gpio_hold_dis(VBAT_PWR_HOLD_PIN);
+    gpio_hold_dis(AUDIO_PWR_PIN);
+    gpio_hold_dis(LED_GREEN_PIN);
+    gpio_deep_sleep_hold_dis();
+
     // 4. Initialize ADC for battery monitoring
     adc_oneshot_unit_init_cfg_t init_config = {
         .unit_id = ADC_UNIT_1,
@@ -137,14 +142,19 @@ void power_mgr_enter_deep_sleep(uint32_t sleep_seconds) {
     }
 
     // Keep GPIO 17 latched high during sleep so battery circuit stays alive
+    // Latch pin audio PMOS & LED agar gate tidak mengambang (floating) dan amplifier tidak menyedot 15-30mA saat sleep
+    gpio_set_level(VBAT_PWR_HOLD_PIN, 1);
+    gpio_set_level(AUDIO_PWR_PIN, 1);
+    gpio_set_level(LED_GREEN_PIN, 1); // 1 = OFF during sleep (Active-Low)
     gpio_hold_en(VBAT_PWR_HOLD_PIN);
+    gpio_hold_en(AUDIO_PWR_PIN);
+    gpio_hold_en(LED_GREEN_PIN);
     gpio_deep_sleep_hold_en();
 
     // Wait for buttons to be released so Ext1 ANY_LOW does not trigger immediately
-    int timeout_ms = 3000;
-    while ((gpio_get_level(BOOT_BUTTON_PIN) == 0 || gpio_get_level(PWR_BUTTON_PIN) == 0) && timeout_ms > 0) {
+    // Pastikan loop menunggu sampai kedua tombol (GPIO 0 & GPIO 18) bernilai 1 (HIGH) sebelum esp_deep_sleep_start()
+    while (gpio_get_level(BOOT_BUTTON_PIN) == 0 || gpio_get_level(PWR_BUTTON_PIN) == 0) {
         vTaskDelay(pdMS_TO_TICKS(10));
-        timeout_ms -= 10;
     }
     vTaskDelay(pdMS_TO_TICKS(50));
     esp_deep_sleep_start();

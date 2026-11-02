@@ -16,7 +16,12 @@ const OPCODES = {
   START_UPLOAD: 0x02,
   FINISH_UPLOAD: 0x03,
   DELETE_BOOK: 0x04,
-  ABORT_UPLOAD: 0x05
+  ABORT_UPLOAD: 0x05,
+  SET_STORAGE_TARGET: 0x06,
+  SET_FONT: 0x10,
+  FORCE_REFRESH: 0x12,
+  SET_SLEEP_TIMEOUT: 0x13,
+  TRIGGER_SLEEP: 0x14
 };
 
 const CHUNK_SIZE = 506; // Max BLE payload per packet (508B with 2B seq_id fits in 512B MTU)
@@ -116,7 +121,17 @@ const el = {
   logCountBadge: document.getElementById('logCountBadge'),
   clearLogBtn: document.getElementById('clearLogBtn'),
 
-  toastContainer: document.getElementById('toastContainer')
+  toastContainer: document.getElementById('toastContainer'),
+
+  // On-the-Fly Live Controls
+  storageTargetSdBtn: document.getElementById('storageTargetSdBtn'),
+  storageTargetFlashBtn: document.getElementById('storageTargetFlashBtn'),
+  storageTargetDesc: document.getElementById('storageTargetDesc'),
+  font16Btn: document.getElementById('font16Btn'),
+  font12Btn: document.getElementById('font12Btn'),
+  forceRefreshBtn: document.getElementById('forceRefreshBtn'),
+  sleepTimeoutSelect: document.getElementById('sleepTimeoutSelect'),
+  triggerSleepBtn: document.getElementById('triggerSleepBtn')
 };
 
 // ============================================================================
@@ -456,7 +471,7 @@ function parseStatusValue(dataView) {
   el.storageBadge.textContent = `${usedPct}% used`;
   el.storageMeterFill.style.width = `${Math.min(100, Math.max(0, usedPct))}%`;
 
-  log(`Status Update: Battery ${batteryPct}% (${(batteryMv/1000).toFixed(2)}V), SD Free: ${formatKb(freeKb)} / ${formatKb(totalKb)}`, 'info');
+  log(`Status Update: Battery ${batteryPct}% (${(batteryMv/1000).toFixed(2)}V), Storage Free: ${formatKb(freeKb)} / ${formatKb(totalKb)}`, 'info');
 }
 
 // ============================================================================
@@ -520,7 +535,7 @@ async function queryBooksList() {
       }
     }, 4000);
 
-    log('Querying books on SD card (OpCode 0x01)...', 'info');
+    log('Querying books on active storage (OpCode 0x01)...', 'info');
     const req = new Uint8Array([OPCODES.LIST_BOOKS]);
     await controlChar.writeValueWithResponse(req);
 
@@ -575,7 +590,7 @@ function finalizeBookList() {
 
   // Sort books alphabetically
   remoteBooks = pendingBookList.sort((a, b) => a.name.localeCompare(b.name));
-  log(`Found ${remoteBooks.length} book(s) on SD card.`, 'success');
+  log(`Found ${remoteBooks.length} book(s) on storage.`, 'success');
   renderBooksList();
 }
 
@@ -605,7 +620,7 @@ function renderBooksList() {
           <circle cx="12" cy="12" r="10"></circle>
           <line x1="8" y1="12" x2="16" y2="12"></line>
         </svg>
-        <p>${searchTerm ? 'No matching books found' : 'No books found on SD card (/sdcard/books/). Drop a .txt file above to upload!'}</p>
+        <p>${searchTerm ? 'No matching books found' : 'No books found on active storage. Drop a .txt file above to upload!'}</p>
       </div>`;
     return;
   }
@@ -667,7 +682,7 @@ function renderBooksList() {
 // Delete Book Dialog
 function openDeleteModal(book) {
   bookPendingDelete = book;
-  el.deleteModalText.textContent = `Are you sure you want to delete "${book.name}" (${formatBytes(book.size)}) from the SD card? This cannot be undone.`;
+  el.deleteModalText.textContent = `Are you sure you want to delete "${book.name}" (${formatBytes(book.size)}) from the active storage? This cannot be undone.`;
   el.deleteModal.classList.add('active');
 }
 
@@ -915,6 +930,118 @@ function registerServiceWorker() {
 }
 
 // ============================================================================
+// Live Hardware Controls Logic (Phase 3)
+// ============================================================================
+let currentStorageTarget = 1; // 0: SD, 1: Flash
+let currentFontSize = 0; // 0: Font16, 1: Font12
+
+function updateStorageTargetUI(target) {
+  currentStorageTarget = target;
+  if (el.storageTargetSdBtn && el.storageTargetFlashBtn) {
+    el.storageTargetSdBtn.classList.toggle('active', target === 0);
+    el.storageTargetFlashBtn.classList.toggle('active', target === 1);
+  }
+  if (el.storageTargetDesc) {
+    el.storageTargetDesc.textContent = target === 0
+      ? 'Books and reading progress are synced to MicroSD card (/sdcard).'
+      : 'Books and reading progress are synced to Internal Flash (/spiflash 5.8MB).';
+  }
+}
+
+function updateFontUI(fontId) {
+  currentFontSize = fontId;
+  if (el.font16Btn && el.font12Btn) {
+    el.font16Btn.classList.toggle('active', fontId === 0);
+    el.font12Btn.classList.toggle('active', fontId === 1);
+  }
+}
+
+async function sendSetStorageTarget(target) {
+  if (!isConnected || !controlChar) {
+    showToast('Connect E-Reader first', 'warning');
+    return;
+  }
+  try {
+    log(`Setting storage target to ${target === 0 ? 'MicroSD (/sdcard)' : 'Internal Flash (/spiflash)'}...`, 'info');
+    const packet = new Uint8Array([OPCODES.SET_STORAGE_TARGET, target]);
+    await controlChar.writeValueWithResponse(packet);
+    updateStorageTargetUI(target);
+    showToast(`Active storage: ${target === 0 ? 'MicroSD (/sdcard)' : 'Internal Flash (/spiflash)'}`, 'success');
+    await readDeviceStatus();
+    await queryBooksList();
+  } catch (err) {
+    log(`Failed to set storage target: ${err.message}`, 'error');
+    showToast('Failed to switch storage target', 'error');
+  }
+}
+
+async function sendSetFont(fontId) {
+  if (!isConnected || !controlChar) {
+    showToast('Connect E-Reader first', 'warning');
+    return;
+  }
+  try {
+    log(`Setting display typography to Font${fontId === 0 ? '16' : '12'}...`, 'info');
+    const packet = new Uint8Array([OPCODES.SET_FONT, fontId]);
+    await controlChar.writeValueWithResponse(packet);
+    updateFontUI(fontId);
+    showToast(`Font set to Font${fontId === 0 ? '16' : '12'}`, 'success');
+  } catch (err) {
+    log(`Failed to set font: ${err.message}`, 'error');
+    showToast('Failed to change typography', 'error');
+  }
+}
+
+async function sendForceRefresh() {
+  if (!isConnected || !controlChar) {
+    showToast('Connect E-Reader first', 'warning');
+    return;
+  }
+  try {
+    log('Sending screen clean / full refresh request...', 'info');
+    const packet = new Uint8Array([OPCODES.FORCE_REFRESH]);
+    await controlChar.writeValueWithResponse(packet);
+    showToast('Display cleaned (ghosting cleared)', 'success');
+  } catch (err) {
+    log(`Failed to refresh screen: ${err.message}`, 'error');
+    showToast('Refresh request failed', 'error');
+  }
+}
+
+async function sendSetSleepTimeout(seconds) {
+  if (!isConnected || !controlChar) {
+    showToast('Connect E-Reader first', 'warning');
+    return;
+  }
+  try {
+    log(`Setting inactivity sleep timeout to ${seconds}s...`, 'info');
+    const packet = new Uint8Array([OPCODES.SET_SLEEP_TIMEOUT, seconds & 0xff, (seconds >> 8) & 0xff]);
+    await controlChar.writeValueWithResponse(packet);
+    showToast(`Inactivity timeout: ${seconds === 0 ? 'Disabled' : seconds + 's'}`, 'success');
+  } catch (err) {
+    log(`Failed to set sleep timeout: ${err.message}`, 'error');
+    showToast('Failed to update timeout', 'error');
+  }
+}
+
+async function sendTriggerSleep() {
+  if (!isConnected || !controlChar) {
+    showToast('Connect E-Reader first', 'warning');
+    return;
+  }
+  try {
+    log('Triggering instant deep sleep on device...', 'warning');
+    const packet = new Uint8Array([OPCODES.TRIGGER_SLEEP]);
+    await controlChar.writeValueWithResponse(packet);
+    showToast('Device entering deep sleep. Disconnecting...', 'info');
+    disconnectDevice();
+  } catch (err) {
+    log(`Failed to trigger sleep: ${err.message}`, 'error');
+    showToast('Failed to enter sleep', 'error');
+  }
+}
+
+// ============================================================================
 // Event Listeners Initialization
 // ============================================================================
 function initEventListeners() {
@@ -982,6 +1109,29 @@ function initEventListeners() {
     logCount = 0;
     el.logCountBadge.textContent = '0';
   });
+
+  // Tab 2 Live Control Listeners
+  if (el.storageTargetSdBtn) {
+    el.storageTargetSdBtn.addEventListener('click', () => sendSetStorageTarget(0));
+  }
+  if (el.storageTargetFlashBtn) {
+    el.storageTargetFlashBtn.addEventListener('click', () => sendSetStorageTarget(1));
+  }
+  if (el.font16Btn) {
+    el.font16Btn.addEventListener('click', () => sendSetFont(0));
+  }
+  if (el.font12Btn) {
+    el.font12Btn.addEventListener('click', () => sendSetFont(1));
+  }
+  if (el.forceRefreshBtn) {
+    el.forceRefreshBtn.addEventListener('click', () => sendForceRefresh());
+  }
+  if (el.sleepTimeoutSelect) {
+    el.sleepTimeoutSelect.addEventListener('change', (e) => sendSetSleepTimeout(parseInt(e.target.value, 10)));
+  }
+  if (el.triggerSleepBtn) {
+    el.triggerSleepBtn.addEventListener('click', () => sendTriggerSleep());
+  }
 }
 
 // ============================================================================
@@ -991,6 +1141,7 @@ function init() {
   initTheme();
   checkBluetoothCompatibility();
   initEventListeners();
+  updateStorageTargetUI(1);
   registerServiceWorker();
   log('Mini E-Reader Web Bluetooth PWA initialized.', 'info');
 }

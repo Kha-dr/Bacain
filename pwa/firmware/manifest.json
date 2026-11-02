@@ -1,0 +1,28 @@
+{
+  "chip": "ESP32-S3",
+  "target": "ESP32-S3",
+  "flash_size": "8MB",
+  "baudrate": 460800,
+  "build_date": "2026-11-01T14:08:59Z",
+  "factory_bin": "mini_e_reader_factory.bin",
+  "parts": [
+    {
+      "name": "bootloader",
+      "offset": "0x0000",
+      "path": "bootloader.bin",
+      "size_bytes": 22560
+    },
+    {
+      "name": "partition_table",
+      "offset": "0x8000",
+      "path": "partition-table.bin",
+      "size_bytes": 3072
+    },
+    {
+      "name": "reader_firmware",
+      "offset": "0x20000",
+      "path": "reader_firmware.bin",
+      "size_bytes": 687264
+    }
+  ]
+}
