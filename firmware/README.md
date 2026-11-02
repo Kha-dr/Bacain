@@ -30,7 +30,7 @@ Docker Compose akan:
 
 Dari root repositori:
 ```bash
-docker run --rm -v "${PWD}:/project" -w /project/firmware espressif/idf:v5.3.1 bash -c "idf.py -B /project/build set-target esp32s3 && idf.py -B /project/build build && python3 package_firmware.py --build-dir /project/build --no-web-copy"
+docker run --rm -v "${PWD}:/project" -w /project/firmware espressif/idf:v5.3.1 bash -c "idf.py -B /project/build set-target esp32s3 && idf.py -B /project/build build && python3 package_firmware.py /project/build"
 ```
 
 ---
