@@ -1,18 +1,66 @@
-# BacaIn (Waveshare ESP32-S3-ePaper-1.54G)
+# BacaIn
 
-An ultra-low-power, pocket-sized E-Reader built for the **Waveshare ESP32-S3-ePaper-1.54G** development board, featuring a 1.54-inch 4-color e-paper display, UTF-8 `.txt` book pagination, intelligent deep sleep, and wireless book syncing via a **Web Bluetooth Progressive Web App (PWA)**.
+An ultra-low-power, pocket-sized e-reader firmware and web management suite for ESP32-S3 devices with e-paper displays. Features UTF-8 book pagination, low-power deep sleep, and wireless book syncing via a Progressive Web App (PWA).
 
-<img src="assets/ESP32-S3-ePaper-1.54G-1.jpg" alt="Waveshare ESP32-S3-ePaper-1.54G" width="450">
+The firmware includes a modular hardware configuration layer (`board_config`) with ready-to-use defaults for the **Waveshare ESP32-S3-ePaper-1.54**, while allowing custom screen dimensions, rotation, and GPIO pinouts through Kconfig or build flags.
 
 ---
 
 ## Key Features
 
-- **1.54" 4-Color E-Paper Display (200x200)**: Clean rendering using `Font16` (22 chars/line, 8 lines) or `Font12` (30 chars/line, 11 lines) with battery indicator, book title, and reading percentage.
-- **UTF-8 Word-Wrapping & Rolling Page Cache**: Multi-byte boundary protection with a 16-deep rolling offset history for instant backward and forward page turning.
-- **Ultra-Low Power & Deep Sleep**: Draws $< 30\ \mu\text{A}$ in deep sleep. Latches board power rail via GPIO 17 (`gpio_hold_en`), cuts e-paper rail via GPIO 6, and wakes instantly on button press (`Ext1`).
-- **Web Bluetooth Sync (`/web`)**: Zero app installation required. Connect from any browser with Web Bluetooth (Chrome, Edge, Bluefy) to stream `.txt` books directly to `/sdcard/books/` over 512-byte MTU BLE GATT.
-- **Reading State Persistence**: Automatically persists reading progress and bookmarks in `/sdcard/.reader/state.json`.
+- **E-Paper Display Support**: Clean text rendering with configurable display dimensions and orientation (default: 200x200), supporting multiple font sizes (`Font16`, `Font12`), title header, battery monitor, and reading progress percentage.
+- **UTF-8 Pagination & Rolling Cache**: Multi-byte character boundary protection with a 16-deep rolling offset history for instant forward and backward page turns.
+- **Power Management & Deep Sleep**: Draws $< 30\ \mu\text{A}$ in deep sleep. Supports power rail latching, display power gating, and instant button wakeup (`Ext1`).
+- **Web Bluetooth Sync**: Connect from any browser supporting Web Bluetooth (Chrome, Edge, Bluefy) to manage and upload `.txt` books directly over BLE GATT without installing apps.
+- **Dual Storage & Progress Persistence**: Supports MicroSD cards (FAT32 and exFAT) with automatic fallback to internal SPI flash storage. Reading progress and bookmarks are saved automatically.
+- **Configurable Hardware**: Screen dimensions, SPI bus pins, buttons, power pins, and audio peripherals can be customized via ESP-IDF Kconfig or environment variables.
+
+---
+
+## Device Controls
+
+Navigation uses a simple two-button interface (default: **BOOT / GPIO 0** and **PWR / GPIO 18**):
+
+| Context | Action | Button | Function |
+| :--- | :--- | :--- | :--- |
+| **Any (Sleep)** | Click | **BOOT** or **PWR** | Wake device from deep sleep |
+| **Reading** | Click | **BOOT** | Next page |
+| | Click | **PWR** | Previous page |
+| | Double Click | **BOOT** | Add or remove bookmark |
+| | Long Press (>1.2s) | **BOOT** | Open reader menu |
+| | Long Press (>1.2s) | **PWR** | Enter deep sleep immediately |
+| **Menu** | Click | **BOOT** | Next item ($\downarrow$) |
+| | Click | **PWR** | Select item ($\checkmark$) |
+| | Long Press (>1.2s) | **BOOT** | Close menu and return to reading |
+| **Book Library** | Click | **BOOT** | Next book in list |
+| | Click | **PWR** | Open selected book |
+| | Long Press (>1.2s) | **BOOT** | Return to menu |
+| **Bookmarks** | Click | **BOOT** | Next bookmark in list |
+| | Click | **PWR** | Jump to selected bookmark |
+| | Long Press (>1.2s) | **BOOT** | Return to menu |
+| **BLE Sync** | Long Press (>1.2s) | **BOOT** | Exit sync mode and return to reading |
+
+_Note: In reading view, after 60 seconds of inactivity, reading progress is automatically saved to storage and the device enters deep sleep._
+
+---
+
+## Getting Started
+
+### 1. Storage Preparation
+- Insert a MicroSD card formatted with **FAT32** or **exFAT** (MBR partition scheme).
+- If no card is present, the reader automatically falls back to internal SPI flash storage (`/spiflash`).
+- You can copy UTF-8 `.txt` books directly into the `books/` directory on the card or upload them wirelessly via Web Bluetooth.
+
+### 2. Installing Firmware
+- **Web Serial Flasher**: Connect the board via USB-C, open `web/flasher.html` in Chrome or Edge, and click **Unduh Firmware Terbaru dari GitHub Release** to flash directly from the browser.
+- **Compiling & Customizing**: For building from source (Docker Compose or ESP-IDF), adjusting pinouts, or setting custom display resolutions, refer to [firmware/README.md](firmware/README.md).
+
+### 3. Syncing Books via Web Bluetooth
+1. On the reader, open the menu (long press **BOOT**) and select **Sync Books (BLE)**.
+2. Open `web/index.html` in Chrome, Edge, or Bluefy on iOS.
+3. Click **Connect BacaIn** to pair over Bluetooth.
+4. Drag and drop `.txt` files to upload them to the device.
+5. Long press **BOOT** on the device to exit sync mode and return to reading.
 
 ---
 
@@ -20,198 +68,40 @@ An ultra-low-power, pocket-sized E-Reader built for the **Waveshare ESP32-S3-ePa
 
 ```text
 .
-├── firmware/                      # Production ESP-IDF BacaIn firmware
-│   ├── docker-compose.yml         # Docker Compose build service (espressif/idf:v5.3.1)
-│   ├── README.md                  # Comprehensive firmware build & flash guide
-│   ├── package_firmware.py        # Factory binary merger & web manifest generator
-│   ├── CMakeLists.txt             # Project CMake build definition
-│   ├── partitions.csv             # 8MB Flash partition layout
-│   ├── sdkconfig.defaults         # Octal PSRAM, NimBLE, and FATFS configurations
-│   ├── main/                      # UI state machine, event dispatcher, view renderers
-│   └── components/
-│       ├── epaper/                # Hardware SPI display driver, fonts, GUI_Paint
-│       ├── sdcard/                # 1-line SDMMC host FatFS mount at /sdcard
-│       ├── button/                # Multi-button event handler (BOOT & PWR)
-│       ├── power_mgr/             # GPIO 17 latch, ADC battery monitor, deep sleep
-│       ├── reader_core/           # Text pager, UTF-8 parser, book library & bookmarks
-│       └── ble_sync/              # NimBLE GATT service for high-speed file transfer
-├── web/                           # Web application for Web Bluetooth sync & Web Serial flasher
-│   ├── index.html                 # Modern responsive dashboard & upload UI
-│   ├── app.js                     # Web Bluetooth GATT client (0xfe60 profile)
-│   ├── style.css                  # Dark/light theme styles
-│   ├── manifest.json              # Web app manifest
-│   ├── sw.js                      # Offline service worker
-│   ├── icon.svg                   # Device vector icon
-│   ├── firmware/                  # Firmware distribution manifest
-│   │   └── manifest.json          # Web flasher partition metadata
-│   └── components/                # Modular web components
-│       └── esp-flasher.js         # ESP32-S3 Web Serial flasher (esptool-js)
-├── Example/                       # Reference examples (ESP-IDF, Arduino, XiaoZhi AI)
-├── Firmware/                      # Factory test binary (01_factory.bin)
-└── Hardware/                      # Schematics and mechanical drawings
+├── firmware/                      # ESP-IDF firmware source & build system
+│   ├── components/
+│   │   ├── board_config/          # Hardware configuration & Kconfig definitions
+│   │   ├── epaper/                # Hardware SPI display driver & font rendering
+│   │   ├── sdcard/                # 1-line SDMMC host FatFS storage driver
+│   │   ├── button/                # Hardware button handler (BOOT & PWR)
+│   │   ├── power_mgr/             # Power latch, battery ADC monitor, deep sleep
+│   │   ├── reader_core/           # Text pager, UTF-8 parser, bookmarks
+│   │   └── ble_sync/              # NimBLE GATT service for file transfer
+│   ├── compose.yml                # Docker Compose build service
+│   ├── package_firmware.py        # Factory binary packaging & manifest generator
+│   └── README.md                  # Hardware pinouts, build instructions & CI/CD
+├── web/                           # Web application (Web Bluetooth sync & Web Serial flasher)
+│   ├── components/                # Modular web components (esp-flasher, book-library, dashboard)
+│   ├── index.html                 # Main dashboard UI
+│   ├── flasher.html               # Dedicated web flasher page
+│   └── sw.js                      # Offline service worker
+├── .github/                       # CI/CD workflows, release drafter & GitHub Pages deploy
+├── LICENSE                        # CC BY-NC-SA 4.0 license
+└── README.md                      # Project overview & quick start
 ```
 
 ---
 
-## 2-Button Interaction Guide
+## Acknowledgments
 
-The board features two hardware buttons: **BOOT (GPIO 0)** and **PWR (GPIO 18)**.
-
-| Screen Context    | Action             | Button            | Function                               |
-| :---------------- | :----------------- | :---------------- | :------------------------------------- |
-| **Reading View**  | Single Click       | **BOOT (GPIO 0)** | **Next Page**                          |
-|                   | Single Click       | **PWR (GPIO 18)** | **Previous Page**                      |
-|                   | Double Click       | **BOOT (GPIO 0)** | **Toggle Bookmark**                    |
-|                   | Long Press (>1.2s) | **BOOT (GPIO 0)** | **Open Reader Menu**                   |
-|                   | Long Press (>1.2s) | **PWR (GPIO 18)** | **Deep Sleep / Power Off**             |
-| **Menu View**     | Single Click       | **BOOT (GPIO 0)** | **Move Selection Down** ($\downarrow$) |
-|                   | Single Click       | **PWR (GPIO 18)** | **Confirm Selection** ($\checkmark$)   |
-|                   | Long Press (>1.2s) | **BOOT (GPIO 0)** | **Back to Reading View**               |
-| **Book Library**  | Single Click       | **BOOT (GPIO 0)** | **Next Book**                          |
-|                   | Single Click       | **PWR (GPIO 18)** | **Open Book**                          |
-|                   | Long Press (>1.2s) | **BOOT (GPIO 0)** | **Back to Menu**                       |
-| **BLE Sync View** | Long Press (>1.2s) | **BOOT (GPIO 0)** | **Exit Sync & Return to Reading**      |
-
-_Note: In Reading View, after 60 seconds of inactivity, the reader automatically persists the current byte offset and enters deep sleep to preserve battery._
+- Base hardware design, schematics, and reference implementations are based on the [Waveshare ESP32-S3-ePaper-1.54](https://github.com/waveshareteam/ESP32-S3-ePaper-1.54) repository and documentation.
 
 ---
 
-## Quick Start & Build Instructions
+## License
 
-### 1. Hardware Preparation
+This project is open source under the terms of the [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0)](https://creativecommons.org/licenses/by-nc-sa/4.0/) license:
 
-1. Format a MicroSD card as FAT32.
-2. Create a `books/` directory on the MicroSD card and copy `.txt` files into it.
-3. Insert the card into the MicroSD slot on the ESP32-S3-ePaper board.
-
-### 2. Building & Flashing Firmware
-
-#### Method A: Build via Docker Compose (Recommended - Zero Toolchain Setup)
-
-No local ESP-IDF or Python toolchains required. The build runs in an isolated official `espressif/idf:v5.3.1` container and outputs all compiled and packaged binaries directly to root `.\build`:
-
-**Docker Compose:**
-```bash
-cd firmware
-docker compose up
-```
-*(Or `docker compose run --rm firmware`)*
-
-**Docker One-Liner (Linux / macOS / Windows):**
-```bash
-docker run --rm -v "${PWD}:/project" -w /project/firmware espressif/idf:v5.3.1 \
-  bash -c "idf.py -B /project/build set-target esp32s3 && idf.py -B /project/build build && python3 package_firmware.py --build-dir /project/build --no-web-copy"
-```
-
-#### Method B: Native ESP-IDF Build (Local Environment)
-
-Prerequisites: ESP-IDF v5.2 or later (v5.3+ recommended) configured in your environment.
-
-```bash
-cd firmware
-
-# 1. Target ESP32-S3
-idf.py set-target esp32s3
-
-# 2. Build firmware
-idf.py build
-
-# 3. Merge unified factory binary & update web manifest
-python3 package_firmware.py --web-dir ../web/firmware
-```
-
-#### Flashing Options
-
-- **Web Serial Flasher (No CLI required)**:
-  Open `web/index.html` in Chrome/Edge, go to the **Firmware Flasher** tab, and click **Connect & Flash Firmware**.
-- **ESP-IDF Serial Flash & Monitor**:
-  ```bash
-  idf.py -p COM3 flash monitor          # Windows (adjust COM port)
-  idf.py -p /dev/ttyUSB0 flash monitor  # Linux / macOS
-  ```
-
-### 3. Syncing Books Wirelessly via Web Bluetooth
-
-1. On the reader, open the menu (long press **BOOT**) and select **Sync Books (BLE)**.
-2. Open `web/index.html` in any browser supporting Web Bluetooth (Google Chrome, Microsoft Edge, or Bluefy on iOS). You can also serve it via:
-   ```bash
-   cd web && npx serve
-   ```
-3. Click **Connect BacaIn** and pair with `BacaIn` (or `Mini-E-Reader`).
-4. Drag and drop `.txt` files or click to upload. Files are written directly to `/sdcard/books/` at high speed (~40 KB/s).
-5. Manage existing books or delete them remotely directly from the web interface.
-6. Long press **BOOT** on the device to exit sync mode and start reading!
-
----
-
-## Firmware Shipping & Distribution
-
-The BacaIn project provides automated, zero-toolchain firmware installation methods alongside reproducible CI/CD pipelines and manual partition flashing references.
-
-### 1. 1-Click Flashing via Web Serial
-
-Flashing can be performed directly from modern desktop web browsers (Google Chrome, Microsoft Edge, Opera) without installing Python, ESP-IDF, or USB drivers:
-
-1. Connect the ESP32-S3 board to your computer via USB-C.
-2. Open the web dashboard at `web/index.html` (e.g., served locally via `npx serve web` or hosted via GitHub Pages).
-3. Navigate to the **Firmware Flasher** tab.
-4. The flasher automatically checks `web/firmware/manifest.json` and loads the bundled unified factory image (`01_factory.bin`) at offset `0x0`.
-5. Click **Connect & Flash Firmware** (or **Flash Firmware Now** if already connected), select your ESP32-S3 serial port in the browser prompt, and monitor real-time progress and serial logs in the console terminal.
-
-### 2. GitHub Actions CI/CD Pipeline & GitHub Releases
-
-Continuous integration and automated shipping are configured via `.github/workflows/firmware_ci.yml`:
-
-- **Triggers**: Automated on pushes/PRs to `main` and version release tags (`v*.*.*`).
-- **Build Environment**: Ubuntu runner with Espressif ESP-IDF v5.2+ Docker environment.
-- **Artifact Generation**: Compiles bootloader, partition table, and application binaries for the `esp32s3` target with 8MB Flash and Octal PSRAM configurations.
-- **Factory Image Packaging**: Merges artifacts into a unified `01_factory.bin` image and synchronizes `web/firmware/manifest.json`.
-- **Release Publishing**: Tagged releases automatically generate GitHub Release entries with binary assets (`01_factory.bin`, `bootloader.bin`, `partition-table.bin`, `reader_firmware.bin`) attached for direct download.
-
-### 3. Local Packaging Script (`firmware/package_firmware.py`)
-
-Developers can locally combine ESP-IDF build outputs into a single flashable binary:
-
-```bash
-# Execute local packaging helper
-python firmware/package_firmware.py
-```
-
-Alternatively, invoke `esptool.py` directly:
-
-```bash
-esptool.py --chip esp32s3 merge_bin \
-  -o Firmware/01_factory.bin \
-  --flash_mode dio \
-  --flash_size 8MB \
-  0x0 firmware/build/bootloader/bootloader.bin \
-  0x8000 firmware/build/partition_table/partition-table.bin \
-  0x20000 firmware/build/reader_firmware.bin
-```
-
-### 4. Flash Memory Partition Offset Table (Manual Reference)
-
-Standard ESP32-S3 partition offsets for 8MB (64Mb) Quad/Octal SPI Flash:
-
-| Partition / Region | Start Offset | Size | Type / SubType | Description |
-| :----------------- | :----------- | :--- | :------------- | :---------- |
-| **Bootloader** | `0x0000` | 32 KB (`0x8000`) | System | ESP-IDF 2nd stage bootloader (`bootloader.bin`) |
-| **Partition Table** | `0x8000` | 4 KB (`0x1000`) | System | Partition map definitions (`partition-table.bin`) |
-| **NVS Partition** | `0x9000` | 24 KB (`0x6000`) | `data, nvs` | Non-volatile storage (WiFi/BLE keys, configs) |
-| **PHY Init** | `0xF000` | 4 KB (`0x1000`) | `data, phy` | RF calibration and physical layer parameters |
-| **Factory App** | `0x20000` | 2.0 MB (`0x200000`) | `app, factory` | BacaIn firmware binary (`bacain.bin` / `reader_firmware.bin`) |
-| **Storage (FatFS)** | `0x220000` | 5.81 MB (`0x5D0000`) | `data, fat` | Flash filesystem storage partition |
-| **Unified Factory Image** | `0x0000` | ~3.84 MB | Unified Image | Complete pre-merged binary (`01_factory.bin`) |
-
----
-
-## Hardware Pinout Reference
-
-| Pin Name                         | GPIO           | Function                                   |
-| :------------------------------- | :------------- | :----------------------------------------- |
-| `EPD_MOSI` / `SCK` / `CS` / `DC` | 13, 12, 11, 10 | SPI2 Host E-Paper Display                  |
-| `EPD_RST` / `BUSY` / `PWR`       | 9, 8, 6        | Display reset, busy line, and power switch |
-| `SD_CLK` / `SD_CMD` / `SD_D0`    | 39, 41, 40     | 1-line SDMMC MicroSD card interface        |
-| `BOOT_KEY` / `PWR_KEY`           | 0, 18          | User input buttons (Ext1 wakeups)          |
-| `POWER_HOLD`                     | 17             | Board power latch (must be kept HIGH)      |
-| `BATTERY_ADC`                    | 1              | Battery voltage monitoring via ADC1_CH0    |
+- **Attribution**: You must give appropriate credit and reference this original project.
+- **Share-Alike**: If you modify or build upon this project, your contributions must be released under the same open-source terms.
+- **Non-Commercial**: Commercial use is not permitted without explicit permission from the author/owner.
