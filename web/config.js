@@ -1,0 +1,48 @@
+(function() {
+  const cfg = {
+    name: 'BacaIn',
+    repo: 'https://github.com/khad1r/BacaIn',
+    ble: {
+      service: '0000fe60-0000-1000-8000-00805f9b34fb',
+      control: '0000fe61-0000-1000-8000-00805f9b34fb',
+      data:    '0000fe62-0000-1000-8000-00805f9b34fb',
+      status:  '0000fe63-0000-1000-8000-00805f9b34fb',
+      chunkSize: 506,
+      chunkDelayMs: 6,
+      opcodes: {
+        LIST_BOOKS: 0x01,
+        START_UPLOAD: 0x02,
+        FINISH_UPLOAD: 0x03,
+        DELETE_BOOK: 0x04,
+        ABORT_UPLOAD: 0x05,
+        SET_STORAGE_TARGET: 0x06,
+        GET_BOOKMARKS: 0x07,
+        DELETE_BOOKMARK: 0x08,
+        SET_FONT: 0x10,
+        FORCE_REFRESH: 0x12,
+        SET_SLEEP_TIMEOUT: 0x13,
+        TRIGGER_SLEEP: 0x14
+      }
+    },
+    storage: {
+      flash: 1,
+      sd: 2,
+      paths: {
+        1: '/spiflash',
+        2: '/sdcard'
+      }
+    },
+    flasher: {
+      baud: 460800,
+      offset: '0x0'
+    }
+  };
+
+  if (typeof window !== 'undefined') {
+    window.CONFIG = cfg;
+    window.BACA_CONFIG = cfg;
+  }
+  if (typeof module !== 'undefined') {
+    module.exports = { CONFIG: cfg };
+  }
+})();

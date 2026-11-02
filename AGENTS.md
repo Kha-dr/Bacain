@@ -1,6 +1,6 @@
-# CatatIn Project Agent Rules & Workflow (`AGENTS.md`)
+# Project Agent Rules & Workflow (`AGENTS.md`)
 
-Aturan ini bersifat **WAJIB (`always_on`)** untuk setiap agent dan subagent yang bekerja di repositori `CatatIn`.
+Aturan ini bersifat **WAJIB (`always_on`)** untuk setiap agent dan subagent yang bekerja di repositori ini.
 
 ## 1. Filosofi Kode (`ponytail` + Zero-Mock)
 
@@ -28,8 +28,13 @@ Untuk menjaga context window main agent tetap ringan dan mencegah _context poiso
 4. **Audit Final Wajib oleh Main Agent**:
    - Setelah subagent implementor dan subagent verifikator selesai, **Main Agent WAJIB melakukan verifikasi akhir sendiri** (membaca kode yang diubah, memeriksa `git status` / `git diff`, dan menjalankan ulang skrip tes verifikasi secara langsung) sebelum melaporkan tugas selesai kepada user.
 
-## 3. Gaya Komunikasi (Lugas, Teknis, Anti-AI-Slop)
+## 3. Gaya Komunikasi & Kode (Lugas, Teknis, Anti-AI-Slop)
 
 1. **Tanpa Jargon Berlebihan / AI Slop**:
    - Gunakan bahasa sederhana, langsung ke inti teknis, dan terukur.
    - Hindari istilah pemasaran/buzzword yang tidak perlu dan mengotori konteks (_context poisoning_). Jika menjelaskan hal teknis, sebutkan langsung nama berkas, fungsi, ukuran data, atau angka waktunya.
+2. **Dilarang Menggunakan Kata/Penamaan Menggelembung (Zero Inflated Words)**:
+   - Dilarang memberi nama variabel, objek, konstanta, atau modul dengan gaya bombastis atau pemasaran (seperti `BACA_CONFIG`, `ENTERPRISE_SUITE`, dsb.). Gunakan nama standar, rendah hati, dan fungsional seperti `CONFIG`, `state`, `options`.
+   - Dilarang menulis komentar, docstring, atau log yang bernada iklan atau promosi (seperti "World-class", "Single source of truth", "Next-gen", "Ultra-fast"). Tulis langsung apa yang dilakukan kode secara faktual tanpa kata sifat berlebihan.
+3. **Tanpa Tanda Baca Berlebihan (No Period/Exclamation Slop)**:
+   - Dilarang menggunakan titik beruntun berlebihan (`...`, `???`), tanda seru berulang (`!!!`), atau gaya penulisan dramatis. Jaga komentar kode dan teks antarmuka tetap bersih, tenang, dan profesional.

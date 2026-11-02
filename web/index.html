@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -15,6 +16,9 @@
   <link rel="manifest" href="manifest.json">
   <link rel="stylesheet" href="style.css">
 
+  <!-- Central Configuration -->
+  <script src="config.js" defer></script>
+
   <!-- E-Book Ingestion Processors -->
   <script src="processors/text-cleaner.js" defer></script>
   <script src="processors/epub-processor.js" defer></script>
@@ -26,6 +30,7 @@
   <script src="components/book-uploader.js" defer></script>
   <script src="components/device-settings-modal.js" defer></script>
 </head>
+
 <body>
   <div class="app-container">
 
@@ -34,8 +39,10 @@
       <div class="brand-section">
         <img src="icon.svg" alt="BacaIn Logo" class="brand-logo">
         <div class="brand-text">
-          <h1>BacaIn</h1>
-          <p>E-Paper Reader Manager</p>
+          <h1>
+            <span>Baca<span style="color: var(--accent-color);">In</span></span>
+          </h1>
+          <p>Mini E-Reader</p>
         </div>
       </div>
 
@@ -43,37 +50,109 @@
         <!-- BLE Connection Button -->
         <button id="connectBtn" class="btn-connect">
           <span id="statusDot" class="status-dot disconnected"></span>
-          <span id="connectBtnText">Connect BacaIn</span>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;">
+          <span id="connectBtnText">Connect Device</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round" style="width:16px;height:16px;">
             <path d="M6.5 6.5l11 11L12 23V1l5.5 5.5-11 11"></path>
           </svg>
         </button>
 
         <!-- Settings Modal Trigger Button -->
         <button id="settingsBtn" class="btn-icon" aria-label="Open Settings" title="Settings & Hardware Configuration">
-          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="3"></circle>
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+            <path
+              d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
+            </path>
           </svg>
         </button>
+
+        <!-- GitHub Repository Button -->
+        <a id="githubBtn" href="https://github.com/khad1r/BacaIn" target="_blank" rel="noopener noreferrer"
+          class="btn-icon" aria-label="GitHub Repository" title="GitHub Repository">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <path
+              d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22">
+            </path>
+          </svg>
+        </a>
       </div>
     </header>
 
     <!-- Browser Incompatibility Banner (hidden by default) -->
     <div id="compatBanner" class="alert-banner alert-warning" style="display: none;">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+        stroke-linejoin="round">
         <circle cx="12" cy="12" r="10"></circle>
         <line x1="12" y1="8" x2="12" y2="12"></line>
         <line x1="12" y1="16" x2="12.01" y2="16"></line>
       </svg>
       <div>
         <strong>Web Bluetooth Not Supported:</strong> Your current browser does not support the Web Bluetooth API.
-        Please open this application in <strong>Google Chrome</strong>, <strong>Microsoft Edge</strong>, or <strong>Bluefy (iOS)</strong> over HTTPS or localhost.
+        Please open this application in <strong>Google Chrome</strong>, <strong>Microsoft Edge</strong>, or
+        <strong>Bluefy (iOS)</strong> over HTTPS or localhost.
       </div>
     </div>
 
+    <!-- Simple Onboarding View (Default when not connected) -->
+    <section id="onboardingView" class="onboarding-section">
+      <div class="onboarding-card">
+        <div class="onboarding-header">
+          <img src="icon.svg" alt="Device" class="onboarding-logo">
+          <h2 class="onboarding-title"><span>Baca<span style="color: var(--accent-color);">In</span></span></h2>
+          <p class="onboarding-desc">Connect device via Bluetooth or install firmware via USB.</p>
+        </div>
+
+        <div class="onboarding-options">
+          <!-- Option 1: Connect Bluetooth -->
+          <div class="onboarding-option">
+            <div class="option-icon-box">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                stroke-linejoin="round">
+                <path d="M6.5 6.5l11 11L12 23V1l5.5 5.5-11 11"></path>
+              </svg>
+            </div>
+            <h3>Connect Device</h3>
+            <p>Manage books and status over Bluetooth.</p>
+            <button id="onboardingConnectBtn" class="btn-connect onboarding-action-btn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                stroke-linejoin="round" style="width:16px;height:16px;">
+                <path d="M6.5 6.5l11 11L12 23V1l5.5 5.5-11 11"></path>
+              </svg>
+              <span>Connect Device</span>
+            </button>
+          </div>
+
+          <!-- Option 2: Flash USB -->
+          <div class="onboarding-option">
+            <div class="option-icon-box">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                stroke-linejoin="round">
+                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path>
+              </svg>
+            </div>
+            <h3>Flash Firmware</h3>
+            <p>Write firmware binary to ESP32-S3 over USB.</p>
+            <a href="flasher.html" class="btn-secondary onboarding-action-btn" style="text-decoration:none;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                stroke-linejoin="round" style="width:16px;height:16px;">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+              </svg>
+              <span>Open Flasher</span>
+            </a>
+          </div>
+        </div>
+
+        <div class="onboarding-footer">
+          <button id="skipOnboardingBtn" class="btn-text">Open Dashboard</button>
+        </div>
+      </div>
+    </section>
+
     <!-- MAIN DASHBOARD & MANAGER SEQUENCE -->
-    <main class="app-main-content">
+    <main id="mainContent" class="app-main-content" style="display: none;">
       <status-dashboard id="statusDashboard"></status-dashboard>
       <book-library id="bookLibrary"></book-library>
       <book-uploader id="bookUploader"></book-uploader>
@@ -88,7 +167,7 @@
   <div id="deleteModal" class="modal-backdrop">
     <div class="modal-card">
       <h3 class="modal-title">Delete Book</h3>
-      <p id="deleteModalText" class="modal-desc">Are you sure you want to delete this book from your BacaIn?</p>
+      <p id="deleteModalText" class="modal-desc">Are you sure you want to delete this book from your device?</p>
       <div class="modal-actions">
         <button id="cancelDeleteBtn" class="btn-secondary">Cancel</button>
         <button id="confirmDeleteBtn" class="btn-danger">Delete</button>
@@ -102,4 +181,5 @@
   <!-- PWA Main Logic -->
   <script src="app.js" defer></script>
 </body>
+
 </html>

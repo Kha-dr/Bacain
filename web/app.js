@@ -6,26 +6,29 @@
 // ============================================================================
 // BLE Configuration & UUIDs
 // ============================================================================
-const SERVICE_UUID = '0000fe60-0000-1000-8000-00805f9b34fb';
-const CONTROL_UUID = '0000fe61-0000-1000-8000-00805f9b34fb';
-const DATA_UUID    = '0000fe62-0000-1000-8000-00805f9b34fb';
-const STATUS_UUID  = '0000fe63-0000-1000-8000-00805f9b34fb';
+const appConfig = (typeof window !== 'undefined' && (window.CONFIG || window.BACA_CONFIG)) ? (window.CONFIG || window.BACA_CONFIG) : null;
+const SERVICE_UUID = appConfig?.ble?.service || '0000fe60-0000-1000-8000-00805f9b34fb';
+const CONTROL_UUID = appConfig?.ble?.control || '0000fe61-0000-1000-8000-00805f9b34fb';
+const DATA_UUID    = appConfig?.ble?.data    || '0000fe62-0000-1000-8000-00805f9b34fb';
+const STATUS_UUID  = appConfig?.ble?.status  || '0000fe63-0000-1000-8000-00805f9b34fb';
 
-const OPCODES = {
+const OPCODES = appConfig?.ble?.opcodes || {
   LIST_BOOKS: 0x01,
   START_UPLOAD: 0x02,
   FINISH_UPLOAD: 0x03,
   DELETE_BOOK: 0x04,
   ABORT_UPLOAD: 0x05,
   SET_STORAGE_TARGET: 0x06,
+  GET_BOOKMARKS: 0x07,
+  DELETE_BOOKMARK: 0x08,
   SET_FONT: 0x10,
   FORCE_REFRESH: 0x12,
   SET_SLEEP_TIMEOUT: 0x13,
   TRIGGER_SLEEP: 0x14
 };
 
-const CHUNK_SIZE = 506; // Max BLE payload per packet (508B with 2B seq_id fits in 512B MTU)
-const CHUNK_DELAY_MS = 6; // Pacing delay to prevent buffer overruns on ESP32 NimBLE
+const CHUNK_SIZE = appConfig?.ble?.chunkSize || 506;
+const CHUNK_DELAY_MS = appConfig?.ble?.chunkDelayMs || 6;
 
 // ============================================================================
 // State Variables
@@ -60,6 +63,12 @@ let bookPendingDelete = null;
 // DOM Elements
 // ============================================================================
 const el = {
+  // Onboarding elements
+  onboardingView: document.getElementById('onboardingView'),
+  mainContent: document.getElementById('mainContent'),
+  onboardingConnectBtn: document.getElementById('onboardingConnectBtn'),
+  skipOnboardingBtn: document.getElementById('skipOnboardingBtn'),
+
   themeToggleBtn: document.getElementById('themeToggleBtn'),
   themeIconSun: document.getElementById('themeIconSun'),
   themeIconMoon: document.getElementById('themeIconMoon'),
@@ -68,6 +77,7 @@ const el = {
   connectBtnText: document.getElementById('connectBtnText'),
   statusDot: document.getElementById('statusDot'),
   compatBanner: document.getElementById('compatBanner'),
+  githubBtn: document.getElementById('githubBtn'),
 
   // Device status cards
   deviceStateBadge: document.getElementById('deviceStateBadge'),
@@ -389,11 +399,32 @@ function onDisconnected() {
   updateConnectionUI('disconnected');
 }
 
+function switchToDashboard() {
+  const onboardingView = el.onboardingView || document.getElementById('onboardingView');
+  const mainContent = el.mainContent || document.getElementById('mainContent');
+  if (onboardingView) onboardingView.style.display = 'none';
+  if (mainContent) mainContent.style.display = 'flex';
+}
+
 function updateConnectionUI(state) {
   const statusDashboard = document.getElementById('statusDashboard');
   const bookLibrary = document.getElementById('bookLibrary');
+  const onboardingConnectBtn = el.onboardingConnectBtn || document.getElementById('onboardingConnectBtn');
+  const settingsModal = document.getElementById('deviceSettingsModal') || document.getElementById('settingsModal');
+
+  if (state !== 'connected') {
+    if (settingsModal && typeof settingsModal.setSdCardAvailable === 'function') {
+      settingsModal.setSdCardAvailable(false);
+    }
+  }
 
   if (state === 'connected') {
+    switchToDashboard();
+    if (onboardingConnectBtn) {
+      onboardingConnectBtn.disabled = false;
+      const span = onboardingConnectBtn.querySelector('span');
+      if (span) span.textContent = 'Connected';
+    }
     if (el.statusDot) el.statusDot.className = 'status-dot connected';
     if (el.connectBtn) {
       el.connectBtn.className = 'btn-connect connected';
@@ -417,6 +448,11 @@ function updateConnectionUI(state) {
       bookLibrary.setDeviceConnected(true);
     }
   } else if (state === 'connecting') {
+    if (onboardingConnectBtn) {
+      onboardingConnectBtn.disabled = true;
+      const span = onboardingConnectBtn.querySelector('span');
+      if (span) span.textContent = 'Connecting...';
+    }
     if (el.statusDot) el.statusDot.className = 'status-dot connecting';
     if (el.connectBtn) {
       el.connectBtn.className = 'btn-connect';
@@ -433,10 +469,15 @@ function updateConnectionUI(state) {
       statusDashboard.updateDeviceStatus({ state: 'Connecting' });
     }
   } else {
+    if (onboardingConnectBtn) {
+      onboardingConnectBtn.disabled = false;
+      const span = onboardingConnectBtn.querySelector('span');
+      if (span) span.textContent = 'Connect Device';
+    }
     if (el.statusDot) el.statusDot.className = 'status-dot disconnected';
     if (el.connectBtn) {
       el.connectBtn.className = 'btn-connect';
-      if (el.connectBtnText) el.connectBtnText.textContent = 'Connect BacaIn';
+      if (el.connectBtnText) el.connectBtnText.textContent = 'Connect Device';
     }
     if (el.deviceStateBadge) {
       el.deviceStateBadge.className = 'card-badge badge-muted';
@@ -609,6 +650,20 @@ function parseStatusValue(dataView) {
           isActive: false
         });
       }
+    }
+  }
+
+  const settingsModal = document.getElementById('deviceSettingsModal') || document.getElementById('settingsModal');
+  if (currentStorageTarget === 0) {
+    if (totalKb > 0) {
+      if (settingsModal && typeof settingsModal.setSdCardAvailable === 'function') {
+        settingsModal.setSdCardAvailable(true);
+      }
+    } else if (totalKb === 0) {
+      if (settingsModal && typeof settingsModal.setSdCardAvailable === 'function') {
+        settingsModal.setSdCardAvailable(false);
+      }
+      updateStorageTargetUI(1);
     }
   }
 
@@ -1226,14 +1281,42 @@ function updateStorageTargetUI(target) {
 async function setStorageTarget(target) {
   updateStorageTargetUI(target);
   if (!isConnected || !controlChar) {
-    showToast('Connect BacaIn first to switch storage on device', 'warning');
+    showToast('Connect device first to switch storage', 'warning');
     return;
   }
   try {
     const targetName = target === 0 ? 'MicroSD Storage' : 'Internal Flash';
     log(`Setting storage target to ${targetName} (OpCode 0x06)...`, 'info');
     const packet = new Uint8Array([OPCODES.SET_STORAGE_TARGET, target]);
+    const waitPromise = waitForControlResponse(OPCODES.SET_STORAGE_TARGET, 3500);
     await controlChar.writeValueWithResponse(packet);
+    const resp = await waitPromise;
+    let status = resp && resp.byteLength > 1 ? resp.getUint8(1) : 0;
+    if (resp && typeof resp.status === 'number') {
+      status = resp.status;
+    }
+
+    const settingsModal = document.getElementById('deviceSettingsModal') || document.getElementById('settingsModal');
+    const statusDashboard = document.getElementById('statusDashboard');
+
+    if (status !== 0) {
+      showToast('MicroSD card not available or not mounted', 'warning');
+      updateStorageTargetUI(1);
+      if (settingsModal && typeof settingsModal.setSdCardAvailable === 'function') {
+        settingsModal.setSdCardAvailable(false);
+      }
+      if (statusDashboard && typeof statusDashboard.updateSdStorage === 'function') {
+        statusDashboard.updateSdStorage({ isMounted: false, totalKb: 0 });
+      }
+      return;
+    }
+
+    if (target === 0) {
+      if (settingsModal && typeof settingsModal.setSdCardAvailable === 'function') {
+        settingsModal.setSdCardAvailable(true);
+      }
+    }
+
     showToast(`Active storage: ${targetName}`, 'success');
     await readDeviceStatus();
     await queryBooksList();
@@ -1254,7 +1337,7 @@ function updateFontUI(fontId) {
 
 async function setFont(fontId) {
   if (!isConnected || !controlChar) {
-    showToast('Connect BacaIn first', 'warning');
+    showToast('Connect device first', 'warning');
     return;
   }
   try {
@@ -1272,7 +1355,7 @@ const sendSetFont = setFont;
 
 async function forceRefresh() {
   if (!isConnected || !controlChar) {
-    showToast('Connect BacaIn first', 'warning');
+    showToast('Connect device first', 'warning');
     return;
   }
   try {
@@ -1289,7 +1372,7 @@ const sendForceRefresh = forceRefresh;
 
 async function setSleepTimeout(seconds) {
   if (!isConnected || !controlChar) {
-    showToast('Connect BacaIn first', 'warning');
+    showToast('Connect device first', 'warning');
     return;
   }
   try {
@@ -1306,7 +1389,7 @@ const sendSetSleepTimeout = setSleepTimeout;
 
 async function triggerSleep() {
   if (!isConnected || !controlChar) {
-    showToast('Connect BacaIn first', 'warning');
+    showToast('Connect device first', 'warning');
     return;
   }
   try {
@@ -1326,9 +1409,15 @@ const sendTriggerSleep = triggerSleep;
 // Event Listeners Initialization
 // ============================================================================
 function initEventListeners() {
-  // BLE Connection Button
+  // BLE Connection Button (Header & Onboarding)
   if (el.connectBtn) {
     el.connectBtn.addEventListener('click', handleConnectToggle);
+  }
+  if (el.onboardingConnectBtn) {
+    el.onboardingConnectBtn.addEventListener('click', handleConnectToggle);
+  }
+  if (el.skipOnboardingBtn) {
+    el.skipOnboardingBtn.addEventListener('click', switchToDashboard);
   }
 
   // Status & Books Refresh Buttons
@@ -1440,14 +1529,6 @@ function initEventListeners() {
     });
   }
 
-  // Storage Target Buttons
-  if (el.storageTargetSdBtn) {
-    el.storageTargetSdBtn.addEventListener('click', () => setStorageTarget(0));
-  }
-  if (el.storageTargetFlashBtn) {
-    el.storageTargetFlashBtn.addEventListener('click', () => setStorageTarget(1));
-  }
-
   // Settings Modal Hardware Control Listeners
   if (el.font16Btn) {
     el.font16Btn.addEventListener('click', () => setFont(0));
@@ -1472,12 +1553,9 @@ function initEventListeners() {
     }
   });
 
-  document.addEventListener('refresh-books', () => {
-    queryBooksList();
-  });
-
-  document.addEventListener('refresh-status', () => {
-    readDeviceStatus();
+  document.addEventListener('refresh-books', async () => {
+    await readDeviceStatus();
+    await queryBooksList();
   });
 
   document.addEventListener('delete-book', (e) => {
@@ -1526,6 +1604,13 @@ function initEventListeners() {
 // ============================================================================
 function init() {
   refreshDomElements();
+  const repoUrl = appConfig?.repo || appConfig?.GITHUB_REPO;
+  if (repoUrl) {
+    const githubBtn = el.githubBtn || document.getElementById('githubBtn');
+    if (githubBtn) {
+      githubBtn.href = repoUrl;
+    }
+  }
   initTheme();
   checkBluetoothCompatibility();
   initEventListeners();

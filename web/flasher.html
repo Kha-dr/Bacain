@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -10,6 +11,7 @@
   <link rel="apple-touch-icon" href="icon.svg">
   <link rel="manifest" href="manifest.json">
   <link rel="stylesheet" href="style.css">
+  <script src="config.js" defer></script>
   <script>
     const savedTheme = localStorage.getItem('ereader_pwa_theme');
     if (savedTheme) {
@@ -17,6 +19,7 @@
     }
   </script>
 </head>
+
 <body>
   <div class="app-container">
     <!-- Header Section -->
@@ -24,18 +27,30 @@
       <div class="brand-section">
         <img src="icon.svg" alt="BacaIn Logo" class="brand-logo">
         <div class="brand-text">
-          <h1>BacaIn <span class="brand-badge">Flasher</span></h1>
+          <h1><span>Baca<span style="color: var(--accent-color);">In</span></span> <span
+              class="brand-badge">Flasher</span></h1>
           <p>ESP32-S3 Web Serial Firmware Flashing Tool</p>
         </div>
       </div>
 
       <div class="header-actions">
-        <a href="index.html" class="btn-secondary" style="display:inline-flex;align-items:center;gap:0.5rem;text-decoration:none;padding:0.6rem 1rem;font-size:0.9rem;font-weight:600;border-radius:var(--radius-md);">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;">
+        <a id="githubBtn" href="https://github.com/khad1r/BacaIn" target="_blank" rel="noopener noreferrer"
+          class="btn-icon" aria-label="GitHub Repository" title="GitHub Repository">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <path
+              d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22">
+            </path>
+          </svg>
+        </a>
+        <a href="index.html" class="btn-secondary"
+          style="display:inline-flex;align-items:center;gap:0.5rem;text-decoration:none;padding:0.6rem 1rem;font-size:0.9rem;font-weight:600;border-radius:var(--radius-md);">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round" style="width:16px;height:16px;">
             <line x1="19" y1="12" x2="5" y2="12"></line>
             <polyline points="12 19 5 12 12 5"></polyline>
           </svg>
-          <span>Back to Reader Manager</span>
+          <span>Back to Dashboard</span>
         </a>
       </div>
     </header>
@@ -49,4 +64,5 @@
   <!-- ESP Web Flasher Web Component Module -->
   <script type="module" src="components/esp-flasher.js"></script>
 </body>
+
 </html>

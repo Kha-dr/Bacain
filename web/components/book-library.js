@@ -1,6 +1,6 @@
 /**
  * book-library.js
- * BacaIn PWA - Remote Books Library Custom Element (<book-library>)
+ * Mini E-Reader - Remote Books Library Custom Element (<book-library>)
  * Light DOM Web Component managing the book list, search filtering,
  * storage target badge, subfolder breadcrumb, and deletion triggers.
  */
@@ -65,20 +65,13 @@ class BookLibrary extends HTMLElement {
             <input type="text" id="bookSearchInput" class="search-input" placeholder="Search books by name...">
           </div>
 
-          <button id="refreshBooksBtn" class="btn-secondary" title="Query storage for books">
-            <svg id="refreshBooksIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <button id="refreshBooksBtn" class="btn-secondary" title="Refresh books and device status">
+            <svg id="refreshBooksIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;">
               <polyline points="23 4 23 10 17 10"></polyline>
               <polyline points="1 20 1 14 7 14"></polyline>
               <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
             </svg>
-            <span>Refresh Books</span>
-          </button>
-
-          <button id="refreshStatusBtn" class="btn-secondary" title="Read Battery & Storage">
-            <svg id="refreshStatusIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path>
-            </svg>
-            <span>Refresh Status</span>
+            <span>Refresh</span>
           </button>
         </div>
 
@@ -98,7 +91,7 @@ class BookLibrary extends HTMLElement {
               <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
               <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
             </svg>
-            <p>Connect your BacaIn to view and manage books.</p>
+            <p>Connect device to view and manage books.</p>
           </div>
         </div>
       </section>
@@ -122,16 +115,6 @@ class BookLibrary extends HTMLElement {
     if (refreshBooksBtn) {
       refreshBooksBtn.addEventListener('click', () => {
         this.dispatchEvent(new CustomEvent('refresh-books', {
-          bubbles: true,
-          composed: true
-        }));
-      });
-    }
-
-    const refreshStatusBtn = this.querySelector('#refreshStatusBtn');
-    if (refreshStatusBtn) {
-      refreshStatusBtn.addEventListener('click', () => {
-        this.dispatchEvent(new CustomEvent('refresh-status', {
           bubbles: true,
           composed: true
         }));

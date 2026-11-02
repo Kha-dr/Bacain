@@ -1,12 +1,13 @@
 /**
  * device-settings-modal.js
- * BacaIn PWA - Device Settings Modal Custom Element (<device-settings-modal>)
+ * Mini E-Reader - Device Settings Modal Custom Element (<device-settings-modal>)
  * Light DOM Web Component rendering:
  * 1. Appearance / Theme toggle
- * 2. Storage Target Destination (Flash vs MicroSD)
- * 3. E-Paper Hardware Controls (Font, Refresh, Auto-Sleep)
- * 4. BLE Technical Specifications
- * 5. Activity Log Console
+ * 2. Storage Target Destination (Internal Flash vs MicroSD)
+ * 3. E-Paper Hardware Controls (Typography, Screen Refresh, Power)
+ * 4. Firmware Flasher
+ * 5. BLE Specifications
+ * 6. Activity Log Console
  */
 
 function escapeHtml(str) {
@@ -22,6 +23,7 @@ function escapeHtml(str) {
 class DeviceSettingsModal extends HTMLElement {
   constructor() {
     super();
+    this._sdAvailable = false;
     this._logCount = 0;
     this._handleKeyDown = this._handleKeyDown.bind(this);
   }
@@ -30,6 +32,8 @@ class DeviceSettingsModal extends HTMLElement {
     if (!this.querySelector('#settingsModal')) {
       this.render();
     }
+    const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+    this._updateThemeUI(currentTheme);
     this.bindEvents();
     document.addEventListener('keydown', this._handleKeyDown);
   }
@@ -49,6 +53,9 @@ class DeviceSettingsModal extends HTMLElement {
 
   render() {
     this.innerHTML = `
+      <style>
+        .btn-control:disabled { opacity: 0.45; cursor: not-allowed; }
+      </style>
       <div id="settingsModal" class="modal-backdrop" aria-hidden="true">
         <div class="modal-card" style="max-width: 640px; max-height: 88vh; display: flex; flex-direction: column; padding: 1.25rem;">
           
@@ -72,7 +79,7 @@ class DeviceSettingsModal extends HTMLElement {
           <!-- Modal Body Content -->
           <div class="modal-settings-body" style="overflow-y: auto; padding-right: 4px; display: flex; flex-direction: column; gap: 1rem;">
             
-            <!-- Bagian 1: Preferensi Tampilan & Tema -->
+            <!-- Appearance / Theme -->
             <div class="control-card">
               <div class="control-card-title">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;">
@@ -89,27 +96,19 @@ class DeviceSettingsModal extends HTMLElement {
                 Appearance
               </div>
               <div class="control-inline-row" style="justify-content: space-between;">
-                <span class="control-label">Interface Theme</span>
-                <button id="themeToggleBtn" class="btn-icon" aria-label="Toggle Theme" title="Toggle Dark/Light Mode">
-                  <svg id="themeIconSun" class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="12" cy="12" r="5"></circle>
-                    <line x1="12" y1="1" x2="12" y2="3"></line>
-                    <line x1="12" y1="21" x2="12" y2="23"></line>
-                    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
-                    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
-                    <line x1="1" y1="12" x2="3" y2="12"></line>
-                    <line x1="21" y1="12" x2="23" y2="12"></line>
-                    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
-                    <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
-                  </svg>
-                  <svg id="themeIconMoon" class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
-                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
-                  </svg>
-                </button>
+                <span class="control-label">Theme</span>
+                <div class="control-btn-group">
+                  <button id="themeLightBtn" class="btn-control" type="button">
+                    <span>Light</span>
+                  </button>
+                  <button id="themeDarkBtn" class="btn-control active" type="button">
+                    <span>Dark</span>
+                  </button>
+                </div>
               </div>
             </div>
 
-            <!-- Bagian 2: Target Storage Sinkronisasi -->
+            <!-- Storage Target -->
             <div class="control-card">
               <div class="control-card-title">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;">
@@ -118,20 +117,20 @@ class DeviceSettingsModal extends HTMLElement {
                   <line x1="6" y1="6" x2="6.01" y2="6"></line>
                   <line x1="6" y1="18" x2="6.01" y2="18"></line>
                 </svg>
-                Storage Target Destination
+                Storage Target
               </div>
               <div class="control-btn-group">
-                <button id="storageTargetFlashBtn" class="btn-control" data-target="1" type="button">
-                  <span>⚡ Internal Flash (/spiflash)</span>
+                <button id="storageTargetFlashBtn" class="btn-control active" data-target="1" type="button">
+                  <span>Internal Flash</span>
                 </button>
-                <button id="storageTargetSdBtn" class="btn-control active" data-target="0" type="button">
-                  <span>📁 MicroSD (/sdcard)</span>
+                <button id="storageTargetSdBtn" class="btn-control" data-target="0" type="button" disabled title="MicroSD card not available">
+                  <span>MicroSD Card</span>
                 </button>
               </div>
-              <div id="storageTargetDesc" class="control-hint">Books and reading progress are synced to MicroSD card.</div>
+              <div id="storageTargetDesc" class="control-hint">Target storage for books and progress.</div>
             </div>
 
-            <!-- Bagian 3: Kontrol Hardware E-Paper -->
+            <!-- Typography -->
             <div class="control-card">
               <div class="control-card-title">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;">
@@ -139,51 +138,52 @@ class DeviceSettingsModal extends HTMLElement {
                   <line x1="9" y1="20" x2="15" y2="20"></line>
                   <line x1="12" y1="4" x2="12" y2="20"></line>
                 </svg>
-                Display & Typography
+                Typography
               </div>
               <div class="control-btn-group">
                 <button id="font16Btn" class="btn-control active" data-font="0" type="button">
-                  <span>Font 16 (Standard - 8 lines)</span>
+                  <span>Font 16 (8 lines)</span>
                 </button>
                 <button id="font12Btn" class="btn-control" data-font="1" type="button">
-                  <span>Font 12 (Compact - 11 lines)</span>
-                </button>
-                <button id="forceRefreshBtn" class="btn-control-secondary" type="button">
-                  <span>🔄 Clean Screen (Clear Ghosting)</span>
+                  <span>Font 12 (11 lines)</span>
                 </button>
               </div>
             </div>
 
+            <!-- Screen Refresh -->
             <div class="control-card">
-              <div class="control-card-title">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;">
-                  <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
-                  <line x1="12" y1="2" x2="12" y2="12"></line>
-                </svg>
-                Power Management
-              </div>
-              <div class="control-inline-row">
-                <label for="sleepTimeoutSelect" class="control-label">Auto-Sleep Timeout:</label>
-                <select id="sleepTimeoutSelect" class="control-select">
-                  <option value="30">30 seconds</option>
-                  <option value="60" selected>60 seconds (Default)</option>
-                  <option value="120">2 minutes</option>
-                  <option value="300">5 minutes</option>
-                  <option value="0">Disabled (Stay Awake)</option>
-                </select>
-              </div>
-              <div class="control-actions-row" style="margin-top: 0.5rem;">
-                <button id="triggerSleepBtn" class="btn-danger-outline" type="button">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;">
-                    <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
-                    <line x1="12" y1="2" x2="12" y2="12"></line>
-                  </svg>
-                  <span>Put BacaIn to Sleep</span>
-                </button>
+              <div class="control-inline-row" style="justify-content: space-between;">
+                <span class="control-label">Screen</span>
+                <button id="forceRefreshBtn" class="btn-secondary" type="button">Clean Screen</button>
               </div>
             </div>
 
-            <!-- Bagian 4: Spesifikasi Teknis BLE -->
+            <!-- Power Management -->
+            <div class="control-card">
+              <div class="control-inline-row" style="justify-content: space-between;">
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                  <label for="sleepTimeoutSelect" class="control-label">Auto-Sleep:</label>
+                  <select id="sleepTimeoutSelect" class="control-select">
+                    <option value="30">30s</option>
+                    <option value="60" selected>60s</option>
+                    <option value="120">2m</option>
+                    <option value="300">5m</option>
+                    <option value="0">Off</option>
+                  </select>
+                </div>
+                <button id="triggerSleepBtn" class="btn-danger-outline" type="button">Sleep Now</button>
+              </div>
+            </div>
+
+            <!-- Firmware Flasher -->
+            <div class="control-card">
+              <div class="control-inline-row" style="justify-content: space-between;">
+                <span class="control-label">Firmware</span>
+                <a href="flasher.html" class="btn-secondary" style="text-decoration: none;">Open Flasher</a>
+              </div>
+            </div>
+
+            <!-- BLE Specifications -->
             <div class="telemetry-specs">
               <div class="spec-row">
                 <span class="spec-label">Service UUID</span>
@@ -199,19 +199,15 @@ class DeviceSettingsModal extends HTMLElement {
               </div>
               <div class="spec-row">
                 <span class="spec-label">Status Characteristic</span>
-                <span class="spec-value mono">0000fe63 (Read / Notify - 12B payload)</span>
+                <span class="spec-value mono">0000fe63 (Read / Notify)</span>
               </div>
               <div class="spec-row">
                 <span class="spec-label">Chunk Payload</span>
                 <span class="spec-value mono">506B Data + 2B Seq = 508B (512B MTU)</span>
               </div>
-              <div class="spec-row">
-                <span class="spec-label">Target Directory</span>
-                <span class="spec-value mono">/spiflash/books/ atau /sdcard/books/</span>
-              </div>
             </div>
 
-            <!-- Bagian 5: Activity Log console (#activityLog, #clearLogBtn) -->
+            <!-- Activity Log Console -->
             <section id="logSection" class="log-section" style="margin-top: 0.5rem;">
               <div id="logHeader" class="log-header" style="cursor: pointer;">
                 <div class="log-header-left">
@@ -227,15 +223,32 @@ class DeviceSettingsModal extends HTMLElement {
                   <span id="logToggleIcon">&#x25BC;</span>
                 </div>
               </div>
-              <div id="activityLog" class="log-body">
-                <!-- Log entries appear here -->
-              </div>
+              <div id="activityLog" class="log-body"></div>
             </section>
 
           </div>
         </div>
       </div>
     `;
+  }
+
+  _updateThemeUI(theme) {
+    const lightBtn = this.querySelector('#themeLightBtn');
+    const darkBtn = this.querySelector('#themeDarkBtn');
+    if (lightBtn) lightBtn.classList.toggle('active', theme === 'light');
+    if (darkBtn) darkBtn.classList.toggle('active', theme === 'dark');
+
+    const sun = this.querySelector('#themeIconSun');
+    const moon = this.querySelector('#themeIconMoon');
+    if (sun && moon) {
+      if (theme === 'dark') {
+        sun.style.display = 'block';
+        moon.style.display = 'none';
+      } else {
+        sun.style.display = 'none';
+        moon.style.display = 'block';
+      }
+    }
   }
 
   bindEvents() {
@@ -254,11 +267,25 @@ class DeviceSettingsModal extends HTMLElement {
       });
     }
 
-    // Appearance Theme Toggle
+    // Appearance Theme
     const themeBtn = this.querySelector('#themeToggleBtn');
     if (themeBtn) {
       themeBtn.addEventListener('click', () => {
         this.toggleTheme();
+      });
+    }
+
+    const themeLightBtn = this.querySelector('#themeLightBtn');
+    if (themeLightBtn) {
+      themeLightBtn.addEventListener('click', () => {
+        this.setTheme('light');
+      });
+    }
+
+    const themeDarkBtn = this.querySelector('#themeDarkBtn');
+    if (themeDarkBtn) {
+      themeDarkBtn.addEventListener('click', () => {
+        this.setTheme('dark');
       });
     }
 
@@ -273,6 +300,7 @@ class DeviceSettingsModal extends HTMLElement {
     }
     if (sdBtn) {
       sdBtn.addEventListener('click', () => {
+        if (sdBtn.disabled || !this._sdAvailable) return;
         this.setStorageTarget(0);
       });
     }
@@ -412,17 +440,7 @@ class DeviceSettingsModal extends HTMLElement {
       localStorage.setItem('bacain_theme', theme);
     } catch (_) {}
 
-    const sun = this.querySelector('#themeIconSun');
-    const moon = this.querySelector('#themeIconMoon');
-    if (sun && moon) {
-      if (theme === 'dark') {
-        sun.style.display = 'block';
-        moon.style.display = 'none';
-      } else {
-        sun.style.display = 'none';
-        moon.style.display = 'block';
-      }
-    }
+    this._updateThemeUI(theme);
 
     this.dispatchEvent(new CustomEvent('theme-change', {
       detail: { theme },
@@ -432,23 +450,52 @@ class DeviceSettingsModal extends HTMLElement {
   }
 
   /**
+   * Set MicroSD card availability status
+   * @param {boolean} available
+   */
+  setSdCardAvailable(available) {
+    this._sdAvailable = Boolean(available);
+    const sdBtn = this.querySelector('#storageTargetSdBtn');
+    const flashBtn = this.querySelector('#storageTargetFlashBtn');
+
+    if (sdBtn) {
+      if (this._sdAvailable) {
+        sdBtn.removeAttribute('disabled');
+        sdBtn.disabled = false;
+        sdBtn.title = '';
+      } else {
+        sdBtn.setAttribute('disabled', '');
+        sdBtn.disabled = true;
+        sdBtn.title = 'MicroSD card not available';
+        if (sdBtn.classList.contains('active')) {
+          sdBtn.classList.remove('active');
+          if (flashBtn) {
+            flashBtn.classList.add('active');
+          }
+        }
+      }
+    }
+  }
+
+  /**
    * Set Storage Target (0 = MicroSD, 1 = Flash)
    * @param {number} target
    */
   setStorageTarget(target) {
+    const numTarget = Number(target) === 1 ? 1 : 0;
+    if (numTarget === 0 && !this._sdAvailable) {
+      return;
+    }
+
     const flashBtn = this.querySelector('#storageTargetFlashBtn');
     const sdBtn = this.querySelector('#storageTargetSdBtn');
     const desc = this.querySelector('#storageTargetDesc');
-
-    const numTarget = Number(target) === 1 ? 1 : 0;
 
     if (sdBtn) sdBtn.classList.toggle('active', numTarget === 0);
     if (flashBtn) flashBtn.classList.toggle('active', numTarget === 1);
 
     if (desc) {
-      desc.textContent = numTarget === 0
-        ? 'Books and reading progress are synced to MicroSD card.'
-        : 'Books and reading progress are synced to ESP32 internal flash memory (/spiflash).';
+      desc.textContent = 'Target storage for books and progress.';
     }
 
     this.dispatchEvent(new CustomEvent('storage-target-change', {
@@ -456,6 +503,14 @@ class DeviceSettingsModal extends HTMLElement {
       bubbles: true,
       composed: true
     }));
+  }
+
+  /**
+   * Set Storage Target Badge alias
+   * @param {number} target
+   */
+  setStorageTargetBadge(target) {
+    this.setStorageTarget(target);
   }
 
   /**

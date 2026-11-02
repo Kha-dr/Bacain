@@ -1,11 +1,9 @@
 /**
  * status-dashboard.js
  * BacaIn PWA - Status Dashboard Custom Element (<status-dashboard>)
- * Light DOM Web Component displaying 4 status cards:
- * 1. Device Status
- * 2. Battery Status
- * 3. Internal Flash Storage
- * 4. MicroSD Storage
+ * Light DOM Web Component:
+ * - Device connection status bar
+ * - 3 status cards: Battery, Internal Flash, MicroSD
  */
 
 function formatKb(kb) {
@@ -20,6 +18,11 @@ class StatusDashboard extends HTMLElement {
     super();
     this.isDeviceConnected = false;
     this.currentStorageTarget = 0; // 0: SD, 1: Flash
+    this._flashFreeKb = 0;
+    this._flashTotalKb = 0;
+    this._sdMounted = false;
+    this._sdFreeKb = 0;
+    this._sdTotalKb = 0;
   }
 
   connectedCallback() {
@@ -31,27 +34,16 @@ class StatusDashboard extends HTMLElement {
 
   render() {
     this.innerHTML = `
-      <section class="dashboard-grid" style="grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));">
-        <!-- 1. Device Status Card -->
-        <div class="card" id="deviceStatusCard">
-          <div class="card-header">
-            <span class="card-title">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="4" y="2" width="16" height="20" rx="2" ry="2"></rect>
-                <line x1="12" y1="18" x2="12.01" y2="18"></line>
-              </svg>
-              Device
-            </span>
-            <span id="deviceStateBadge" class="card-badge badge-muted">Disconnected</span>
-          </div>
-          <div id="deviceNameText" class="stat-value">BacaIn</div>
-          <div class="stat-sub">
-            <span id="deviceUuidText">UUID: 0000fe60</span>
-            <span id="deviceMtuText">MTU: 512B</span>
-          </div>
+      <div class="device-status-line" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem; padding: 0.5rem 0.75rem; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md);">
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+          <span style="color: var(--text-muted); font-size: 0.875rem;">Device:</span>
+          <strong id="deviceNameText">Device</strong>
         </div>
+        <span id="deviceStateBadge" class="card-badge badge-muted">Disconnected</span>
+      </div>
 
-        <!-- 2. Battery Status Card -->
+      <section class="dashboard-grid" style="grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));">
+        <!-- 1. Battery Status Card -->
         <div class="card" id="batteryStatusCard">
           <div class="card-header">
             <span class="card-title">
@@ -73,8 +65,8 @@ class StatusDashboard extends HTMLElement {
           </div>
         </div>
 
-        <!-- 3. Internal Flash Storage Card -->
-        <div class="card storage-card" id="flashStorageCard" data-storage="1" role="button" tabindex="0" title="Click to select Internal Flash storage" style="cursor: pointer; transition: border-color var(--transition-fast), background-color var(--transition-fast);">
+        <!-- 2. Internal Flash Storage Card -->
+        <div class="card storage-card" id="flashStorageCard">
           <div class="card-header">
             <span class="card-title">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -94,8 +86,8 @@ class StatusDashboard extends HTMLElement {
           </div>
         </div>
 
-        <!-- 4. MicroSD Storage Card -->
-        <div class="card storage-card" id="sdStorageCard" data-storage="0" role="button" tabindex="0" title="Click to select MicroSD storage" style="cursor: pointer; transition: border-color var(--transition-fast), background-color var(--transition-fast);">
+        <!-- 3. MicroSD Storage Card -->
+        <div class="card storage-card" id="sdStorageCard">
           <div class="card-header">
             <span class="card-title">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -106,9 +98,9 @@ class StatusDashboard extends HTMLElement {
               </svg>
               MicroSD Card
             </span>
-            <span id="sdStorageBadge" class="card-badge badge-muted">—</span>
+            <span id="sdStorageBadge" class="card-badge badge-muted">No Card</span>
           </div>
-          <div id="sdStorageFreeText" class="stat-value">—</div>
+          <div id="sdStorageFreeText" class="stat-value">No Card</div>
           <div class="stat-sub">
             <span id="sdStorageUsedText">Used: —</span>
             <span id="sdStorageTotalText">Total: —</span>
@@ -122,46 +114,11 @@ class StatusDashboard extends HTMLElement {
   }
 
   bindEvents() {
-    const flashCard = this.querySelector('#flashStorageCard');
-    const sdCard = this.querySelector('#sdStorageCard');
-
-    if (flashCard) {
-      const selectFlash = () => {
-        this.dispatchEvent(new CustomEvent('storage-target-change', {
-          detail: { target: 1 },
-          bubbles: true,
-          composed: true
-        }));
-      };
-      flashCard.addEventListener('click', selectFlash);
-      flashCard.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          selectFlash();
-        }
-      });
-    }
-
-    if (sdCard) {
-      const selectSd = () => {
-        this.dispatchEvent(new CustomEvent('storage-target-change', {
-          detail: { target: 0 },
-          bubbles: true,
-          composed: true
-        }));
-      };
-      sdCard.addEventListener('click', selectSd);
-      sdCard.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          selectSd();
-        }
-      });
-    }
+    // Interaksi pemilihan target storage dipusatkan pada modal pengaturan
   }
 
   /**
-   * Update Device Status Card
+   * Update Device Status
    * @param {{ state?: string|boolean, name?: string, uuid?: string, mtu?: number|string }} status
    */
   updateDeviceStatus({ state, name, uuid, mtu } = {}) {
@@ -252,32 +209,42 @@ class StatusDashboard extends HTMLElement {
     const usedEl = this.querySelector('#flashStorageUsedText');
     const totalEl = this.querySelector('#flashStorageTotalText');
     const meter = this.querySelector('#flashStorageMeterFill');
-    const card = this.querySelector('#flashStorageCard');
 
-    const free = Number(freeKb) || 0;
-    const total = Number(totalKb) || 0;
-    const used = total > free ? total - free : 0;
-    const usedPct = total > 0 ? ((used / total) * 100).toFixed(1) : 0;
-
-    if (freeEl) freeEl.textContent = `${formatKb(free)} free`;
-    if (usedEl) usedEl.textContent = `Used: ${formatKb(used)} (${usedPct}%)`;
-    if (totalEl) totalEl.textContent = `Total: ${formatKb(total)}`;
-    if (meter) meter.style.width = `${Math.min(100, Math.max(0, usedPct))}%`;
-
-    if (isActive !== undefined && badge) {
-      if (isActive) {
-        badge.className = 'card-badge badge-flash';
-        badge.textContent = 'Active';
-      } else {
-        badge.className = 'card-badge badge-muted';
-        badge.textContent = total > 0 ? 'Ready' : '—';
-      }
+    if (freeKb === undefined && totalKb === undefined) {
+      return;
     }
 
-    if (card && isActive !== undefined) {
-      card.classList.toggle('active-storage', !!isActive);
-      card.style.borderColor = isActive ? 'var(--accent-color)' : '';
-      card.style.boxShadow = isActive ? '0 0 0 1px var(--accent-color)' : '';
+    if (freeKb !== undefined) {
+      this._flashFreeKb = Number(freeKb) || 0;
+    }
+    if (totalKb !== undefined) {
+      this._flashTotalKb = Number(totalKb) || 0;
+    }
+
+    const free = this._flashFreeKb || 0;
+    const total = this._flashTotalKb || 0;
+
+    if (total > 0) {
+      const used = total > free ? total - free : 0;
+      const usedPct = ((used / total) * 100).toFixed(1);
+
+      if (badge) {
+        badge.className = 'card-badge badge-muted';
+        badge.textContent = 'Ready';
+      }
+      if (freeEl) freeEl.textContent = `${formatKb(free)} free`;
+      if (usedEl) usedEl.textContent = `Used: ${formatKb(used)} (${usedPct}%)`;
+      if (totalEl) totalEl.textContent = `Total: ${formatKb(total)}`;
+      if (meter) meter.style.width = `${Math.min(100, Math.max(0, usedPct))}%`;
+    } else {
+      if (badge) {
+        badge.className = 'card-badge badge-muted';
+        badge.textContent = '—';
+      }
+      if (freeEl) freeEl.textContent = '—';
+      if (usedEl) usedEl.textContent = 'Used: —';
+      if (totalEl) totalEl.textContent = 'Total: —';
+      if (meter) meter.style.width = '0%';
     }
   }
 
@@ -285,56 +252,57 @@ class StatusDashboard extends HTMLElement {
    * Update MicroSD Storage Card
    * @param {{ freeKb?: number, totalKb?: number, isMounted?: boolean, isActive?: boolean }} sd
    */
-  updateSdStorage({ freeKb, totalKb, isMounted = true, isActive } = {}) {
+  updateSdStorage({ freeKb, totalKb, isMounted, isActive } = {}) {
     const badge = this.querySelector('#sdStorageBadge');
     const freeEl = this.querySelector('#sdStorageFreeText');
     const usedEl = this.querySelector('#sdStorageUsedText');
     const totalEl = this.querySelector('#sdStorageTotalText');
     const meter = this.querySelector('#sdStorageMeterFill');
-    const card = this.querySelector('#sdStorageCard');
 
-    if (!isMounted) {
+    if (freeKb === undefined && totalKb === undefined && isMounted === undefined) {
+      return;
+    }
+
+    if (isMounted !== undefined) {
+      this._sdMounted = Boolean(isMounted);
+    } else if (totalKb !== undefined) {
+      this._sdMounted = Number(totalKb) > 0;
+    }
+
+    if (freeKb !== undefined) {
+      this._sdFreeKb = Number(freeKb) || 0;
+    }
+    if (totalKb !== undefined) {
+      this._sdTotalKb = Number(totalKb) || 0;
+    }
+
+    const mounted = this._sdMounted;
+    const total = this._sdTotalKb || 0;
+    const free = this._sdFreeKb || 0;
+
+    if (!mounted || total === 0) {
       if (badge) {
         badge.className = 'card-badge badge-muted';
-        badge.textContent = 'Unmounted';
+        badge.textContent = 'No Card';
       }
       if (freeEl) freeEl.textContent = 'No Card';
       if (usedEl) usedEl.textContent = 'Used: —';
       if (totalEl) totalEl.textContent = 'Total: —';
       if (meter) meter.style.width = '0%';
-      if (card) {
-        card.classList.remove('active-storage');
-        card.style.borderColor = '';
-        card.style.boxShadow = '';
-      }
       return;
     }
 
-    const free = Number(freeKb) || 0;
-    const total = Number(totalKb) || 0;
     const used = total > free ? total - free : 0;
-    const usedPct = total > 0 ? ((used / total) * 100).toFixed(1) : 0;
+    const usedPct = ((used / total) * 100).toFixed(1);
 
+    if (badge) {
+      badge.className = 'card-badge badge-muted';
+      badge.textContent = 'Ready';
+    }
     if (freeEl) freeEl.textContent = `${formatKb(free)} free`;
     if (usedEl) usedEl.textContent = `Used: ${formatKb(used)} (${usedPct}%)`;
     if (totalEl) totalEl.textContent = `Total: ${formatKb(total)}`;
     if (meter) meter.style.width = `${Math.min(100, Math.max(0, usedPct))}%`;
-
-    if (isActive !== undefined && badge) {
-      if (isActive) {
-        badge.className = 'card-badge badge-sd';
-        badge.textContent = 'Active';
-      } else {
-        badge.className = 'card-badge badge-muted';
-        badge.textContent = total > 0 ? 'Ready' : '—';
-      }
-    }
-
-    if (card && isActive !== undefined) {
-      card.classList.toggle('active-storage', !!isActive);
-      card.style.borderColor = isActive ? 'var(--success-color)' : '';
-      card.style.boxShadow = isActive ? '0 0 0 1px var(--success-color)' : '';
-    }
   }
 }
 

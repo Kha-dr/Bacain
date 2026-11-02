@@ -4,36 +4,40 @@
    ========================================================================== */
 
 :root {
-  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --font-sans:
+    system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono",
+    monospace;
 
   /* Color Palette - Elegant Dark Zinc Mode (Default) */
-  --bg-primary: #09090b;       /* Zinc 950 */
-  --bg-secondary: #121215;     /* Zinc 900 */
-  --bg-tertiary: #18181b;      /* Zinc 900 alt */
-  --bg-card: #141417;          /* Card surface */
-  --bg-card-hover: #19191e;    /* Card hover state */
-  --bg-input: #101013;         /* Input & code container background */
+  --bg-primary: #09090b; /* Zinc 950 */
+  --bg-secondary: #121215; /* Zinc 900 */
+  --bg-tertiary: #18181b; /* Zinc 900 alt */
+  --bg-card: #141417; /* Card surface */
+  --bg-card-hover: #19191e; /* Card hover state */
+  --bg-input: #101013; /* Input & code container background */
 
-  --text-primary: #f4f4f5;     /* Zinc 100 */
-  --text-secondary: #a1a1aa;   /* Zinc 400 */
-  --text-muted: #71717a;       /* Zinc 500 */
+  --text-primary: #f4f4f5; /* Zinc 100 */
+  --text-secondary: #a1a1aa; /* Zinc 400 */
+  --text-muted: #71717a; /* Zinc 500 */
   --text-inverse: #09090b;
 
-  --border-color: #27272a;     /* Zinc 800 */
+  --border-color: #27272a; /* Zinc 800 */
   --border-subtle: #1f1f23;
-  --border-hover: #3f3f46;     /* Zinc 700 */
-  --border-focus: #3b82f6;     /* Professional Blue 500 */
+  --border-hover: #3f3f46; /* Zinc 700 */
+  --border-focus: #3b82f6; /* Professional Blue 500 */
 
-  --accent-color: #3b82f6;     /* Blue 500 */
-  --accent-hover: #2563eb;     /* Blue 600 */
+  --accent-color: #3b82f6; /* Blue 500 */
+  --accent-hover: #2563eb; /* Blue 600 */
   --accent-subtle: rgba(59, 130, 246, 0.12);
 
-  --success-color: #10b981;    /* Emerald 500 */
+  --success-color: #10b981; /* Emerald 500 */
   --success-bg: rgba(16, 185, 129, 0.12);
-  --warning-color: #f59e0b;    /* Amber 500 */
+  --warning-color: #f59e0b; /* Amber 500 */
   --warning-bg: rgba(245, 158, 11, 0.12);
-  --danger-color: #ef4444;     /* Red 500 */
+  --danger-color: #ef4444; /* Red 500 */
   --danger-bg: rgba(239, 68, 68, 0.12);
   --danger-hover: #dc2626;
 
@@ -43,7 +47,8 @@
   --radius-full: 9999px;
 
   --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.25);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -2px rgba(0, 0, 0, 0.3);
+  --shadow-md:
+    0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -2px rgba(0, 0, 0, 0.3);
   --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.4);
 
   --transition-fast: 0.15s ease;
@@ -51,32 +56,32 @@
 }
 
 [data-theme="light"] {
-  --bg-primary: #f8fafc;       /* Slate 50 */
+  --bg-primary: #f8fafc; /* Slate 50 */
   --bg-secondary: #ffffff;
-  --bg-tertiary: #f1f5f9;      /* Slate 100 */
+  --bg-tertiary: #f1f5f9; /* Slate 100 */
   --bg-card: #ffffff;
   --bg-card-hover: #f8fafc;
   --bg-input: #ffffff;
 
-  --text-primary: #0f172a;     /* Slate 900 */
-  --text-secondary: #475569;   /* Slate 600 */
-  --text-muted: #64748b;       /* Slate 500 */
+  --text-primary: #0f172a; /* Slate 900 */
+  --text-secondary: #475569; /* Slate 600 */
+  --text-muted: #64748b; /* Slate 500 */
   --text-inverse: #ffffff;
 
-  --border-color: #e2e8f0;     /* Slate 200 */
+  --border-color: #e2e8f0; /* Slate 200 */
   --border-subtle: #f1f5f9;
-  --border-hover: #cbd5e1;     /* Slate 300 */
+  --border-hover: #cbd5e1; /* Slate 300 */
   --border-focus: #2563eb;
 
-  --accent-color: #2563eb;     /* Blue 600 */
-  --accent-hover: #1d4ed8;     /* Blue 700 */
+  --accent-color: #2563eb; /* Blue 600 */
+  --accent-hover: #1d4ed8; /* Blue 700 */
   --accent-subtle: rgba(37, 99, 235, 0.08);
 
-  --success-color: #059669;    /* Emerald 600 */
+  --success-color: #059669; /* Emerald 600 */
   --success-bg: rgba(5, 150, 105, 0.1);
-  --warning-color: #d97706;    /* Amber 600 */
+  --warning-color: #d97706; /* Amber 600 */
   --warning-bg: rgba(217, 119, 6, 0.1);
-  --danger-color: #dc2626;     /* Red 600 */
+  --danger-color: #dc2626; /* Red 600 */
   --danger-bg: rgba(220, 38, 38, 0.1);
   --danger-hover: #b91c1c;
 
@@ -89,7 +94,9 @@
    Base & Reset
    ========================================================================== */
 
-*, *::before, *::after {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
@@ -103,7 +110,9 @@ body {
   min-height: 100vh;
   padding: 0;
   margin: 0;
-  transition: background-color var(--transition-normal), color var(--transition-normal);
+  transition:
+    background-color var(--transition-normal),
+    color var(--transition-normal);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -237,8 +246,15 @@ body {
 }
 
 @keyframes pulseDot {
-  0%, 100% { opacity: 0.4; transform: scale(0.9); }
-  50% { opacity: 1; transform: scale(1.15); }
+  0%,
+  100% {
+    opacity: 0.4;
+    transform: scale(0.9);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
 }
 
 /* Icon Buttons (#settingsBtn, #themeToggleBtn, etc.) */
@@ -305,6 +321,154 @@ body {
 
 .alert-banner strong {
   font-weight: 600;
+}
+
+/* ==========================================================================
+   Main Content Layout & Simple Onboarding View
+   ========================================================================== */
+
+.app-main-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.onboarding-section {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 1.5rem 0 2rem;
+}
+
+.onboarding-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  padding: 2.25rem 2rem;
+  width: 100%;
+  max-width: 680px;
+  text-align: center;
+}
+
+.onboarding-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 2rem;
+}
+
+.onboarding-logo {
+  width: 112px;
+  height: 112px;
+  border-radius: var(--radius-md);
+  margin-bottom: 0.5rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.onboarding-title {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+  letter-spacing: -0.02em;
+}
+
+.onboarding-desc {
+  font-size: 0.92rem;
+  color: var(--text-secondary);
+  max-width: 480px;
+  line-height: 1.5;
+}
+
+.onboarding-options {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.25rem;
+  margin-bottom: 1.75rem;
+  text-align: left;
+}
+
+.onboarding-option {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 1.5rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  transition: all var(--transition-fast);
+}
+
+.onboarding-option:hover {
+  border-color: var(--border-hover);
+  background: var(--bg-card-hover);
+}
+
+.onboarding-option h3 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+}
+
+.onboarding-option p {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  line-height: 1.45;
+  flex-grow: 1;
+  margin-bottom: 1.25rem;
+}
+
+.option-icon-box {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-md);
+  background: var(--accent-subtle);
+  color: var(--accent-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 1rem;
+  flex-shrink: 0;
+}
+
+.option-icon-box svg {
+  width: 22px;
+  height: 22px;
+}
+
+.onboarding-action-btn {
+  width: 100%;
+  justify-content: center;
+}
+
+.onboarding-footer {
+  display: flex;
+  justify-content: center;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.btn-text {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0.5rem 0.85rem;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.btn-text:hover {
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
 }
 
 /* ==========================================================================
@@ -422,7 +586,9 @@ body {
 .meter-fill {
   height: 100%;
   border-radius: var(--radius-full);
-  transition: width 0.3s ease, background-color 0.3s ease;
+  transition:
+    width 0.3s ease,
+    background-color 0.3s ease;
 }
 
 .meter-battery {
@@ -554,8 +720,12 @@ body {
 }
 
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* Books List / Table */
@@ -577,7 +747,9 @@ body {
   gap: 0.75rem;
   min-width: 0;
   width: 100%;
-  transition: border-color var(--transition-fast), background-color var(--transition-fast);
+  transition:
+    border-color var(--transition-fast),
+    background-color var(--transition-fast);
 }
 
 .book-item:hover {
@@ -769,8 +941,14 @@ body {
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(-4px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .upload-header {
@@ -869,7 +1047,9 @@ body {
   z-index: 1000;
   opacity: 0;
   visibility: hidden;
-  transition: opacity 0.2s ease, visibility 0.2s ease;
+  transition:
+    opacity 0.2s ease,
+    visibility 0.2s ease;
 }
 
 .modal-backdrop.active {
@@ -1239,10 +1419,18 @@ body {
   color: var(--text-secondary);
 }
 
-.log-entry.info .log-msg { color: var(--text-secondary); }
-.log-entry.success .log-msg { color: var(--success-color); }
-.log-entry.warning .log-msg { color: var(--warning-color); }
-.log-entry.error .log-msg { color: var(--danger-color); }
+.log-entry.info .log-msg {
+  color: var(--text-secondary);
+}
+.log-entry.success .log-msg {
+  color: var(--success-color);
+}
+.log-entry.warning .log-msg {
+  color: var(--warning-color);
+}
+.log-entry.error .log-msg {
+  color: var(--danger-color);
+}
 
 /* ==========================================================================
    Toast Notifications
@@ -1275,16 +1463,30 @@ body {
   border: 1px solid var(--border-color);
   border-left: 3px solid var(--accent-color);
   animation: slideInToast 0.2s ease;
-  transition: opacity 0.2s ease, transform 0.2s ease;
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
 }
 
-.toast.success { border-left-color: var(--success-color); }
-.toast.error { border-left-color: var(--danger-color); }
-.toast.warning { border-left-color: var(--warning-color); }
+.toast.success {
+  border-left-color: var(--success-color);
+}
+.toast.error {
+  border-left-color: var(--danger-color);
+}
+.toast.warning {
+  border-left-color: var(--warning-color);
+}
 
 @keyframes slideInToast {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* ==========================================================================
@@ -1725,10 +1927,20 @@ esp-web-flasher {
   display: inline;
 }
 
-.term-line.info { color: #60a5fa; }
-.term-line.success { color: #34d399; font-weight: 500; }
-.term-line.warning { color: #fbbf24; }
-.term-line.error { color: #f87171; font-weight: 500; }
+.term-line.info {
+  color: #60a5fa;
+}
+.term-line.success {
+  color: #34d399;
+  font-weight: 500;
+}
+.term-line.warning {
+  color: #fbbf24;
+}
+.term-line.error {
+  color: #f87171;
+  font-weight: 500;
+}
 
 /* ==========================================================================
    Responsive Rules
@@ -1806,5 +2018,14 @@ esp-web-flasher {
   .btn-flash {
     width: 100%;
     justify-content: center;
+  }
+
+  .onboarding-card {
+    padding: 1.5rem 1.15rem;
+  }
+
+  .onboarding-options {
+    grid-template-columns: 1fr;
+    gap: 1rem;
   }
 }
