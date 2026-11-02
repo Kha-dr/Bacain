@@ -33,6 +33,9 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
+# Web Serial Flasher Binary Artifacts (preserve manifest.json and .gitkeep)
+web/firmware/*.bin
+
 # Language Server & Clangd Index Cache
 .clangd/
 compile_commands.json
