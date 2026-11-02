@@ -1,5 +1,5 @@
 # ==============================================================================
-# Git Ignore Rules for Mini-E-Reader (Firmware + Web + Python)
+# Git Ignore Rules for BacaIn (Firmware + Web + Python)
 # ==============================================================================
 
 # ESP-IDF Build & Output Directories

@@ -1,4 +1,4 @@
-name: Firmware CI/CD
+name: BacaIn Firmware CI/CD
 
 on:
   push:
@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   build:
-    name: Build & Package ESP32-S3 Firmware
+    name: Build & Package BacaIn ESP32-S3 Firmware
     runs-on: ubuntu-latest
     container:
       image: espressif/idf:release-v5.2
@@ -47,7 +47,9 @@ jobs:
           fi
 
           # Standardize binary paths from ESP-IDF build output
-          if [ -f build/mini_e_reader.bin ] && [ ! -f build/reader_firmware.bin ]; then
+          if [ -f build/bacain.bin ] && [ ! -f build/reader_firmware.bin ]; then
+            cp build/bacain.bin build/reader_firmware.bin
+          elif [ -f build/mini_e_reader.bin ] && [ ! -f build/reader_firmware.bin ]; then
             cp build/mini_e_reader.bin build/reader_firmware.bin
           fi
 
@@ -63,7 +65,7 @@ jobs:
 
           # Merge binaries using esptool.py
           esptool.py --chip esp32s3 merge_bin \
-            -o build/mini_e_reader_factory.bin \
+            -o build/bacain_factory.bin \
             --flash_mode keep \
             --flash_size 8MB \
             0x0000 build/bootloader/bootloader.bin \
@@ -76,9 +78,9 @@ jobs:
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: mini-e-reader-firmware
+          name: bacain-firmware
           path: |
-            firmware/build/mini_e_reader_factory.bin
+            firmware/build/bacain_factory.bin
             firmware/build/reader_firmware.bin
             firmware/build/bootloader.bin
             firmware/build/partition-table.bin
@@ -90,7 +92,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            firmware/build/mini_e_reader_factory.bin
+            firmware/build/bacain_factory.bin
             firmware/build/reader_firmware.bin
             firmware/build/bootloader.bin
             firmware/build/partition-table.bin

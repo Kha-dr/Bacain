@@ -1,4 +1,4 @@
-# Mini-E-Reader (Waveshare ESP32-S3-ePaper-1.54G)
+# BacaIn (Waveshare ESP32-S3-ePaper-1.54G)
 
 An ultra-low-power, pocket-sized E-Reader built for the **Waveshare ESP32-S3-ePaper-1.54G** development board, featuring a 1.54-inch 4-color e-paper display, UTF-8 `.txt` book pagination, intelligent deep sleep, and wireless book syncing via a **Web Bluetooth Progressive Web App (PWA)**.
 
@@ -20,7 +20,10 @@ An ultra-low-power, pocket-sized E-Reader built for the **Waveshare ESP32-S3-ePa
 
 ```text
 .
-├── firmware/                      # Production ESP-IDF Mini E-Reader firmware
+├── firmware/                      # Production ESP-IDF BacaIn firmware
+│   ├── Dockerfile                 # ESP-IDF v5.3.1 reproducible build container
+│   ├── build.ps1                  # Docker-first build runner for Windows
+│   ├── package_firmware.py        # Factory binary merger & web manifest generator
 │   ├── CMakeLists.txt             # Project CMake build definition
 │   ├── partitions.csv             # 8MB Flash partition layout
 │   ├── sdkconfig.defaults         # Octal PSRAM, NimBLE, and FATFS configurations
@@ -83,20 +86,53 @@ _Note: In Reading View, after 60 seconds of inactivity, the reader automatically
 
 ### 2. Building & Flashing Firmware
 
-Prerequisites: ESP-IDF v5.2 or later configured in your environment.
+#### Method A: Build via Docker (Recommended - Zero Toolchain Setup)
+
+No local ESP-IDF or Python toolchains required. The build runs in an isolated official `espressif/idf:v5.3.1` container and automatically merges binaries and synchronizes outputs to `web/firmware/`.
+
+**Windows PowerShell:**
+```powershell
+.\firmware\build.ps1
+```
+
+**Docker One-Liner (Linux / macOS / Windows):**
+```bash
+docker run --rm -v "${PWD}:/project" -w /project/firmware espressif/idf:v5.3.1 \
+  bash -c "idf.py set-target esp32s3 && idf.py build && python3 package_firmware.py --web-dir ../web/firmware"
+```
+
+**Or using `firmware/Dockerfile`:**
+```bash
+docker build -t bacain-firmware firmware/
+docker run --rm -v "${PWD}:/project" bacain-firmware
+```
+
+#### Method B: Native ESP-IDF Build (Local Environment)
+
+Prerequisites: ESP-IDF v5.2 or later (v5.3+ recommended) configured in your environment.
 
 ```bash
 cd firmware
 
-# Target ESP32-S3
+# 1. Target ESP32-S3
 idf.py set-target esp32s3
 
-# Build firmware
+# 2. Build firmware
 idf.py build
 
-# Flash and open serial monitor (replace /dev/ttyUSB0 with your device port)
-idf.py -p /dev/ttyUSB0 flash monitor
+# 3. Merge unified factory binary & update web manifest
+python3 package_firmware.py --web-dir ../web/firmware
 ```
+
+#### Flashing Options
+
+- **Web Serial Flasher (No CLI required)**:
+  Open `web/index.html` in Chrome/Edge, go to the **Firmware Flasher** tab, and click **Connect & Flash Firmware**.
+- **ESP-IDF Serial Flash & Monitor**:
+  ```bash
+  idf.py -p COM3 flash monitor          # Windows (adjust COM port)
+  idf.py -p /dev/ttyUSB0 flash monitor  # Linux / macOS
+  ```
 
 ### 3. Syncing Books Wirelessly via Web Bluetooth
 
@@ -105,7 +141,7 @@ idf.py -p /dev/ttyUSB0 flash monitor
    ```bash
    cd web && npx serve
    ```
-3. Click **Connect E-Reader** and pair with `Mini-E-Reader`.
+3. Click **Connect BacaIn** and pair with `BacaIn` (or `Mini-E-Reader`).
 4. Drag and drop `.txt` files or click to upload. Files are written directly to `/sdcard/books/` at high speed (~40 KB/s).
 5. Manage existing books or delete them remotely directly from the web interface.
 6. Long press **BOOT** on the device to exit sync mode and start reading!
@@ -114,7 +150,7 @@ idf.py -p /dev/ttyUSB0 flash monitor
 
 ## Firmware Shipping & Distribution
 
-The Mini-E-Reader project provides automated, zero-toolchain firmware installation methods alongside reproducible CI/CD pipelines and manual partition flashing references.
+The BacaIn project provides automated, zero-toolchain firmware installation methods alongside reproducible CI/CD pipelines and manual partition flashing references.
 
 ### 1. 1-Click Flashing via Web Serial
 
@@ -167,7 +203,7 @@ Standard ESP32-S3 partition offsets for 8MB (64Mb) Quad/Octal SPI Flash:
 | **Partition Table** | `0x8000` | 4 KB (`0x1000`) | System | Partition map definitions (`partition-table.bin`) |
 | **NVS Partition** | `0x9000` | 24 KB (`0x6000`) | `data, nvs` | Non-volatile storage (WiFi/BLE keys, configs) |
 | **PHY Init** | `0xF000` | 4 KB (`0x1000`) | `data, phy` | RF calibration and physical layer parameters |
-| **Factory App** | `0x20000` | 2.0 MB (`0x200000`) | `app, factory` | Mini-E-Reader firmware binary (`reader_firmware.bin`) |
+| **Factory App** | `0x20000` | 2.0 MB (`0x200000`) | `app, factory` | BacaIn firmware binary (`bacain.bin` / `reader_firmware.bin`) |
 | **Storage (FatFS)** | `0x220000` | 5.81 MB (`0x5D0000`) | `data, fat` | Flash filesystem storage partition |
 | **Unified Factory Image** | `0x0000` | ~3.84 MB | Unified Image | Complete pre-merged binary (`01_factory.bin`) |
 
