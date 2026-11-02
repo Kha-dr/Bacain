@@ -16,6 +16,13 @@
 #include "freertos/semphr.h"
 #include "sdcard.h"
 
+#ifndef S_ISDIR
+#define S_ISDIR(m) (((m) & S_IFMT) == S_IFDIR)
+#endif
+#ifndef S_ISREG
+#define S_ISREG(m) (((m) & S_IFMT) == S_IFREG)
+#endif
+
 static const char *TAG = "book_library";
 
 static book_info_t       s_books[BOOK_MAX_COUNT];
@@ -27,11 +34,46 @@ static storage_target_t  s_storage_target = STORAGE_TARGET_FLASH;
 static char              s_books_dir[64] = "/spiflash/books";
 static char              s_state_dir[64] = "/spiflash/.reader";
 static char              s_state_file[80] = "/spiflash/.reader/state.json";
+static char              s_current_dir[BOOK_PATH_MAX_LEN] = "/spiflash/books";
+static char              s_rel_path[BOOK_PATH_MAX_LEN] = "";
 static bool              s_state_dirty = false;
+
+static bool is_root_dir_locked(void) {
+    return (strcmp(s_current_dir, s_books_dir) == 0);
+}
+
+static void update_current_rel_path(void) {
+    size_t base_len = strlen(s_books_dir);
+    if (strncmp(s_current_dir, s_books_dir, base_len) == 0) {
+        const char *rel = s_current_dir + base_len;
+        if (*rel == '/') {
+            snprintf(s_rel_path, sizeof(s_rel_path), "%s", rel);
+        } else if (*rel == '\0') {
+            s_rel_path[0] = '\0';
+        } else {
+            snprintf(s_rel_path, sizeof(s_rel_path), "/%s", rel);
+        }
+    } else {
+        s_rel_path[0] = '\0';
+    }
+}
 
 static int compare_books(const void *a, const void *b) {
     const book_info_t *book_a = (const book_info_t *)a;
     const book_info_t *book_b = (const book_info_t *)b;
+
+    if (book_a->type == LIBRARY_ENTRY_UP) {
+        return (book_b->type == LIBRARY_ENTRY_UP) ? 0 : -1;
+    }
+    if (book_b->type == LIBRARY_ENTRY_UP) {
+        return 1;
+    }
+
+    if (book_a->type != book_b->type) {
+        // LIBRARY_ENTRY_DIR should come before LIBRARY_ENTRY_FILE
+        return (book_a->type == LIBRARY_ENTRY_DIR) ? -1 : 1;
+    }
+
     return strcasecmp(book_a->filename, book_b->filename);
 }
 
@@ -48,6 +90,9 @@ static void update_target_paths(storage_target_t target) {
     snprintf(s_books_dir, sizeof(s_books_dir), "%.32s/books", mount_pt);
     snprintf(s_state_dir, sizeof(s_state_dir), "%.32s/.reader", mount_pt);
     snprintf(s_state_file, sizeof(s_state_file), "%.32s/.reader/state.json", mount_pt);
+    strncpy(s_current_dir, s_books_dir, sizeof(s_current_dir) - 1);
+    s_current_dir[sizeof(s_current_dir) - 1] = '\0';
+    update_current_rel_path();
 }
 
 static bool check_storage_mounted(storage_target_t target) {
@@ -181,16 +226,44 @@ esp_err_t book_library_scan(void) {
     }
 
     ensure_dir_exists(s_books_dir);
+    ensure_dir_exists(s_current_dir);
 
-    DIR *dir = opendir(s_books_dir);
+    s_book_count = 0;
+
+    // Jika bukan root books dir, tambahkan entri pertama ".." untuk kembali ke folder induk
+    if (!is_root_dir_locked()) {
+        char parent_path[BOOK_PATH_MAX_LEN];
+        strncpy(parent_path, s_current_dir, sizeof(parent_path) - 1);
+        parent_path[sizeof(parent_path) - 1] = '\0';
+
+        char *last_slash = strrchr(parent_path, '/');
+        if (last_slash && last_slash != parent_path) {
+            *last_slash = '\0';
+        }
+
+        size_t base_len = strlen(s_books_dir);
+        if (strlen(parent_path) < base_len ||
+            strncmp(parent_path, s_books_dir, base_len) != 0) {
+            strncpy(parent_path, s_books_dir, sizeof(parent_path) - 1);
+            parent_path[sizeof(parent_path) - 1] = '\0';
+        }
+
+        book_info_t *up = &s_books[s_book_count++];
+        strncpy(up->filename, "..", sizeof(up->filename) - 1);
+        up->filename[sizeof(up->filename) - 1] = '\0';
+        strncpy(up->path, parent_path, sizeof(up->path) - 1);
+        up->path[sizeof(up->path) - 1] = '\0';
+        up->size = 0;
+        up->type = LIBRARY_ENTRY_UP;
+    }
+
+    DIR *dir = opendir(s_current_dir);
     if (!dir) {
-        ESP_LOGW(TAG, "Cannot open books directory: %s", s_books_dir);
-        s_book_count = 0;
+        ESP_LOGW(TAG, "Cannot open books directory: %s", s_current_dir);
         xSemaphoreGive(s_mutex);
         return ESP_ERR_NOT_FOUND;
     }
 
-    s_book_count = 0;
     struct dirent *ent = NULL;
 
     while ((ent = readdir(dir)) != NULL) {
@@ -199,43 +272,51 @@ esp_err_t book_library_scan(void) {
             break;
         }
 
-        // Skip hidden files
+        // Skip hidden files and directories (names starting with '.')
         if (ent->d_name[0] == '.') {
             continue;
         }
 
-        size_t name_len = strlen(ent->d_name);
-        if (name_len < 4) {
+        char full_path[BOOK_PATH_MAX_LEN];
+        int ret = snprintf(full_path, sizeof(full_path), "%s/%s", s_current_dir, ent->d_name);
+        if (ret < 0 || ret >= (int)sizeof(full_path)) {
             continue;
         }
-
-        // Must end in .txt
-        if (strcasecmp(ent->d_name + name_len - 4, ".txt") != 0) {
-            continue;
-        }
-
-        book_info_t *book = &s_books[s_book_count];
-        // Pastikan nama file + path tidak melebihi buffer
-        if (name_len >= sizeof(book->filename)) {
-            continue;
-        }
-
-        int ret = snprintf(book->path, sizeof(book->path), "%.60s/%.190s", s_books_dir, ent->d_name);
-        if (ret < 0 || ret >= (int)sizeof(book->path)) {
-            continue;
-        }
-
-        strncpy(book->filename, ent->d_name, sizeof(book->filename) - 1);
-        book->filename[sizeof(book->filename) - 1] = '\0';
 
         struct stat st;
-        if (stat(book->path, &st) == 0) {
-            book->size = (size_t)st.st_size;
-        } else {
-            book->size = 0;
+        if (stat(full_path, &st) != 0) {
+            continue;
         }
 
-        s_book_count++;
+        if (S_ISDIR(st.st_mode)) {
+            book_info_t *book = &s_books[s_book_count];
+            strncpy(book->filename, ent->d_name, sizeof(book->filename) - 1);
+            book->filename[sizeof(book->filename) - 1] = '\0';
+            strncpy(book->path, full_path, sizeof(book->path) - 1);
+            book->path[sizeof(book->path) - 1] = '\0';
+            book->size = 0;
+            book->type = LIBRARY_ENTRY_DIR;
+            s_book_count++;
+        } else if (S_ISREG(st.st_mode)) {
+            size_t name_len = strlen(ent->d_name);
+            if (name_len < 4) {
+                continue;
+            }
+
+            // Must end in .txt
+            if (strcasecmp(ent->d_name + name_len - 4, ".txt") != 0) {
+                continue;
+            }
+
+            book_info_t *book = &s_books[s_book_count];
+            strncpy(book->filename, ent->d_name, sizeof(book->filename) - 1);
+            book->filename[sizeof(book->filename) - 1] = '\0';
+            strncpy(book->path, full_path, sizeof(book->path) - 1);
+            book->path[sizeof(book->path) - 1] = '\0';
+            book->size = (size_t)st.st_size;
+            book->type = LIBRARY_ENTRY_FILE;
+            s_book_count++;
+        }
     }
 
     closedir(dir);
@@ -244,10 +325,130 @@ esp_err_t book_library_scan(void) {
         qsort(s_books, s_book_count, sizeof(book_info_t), compare_books);
     }
 
-    ESP_LOGI(TAG, "Scanned %u books in %s", (unsigned int)s_book_count, s_books_dir);
+    ESP_LOGI(TAG, "Scanned %u entries in %s", (unsigned int)s_book_count, s_current_dir);
 
     xSemaphoreGive(s_mutex);
     return ESP_OK;
+}
+
+esp_err_t book_library_enter_dir(const char *subdir_name) {
+    if (!subdir_name || subdir_name[0] == '\0') {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (s_mutex == NULL) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (strcmp(subdir_name, "..") == 0) {
+        return book_library_navigate_up();
+    }
+    if (strcmp(subdir_name, ".") == 0) {
+        return ESP_OK;
+    }
+
+    char target_path[BOOK_PATH_MAX_LEN];
+
+    xSemaphoreTake(s_mutex, portMAX_DELAY);
+    size_t base_len = strlen(s_books_dir);
+    if (strncmp(subdir_name, s_books_dir, base_len) == 0 &&
+        (subdir_name[base_len] == '/' || subdir_name[base_len] == '\0')) {
+        int r = snprintf(target_path, sizeof(target_path), "%s", subdir_name);
+        if (r < 0 || r >= (int)sizeof(target_path)) {
+            xSemaphoreGive(s_mutex);
+            return ESP_ERR_INVALID_SIZE;
+        }
+    } else {
+        const char *sub = subdir_name;
+        while (*sub == '/') {
+            sub++;
+        }
+        if (*sub == '\0') {
+            xSemaphoreGive(s_mutex);
+            return ESP_OK;
+        }
+        int r = snprintf(target_path, sizeof(target_path), "%s/%s", s_current_dir, sub);
+        if (r < 0 || r >= (int)sizeof(target_path)) {
+            xSemaphoreGive(s_mutex);
+            return ESP_ERR_INVALID_SIZE;
+        }
+    }
+    xSemaphoreGive(s_mutex);
+
+    size_t tlen = strlen(target_path);
+    if (tlen > 1 && target_path[tlen - 1] == '/') {
+        target_path[tlen - 1] = '\0';
+    }
+
+    struct stat st;
+    if (stat(target_path, &st) != 0) {
+        ESP_LOGW(TAG, "Subdirectory does not exist: %s", target_path);
+        return ESP_ERR_NOT_FOUND;
+    }
+    if (!S_ISDIR(st.st_mode)) {
+        ESP_LOGW(TAG, "Target is not a directory: %s", target_path);
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    xSemaphoreTake(s_mutex, portMAX_DELAY);
+    strncpy(s_current_dir, target_path, sizeof(s_current_dir) - 1);
+    s_current_dir[sizeof(s_current_dir) - 1] = '\0';
+    update_current_rel_path();
+    xSemaphoreGive(s_mutex);
+
+    return book_library_scan();
+}
+
+esp_err_t book_library_navigate_up(void) {
+    if (s_mutex == NULL) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    xSemaphoreTake(s_mutex, portMAX_DELAY);
+
+    if (is_root_dir_locked()) {
+        xSemaphoreGive(s_mutex);
+        ESP_LOGD(TAG, "Already at root books directory");
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    char parent_path[BOOK_PATH_MAX_LEN];
+    strncpy(parent_path, s_current_dir, sizeof(parent_path) - 1);
+    parent_path[sizeof(parent_path) - 1] = '\0';
+
+    char *last_slash = strrchr(parent_path, '/');
+    if (last_slash && last_slash != parent_path) {
+        *last_slash = '\0';
+    }
+
+    size_t base_len = strlen(s_books_dir);
+    if (strlen(parent_path) < base_len ||
+        strncmp(parent_path, s_books_dir, base_len) != 0) {
+        strncpy(parent_path, s_books_dir, sizeof(parent_path) - 1);
+        parent_path[sizeof(parent_path) - 1] = '\0';
+    }
+
+    strncpy(s_current_dir, parent_path, sizeof(s_current_dir) - 1);
+    s_current_dir[sizeof(s_current_dir) - 1] = '\0';
+    update_current_rel_path();
+
+    xSemaphoreGive(s_mutex);
+
+    return book_library_scan();
+}
+
+const char *book_library_get_current_rel_path(void) {
+    return s_rel_path;
+}
+
+bool book_library_is_root_dir(void) {
+    bool is_root = true;
+    if (s_mutex) {
+        xSemaphoreTake(s_mutex, portMAX_DELAY);
+        is_root = is_root_dir_locked();
+        xSemaphoreGive(s_mutex);
+    } else {
+        is_root = is_root_dir_locked();
+    }
+    return is_root;
 }
 
 size_t book_library_get_count(void) {
@@ -310,9 +511,12 @@ esp_err_t book_library_load_state(reading_state_t *state) {
     if (!fp) {
         ESP_LOGI(TAG, "State file not found (%s), initializing defaults", s_state_file);
         memset(&s_reading_state, 0, sizeof(s_reading_state));
-        if (s_book_count > 0) {
-            strncpy(s_reading_state.active_book_path, s_books[0].path, sizeof(s_reading_state.active_book_path) - 1);
-            s_reading_state.total_bytes = s_books[0].size;
+        for (size_t i = 0; i < s_book_count; i++) {
+            if (s_books[i].type == LIBRARY_ENTRY_FILE) {
+                strncpy(s_reading_state.active_book_path, s_books[i].path, sizeof(s_reading_state.active_book_path) - 1);
+                s_reading_state.total_bytes = s_books[i].size;
+                break;
+            }
         }
         if (state) {
             *state = s_reading_state;
@@ -404,10 +608,15 @@ esp_err_t book_library_load_state(reading_state_t *state) {
     }
 
     if (s_reading_state.active_book_path[0] == '\0' && s_book_count > 0) {
-        strncpy(s_reading_state.active_book_path, s_books[0].path, sizeof(s_reading_state.active_book_path) - 1);
-        s_reading_state.byte_offset = 0;
-        s_reading_state.total_bytes = s_books[0].size;
-        s_reading_state.bookmark_count = 0;
+        for (size_t i = 0; i < s_book_count; i++) {
+            if (s_books[i].type == LIBRARY_ENTRY_FILE) {
+                strncpy(s_reading_state.active_book_path, s_books[i].path, sizeof(s_reading_state.active_book_path) - 1);
+                s_reading_state.byte_offset = 0;
+                s_reading_state.total_bytes = s_books[i].size;
+                s_reading_state.bookmark_count = 0;
+                break;
+            }
+        }
     }
     if (state) {
         *state = s_reading_state;

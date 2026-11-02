@@ -33,10 +33,17 @@ typedef enum {
 #define BOOK_MAX_COUNT             64
 #define BOOK_MAX_BOOKMARKS         32
 
+typedef enum {
+    LIBRARY_ENTRY_FILE = 0,
+    LIBRARY_ENTRY_DIR  = 1,
+    LIBRARY_ENTRY_UP   = 2, // Item ".." untuk kembali ke folder induk
+} library_entry_type_t;
+
 typedef struct {
     char filename[BOOK_FILENAME_MAX_LEN];
     char path[BOOK_PATH_MAX_LEN];
     size_t size; // file size in bytes
+    library_entry_type_t type;
 } book_info_t;
 
 typedef struct {
@@ -78,6 +85,35 @@ storage_target_t book_library_get_storage_target(void);
  * @return ESP_OK on success, or an esp_err_t error code.
  */
 esp_err_t book_library_scan(void);
+
+/**
+ * @brief Enter a subdirectory within current directory and rescan.
+ *
+ * @param subdir_name Name of subdirectory or subfolder path.
+ * @return ESP_OK on success, or an error code.
+ */
+esp_err_t book_library_enter_dir(const char *subdir_name);
+
+/**
+ * @brief Navigate up to parent directory and rescan (cannot go above root books dir).
+ *
+ * @return ESP_OK on success, or ESP_ERR_INVALID_STATE if already at root dir.
+ */
+esp_err_t book_library_navigate_up(void);
+
+/**
+ * @brief Get current relative path against base books directory.
+ *
+ * @return Relative path string (e.g. "" for root, or "/Sci-Fi").
+ */
+const char *book_library_get_current_rel_path(void);
+
+/**
+ * @brief Check if current directory is root books directory.
+ *
+ * @return true if at root books directory, false if inside a subdirectory.
+ */
+bool book_library_is_root_dir(void);
 
 /**
  * @brief Get the count of available books.

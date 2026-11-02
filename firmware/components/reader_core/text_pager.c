@@ -190,6 +190,7 @@ static esp_err_t parse_page_at_offset(size_t offset, text_pager_page_t *page) {
     size_t max_cols  = (s_pager.font_size == TEXT_PAGER_FONT_16) ? 22 : 30;
 
     page->line_count = 0;
+    bool force_page_break = false;
 
     while (page->line_count < max_lines && cursor < bytes_read) {
         char *line = page->lines[page->line_count];
@@ -203,7 +204,24 @@ static esp_err_t parse_page_at_offset(size_t offset, text_pager_page_t *page) {
         while (cursor < bytes_read) {
             uint8_t b0 = read_buf[cursor];
 
-            if (b0 == '\r') {
+            if (b0 == '\f') {
+                cursor++;
+                if (cursor < bytes_read && read_buf[cursor] == '\r') {
+                    cursor++;
+                }
+                if (cursor < bytes_read && read_buf[cursor] == '\n') {
+                    cursor++;
+                }
+
+                // Jika sudah di awal halaman baru (line_count == 0 && line_bytes == 0),
+                // abaikan karakter page-break berlebih/leading agar tidak ada blank page kosong
+                if (page->line_count == 0 && line_bytes == 0) {
+                    continue;
+                }
+
+                force_page_break = true;
+                break;
+            } else if (b0 == '\r') {
                 cursor++;
                 if (cursor < bytes_read && read_buf[cursor] == '\n') {
                     cursor++;
@@ -254,7 +272,13 @@ static esp_err_t parse_page_at_offset(size_t offset, text_pager_page_t *page) {
         }
         line[line_bytes] = '\0';
 
-        page->line_count++;
+        if (line_bytes > 0) {
+            page->line_count++;
+        }
+
+        if (force_page_break) {
+            break;
+        }
     }
 
     page->page_end_offset = offset + cursor;
