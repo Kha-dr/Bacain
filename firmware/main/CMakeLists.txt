@@ -18,3 +18,23 @@ idf_component_register(
         reader_core
         ble_sync
 )
+
+idf_build_get_property(python_cmd PYTHON)
+if(NOT python_cmd)
+    set(python_cmd "python")
+endif()
+
+set(QRCODE_HEADER "${CMAKE_CURRENT_SOURCE_DIR}/sync_qrcode.h")
+set(QRCODE_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/generate_qrcode.py")
+
+add_custom_command(
+    OUTPUT "${QRCODE_HEADER}"
+    COMMAND ${python_cmd} "${QRCODE_SCRIPT}" --output "${QRCODE_HEADER}"
+    DEPENDS "${QRCODE_SCRIPT}"
+    COMMENT "Generating sync_qrcode.h"
+    VERBATIM
+)
+
+add_custom_target(generate_sync_qrcode DEPENDS "${QRCODE_HEADER}")
+add_dependencies(${COMPONENT_LIB} generate_sync_qrcode)
+

@@ -12,6 +12,7 @@
 #include "book_library.h"
 #include "power_mgr.h"
 #include "app_config.h"
+#include "sync_qrcode.h"
 
 #define TAG "READER_UI"
 
@@ -583,96 +584,13 @@ void reader_ui_render_bookmarks(int selected_index) {
     epaper_port_display_part(s_canvas);
 }
 
-void reader_ui_render_ble_sync(bool is_connected, uint32_t bytes_received) {
-    if (!s_canvas) return;
-
-    epaper_power_on();
-
-    Paint_SelectImage(s_canvas);
-    Paint_Clear(WHITE);
-
-    // Title Bar - Solid black box with white text
-    Paint_DrawRectangle(0, 0, DISPLAY_WIDTH - 1, UI_HEADER_HEIGHT, BLACK, DOT_PIXEL_1X1, DRAW_FILL_FULL);
-    Paint_DrawString_EN(8, 3, "SYNC BOOKS", &Font12, WHITE, BLACK);
-    Paint_DrawLine(0, UI_HEADER_HEIGHT + 1, DISPLAY_WIDTH - 1, UI_HEADER_HEIGHT + 1, BLACK, DOT_PIXEL_1X1, LINE_STYLE_SOLID);
-
-    Paint_DrawString_EN(12, 35, "Open BacaIn Web on", &Font12, BLACK, WHITE);
-    Paint_DrawString_EN(12, 50, "Chrome / Edge:", &Font12, BLACK, WHITE);
-
-    Paint_DrawRectangle(10, 70, 190, 95, BLACK, DOT_PIXEL_1X1, DRAW_FILL_EMPTY);
-    Paint_DrawString_EN(16, 76, "BacaIn", &Font16, BLACK, WHITE);
-
-    if (is_connected) {
-        Paint_DrawString_EN(12, 110, "Status: CONNECTED", &Font12, BLACK, WHITE);
-        char rx_buf[32];
-        snprintf(rx_buf, sizeof(rx_buf), "Rx: %lu bytes", (unsigned long)bytes_received);
-        Paint_DrawString_EN(12, 130, rx_buf, &Font12, BLACK, WHITE);
-    } else {
-        Paint_DrawString_EN(12, 110, "Waiting to connect...", &Font12, BLACK, WHITE);
-        Paint_DrawString_EN(12, 130, "Ready for connection...", &Font12, BLACK, WHITE);
-    }
-
-    // Footer
-    Paint_DrawLine(0, UI_FOOTER_Y - 2, DISPLAY_WIDTH - 1, UI_FOOTER_Y - 2, BLACK, DOT_PIXEL_1X1, LINE_STYLE_SOLID);
-    draw_ui_string(12, UI_FOOTER_Y + 1, "Hold ▼  Exit", &Font12, BLACK, WHITE);
-
-    epaper_port_display_part(s_canvas);
+static void draw_centered_string(int y, const char *str, sFONT *font) {
+    if (!str || !font) return;
+    int w = get_ui_string_width(str, font);
+    int x = (DISPLAY_WIDTH - w) / 2;
+    if (x < 4) x = 4;
+    draw_ui_string((UWORD)x, (UWORD)y, str, font, BLACK, WHITE);
 }
-
-#define BACA_ICON_WIDTH   48
-#define BACA_ICON_HEIGHT  48
-
-// Official BacaIn 1-bit monochrome icon (Monogram B with spine & ribbon)
-static const uint8_t s_bacain_icon_48x48[288] = {
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // row 0
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // row 1
-    0x0f, 0xef, 0xff, 0xff, 0xe0, 0x00, // row 2
-    0x0f, 0xef, 0xff, 0xff, 0xf8, 0x00, // row 3
-    0x07, 0xcf, 0xff, 0xff, 0xfe, 0x00, // row 4
-    0x07, 0xcf, 0xff, 0xff, 0xff, 0x00, // row 5
-    0x07, 0xcf, 0x80, 0x03, 0xff, 0x80, // row 6
-    0x07, 0xcf, 0x80, 0x00, 0x1f, 0x80, // row 7
-    0x07, 0xcf, 0x80, 0x00, 0x0f, 0x80, // row 8
-    0x07, 0xcf, 0x80, 0x00, 0x0f, 0x80, // row 9
-    0x07, 0xcf, 0x80, 0x00, 0x0f, 0x80, // row 10
-    0x07, 0xcf, 0x83, 0xfc, 0x0f, 0x80, // row 11
-    0x07, 0xcf, 0x80, 0x00, 0x0f, 0x80, // row 12
-    0x07, 0xcf, 0x80, 0x00, 0x0f, 0x80, // row 13
-    0x1f, 0xef, 0x80, 0x00, 0x1f, 0x00, // row 14
-    0x1f, 0xef, 0x80, 0x00, 0x3f, 0x00, // row 15
-    0x07, 0xcf, 0x80, 0x00, 0x7e, 0x00, // row 16
-    0x07, 0xcf, 0x80, 0x03, 0xfc, 0x00, // row 17
-    0x07, 0xcf, 0x80, 0x0f, 0xf8, 0x00, // row 18
-    0x07, 0xcf, 0x80, 0x7f, 0xf0, 0x00, // row 19
-    0x07, 0xcf, 0xff, 0xff, 0xe0, 0x00, // row 20
-    0x07, 0xcf, 0xff, 0xff, 0xc0, 0x00, // row 21
-    0x07, 0xcf, 0xff, 0xff, 0xe0, 0x00, // row 22
-    0x07, 0xcf, 0x80, 0x7f, 0xf8, 0x00, // row 23
-    0x07, 0xcf, 0x80, 0x0f, 0xfe, 0x00, // row 24
-    0x07, 0xcf, 0x80, 0x01, 0xff, 0x00, // row 25
-    0x07, 0xcf, 0x80, 0x00, 0x7f, 0x80, // row 26
-    0x1f, 0xef, 0x80, 0x00, 0x1f, 0xc0, // row 27
-    0x1f, 0xef, 0x80, 0x00, 0x0f, 0xc0, // row 28
-    0x07, 0xcf, 0x80, 0x00, 0x0f, 0xe0, // row 29
-    0x07, 0xcf, 0x83, 0xfe, 0x0f, 0xe0, // row 30
-    0x07, 0xcf, 0x80, 0x00, 0x0f, 0xe0, // row 31
-    0x07, 0xcf, 0x80, 0x00, 0x0f, 0xe0, // row 32
-    0x07, 0xcf, 0x80, 0x00, 0x0f, 0xe0, // row 33
-    0x07, 0xcf, 0x80, 0x00, 0x0f, 0xe0, // row 34
-    0x07, 0xcf, 0x80, 0x00, 0x1f, 0xc0, // row 35
-    0x07, 0xcf, 0x80, 0x00, 0x3f, 0xc0, // row 36
-    0x07, 0xcf, 0xff, 0xff, 0xff, 0x80, // row 37
-    0x07, 0xcf, 0xff, 0xff, 0xff, 0x00, // row 38
-    0x0f, 0xef, 0xff, 0xff, 0xfe, 0x00, // row 39
-    0x0f, 0xef, 0xff, 0xff, 0xf0, 0x00, // row 40
-    0x03, 0xc0, 0x00, 0x00, 0x00, 0x00, // row 41
-    0x03, 0xc0, 0x00, 0x00, 0x00, 0x00, // row 42
-    0x03, 0xc0, 0x00, 0x00, 0x00, 0x00, // row 43
-    0x03, 0xc0, 0x00, 0x00, 0x00, 0x00, // row 44
-    0x02, 0x40, 0x00, 0x00, 0x00, 0x00, // row 45
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // row 46
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // row 47
-};
 
 static void draw_bacain_icon(int center_x, int top_y) {
     int start_x = center_x - (BACA_ICON_WIDTH / 2);
@@ -690,12 +608,55 @@ static void draw_bacain_icon(int center_x, int top_y) {
     }
 }
 
-static void draw_centered_string(int y, const char *str, sFONT *font) {
-    if (!str || !font) return;
-    int w = get_ui_string_width(str, font);
-    int x = (DISPLAY_WIDTH - w) / 2;
-    if (x < 4) x = 4;
-    draw_ui_string((UWORD)x, (UWORD)y, str, font, BLACK, WHITE);
+void reader_ui_render_ble_sync(bool is_connected, uint32_t bytes_received) {
+    if (!s_canvas) return;
+
+    epaper_power_on();
+
+    Paint_SelectImage(s_canvas);
+    Paint_Clear(WHITE);
+
+    // Title Bar - Solid black box with white text
+    Paint_DrawRectangle(0, 0, DISPLAY_WIDTH - 1, UI_HEADER_HEIGHT, BLACK, DOT_PIXEL_1X1, DRAW_FILL_FULL);
+    Paint_DrawString_EN(8, 3, "SYNC BOOKS", &Font12, WHITE, BLACK);
+    Paint_DrawLine(0, UI_HEADER_HEIGHT + 1, DISPLAY_WIDTH - 1, UI_HEADER_HEIGHT + 1, BLACK, DOT_PIXEL_1X1, LINE_STYLE_SOLID);
+
+    // Render 25x25 QR code centered with 2x scaling
+    int scale = 2;
+    int qx = (BOARD_DISPLAY_WIDTH - (SYNC_QRCODE_SIZE * scale)) / 2;
+    int qy = 26;
+    // Draw white quiet zone backing
+    Paint_DrawRectangle(qx - 4, qy - 4, qx + (SYNC_QRCODE_SIZE * scale) + 3, qy + (SYNC_QRCODE_SIZE * scale) + 3, WHITE, DOT_PIXEL_1X1, DRAW_FILL_FULL);
+    for (int y = 0; y < SYNC_QRCODE_SIZE; y++) {
+        for (int x = 0; x < SYNC_QRCODE_SIZE; x++) {
+            int bit_idx = y * SYNC_QRCODE_SIZE + x;
+            uint8_t bit = (s_sync_qrcode_bitmap[bit_idx / 8] >> (7 - (bit_idx % 8))) & 1;
+            if (bit) {
+                Paint_DrawRectangle(qx + x * scale, qy + y * scale,
+                                    qx + (x + 1) * scale - 1, qy + (y + 1) * scale - 1,
+                                    BLACK, DOT_PIXEL_1X1, DRAW_FILL_FULL);
+            }
+        }
+    }
+
+    // Centered URL below QR code
+    draw_centered_string(82, "bacain.khadr.dev", &Font12);
+
+    // Connection status below URL
+    if (is_connected) {
+        draw_centered_string(104, "Status: CONNECTED", &Font12);
+        char rx_buf[32];
+        snprintf(rx_buf, sizeof(rx_buf), "Rx: %u bytes", (unsigned int)bytes_received);
+        draw_centered_string(122, rx_buf, &Font12);
+    } else {
+        draw_centered_string(104, "Waiting to connect...", &Font12);
+    }
+
+    // Footer
+    Paint_DrawLine(0, UI_FOOTER_Y - 2, DISPLAY_WIDTH - 1, UI_FOOTER_Y - 2, BLACK, DOT_PIXEL_1X1, LINE_STYLE_SOLID);
+    draw_ui_string(12, UI_FOOTER_Y + 1, "Hold ▼ Exit", &Font12, BLACK, WHITE);
+
+    epaper_port_display_part(s_canvas);
 }
 
 void reader_ui_render_splash(const char *title, const char *subtitle) {

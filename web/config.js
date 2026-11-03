@@ -2,6 +2,7 @@
   const cfg = {
     name: 'BacaIn',
     repo: 'https://github.com/khad1r/BacaIn',
+    appUrl: 'https://bacain.khadr.dev',
     ble: {
       service: '0000fe60-0000-1000-8000-00805f9b34fb',
       control: '0000fe61-0000-1000-8000-00805f9b34fb',

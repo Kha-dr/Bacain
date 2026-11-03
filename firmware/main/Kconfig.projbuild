@@ -1,0 +1,16 @@
+menu "BacaIn Application Configuration"
+
+    config APP_SYNC_URL
+        string "Web Sync PWA URL"
+        default "https://bacain.khadr.dev"
+        help
+            Target URL displayed as QR code and text on the sync screen.
+
+    config APP_INACTIVITY_SLEEP_SEC
+        int "Inactivity Sleep Timeout (seconds)"
+        default 60
+        range 10 3600
+        help
+            Device deep sleep timeout after user inactivity.
+
+endmenu
