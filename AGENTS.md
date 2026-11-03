@@ -45,3 +45,18 @@ To prevent context exhaustion and hallucination:
    - Write factual comments and documentation without promotional adjectives.
 3. **Calm Punctuation**:
    - Avoid ellipses (`...`), repeated exclamation points (`!!`), and em dashes (`—`). Use commas, colons, or parentheses.
+
+## 4. Antislop Design & Hygiene Standards
+
+All agents and subagents must enforce antislop skills (`antislop`, `antislop-code`, `antislop-ui`, `antislop-copywriting`):
+
+1. **Code & Comment Hygiene (`antislop-code`)**:
+   - Forbid generic AI commentary (e.g. `// Function to do X`, `// Helper function`, `// Set variable`).
+   - Retain only comments detailing hardware timings, register specifications, FreeRTOS synchronization semantics, and memory boundary constraints.
+2. **UI & Layout (`antislop-ui` / `antislop-human`)**:
+   - Avoid artificial generic templates, arbitrary padding, and unbalanced typography.
+   - Design with deliberate hierarchy, intentional negative space, clear visual alignment, and tactile feedback.
+3. **Copy & Text (`antislop-copywriting`)**:
+   - Never use promotional adjectives, vague filler, or hyperbolic descriptions.
+   - Keep UI labels, headers, and documentation direct, purposeful, and human-crafted.
+

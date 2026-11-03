@@ -130,6 +130,11 @@ const el = {
   settingsBtn: document.getElementById('settingsBtn'),
   closeSettingsBtn: document.getElementById('closeSettingsBtn'),
 
+  controlsModal: document.getElementById('controlsModal'),
+  controlsBtn: document.getElementById('controlsBtn'),
+  closeControlsBtn: document.getElementById('closeControlsBtn'),
+  dismissControlsBtn: document.getElementById('dismissControlsBtn'),
+
   deleteModal: document.getElementById('deleteModal'),
   deleteModalText: document.getElementById('deleteModalText'),
   cancelDeleteBtn: document.getElementById('cancelDeleteBtn'),
@@ -961,6 +966,20 @@ function closeSettingsModal() {
   }
 }
 
+function openControlsModal() {
+  if (el.controlsModal) {
+    el.controlsModal.classList.add('active');
+    el.controlsModal.setAttribute('aria-hidden', 'false');
+  }
+}
+
+function closeControlsModal() {
+  if (el.controlsModal) {
+    el.controlsModal.classList.remove('active');
+    el.controlsModal.setAttribute('aria-hidden', 'true');
+  }
+}
+
 // Delete Book Dialog
 function openDeleteModal(book) {
   bookPendingDelete = book;
@@ -1612,6 +1631,24 @@ function initEventListeners() {
     });
   }
 
+  // Controls Guide Modal Dialog
+  if (el.controlsBtn) {
+    el.controlsBtn.addEventListener('click', openControlsModal);
+  }
+  if (el.closeControlsBtn) {
+    el.closeControlsBtn.addEventListener('click', closeControlsModal);
+  }
+  if (el.dismissControlsBtn) {
+    el.dismissControlsBtn.addEventListener('click', closeControlsModal);
+  }
+  if (el.controlsModal) {
+    el.controlsModal.addEventListener('click', (e) => {
+      if (e.target === el.controlsModal) {
+        closeControlsModal();
+      }
+    });
+  }
+
   // Delete Modal
   if (el.cancelDeleteBtn) {
     el.cancelDeleteBtn.addEventListener('click', closeDeleteModal);
@@ -1633,6 +1670,9 @@ function initEventListeners() {
       }
       if (el.deleteModal && el.deleteModal.classList.contains('active')) {
         closeDeleteModal();
+      }
+      if (el.controlsModal && el.controlsModal.classList.contains('active')) {
+        closeControlsModal();
       }
     }
   });

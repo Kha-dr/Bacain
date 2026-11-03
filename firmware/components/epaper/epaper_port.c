@@ -97,13 +97,12 @@ static void epaper_gpio_init(void) {
     epaper_rst_1;
 }
 
+/* SSD1681 timing: min reset low pulse 10 us, recovery time 10 ms */
 static void epaper_reset(void) {
-    epaper_rst_1;
-    vTaskDelay(pdMS_TO_TICKS(50));
     epaper_rst_0;
-    vTaskDelay(pdMS_TO_TICKS(20));
+    vTaskDelay(pdMS_TO_TICKS(10));
     epaper_rst_1;
-    vTaskDelay(pdMS_TO_TICKS(50));
+    vTaskDelay(pdMS_TO_TICKS(10));
 }
 
 static void epaper_spi_init(void) {
@@ -319,6 +318,11 @@ void epaper_port_init_partial(void) {
     epaper_SendCommand(0x20);
     epaper_readbusyh();
 
+    epaper_SendCommand(0x01);  // Driver output control
+    epaper_SendData(0xC7);
+    epaper_SendData(0x00);
+    epaper_SendData(0x01);
+
     epaper_SendCommand(0x11);
     epaper_SendData(0x01);
 
@@ -447,15 +451,17 @@ void epaper_power_on(void) {
     if (!s_pwr_gpio_inited) {
         gpio_config_t conf = {};
         conf.intr_type = GPIO_INTR_DISABLE;
-        conf.mode = GPIO_MODE_OUTPUT;
+        conf.mode = GPIO_MODE_INPUT_OUTPUT;
         conf.pin_bit_mask = (1ULL << EPD_PWR_PIN);
         conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
         conf.pull_up_en = GPIO_PULLUP_ENABLE;
         ESP_ERROR_CHECK_WITHOUT_ABORT(gpio_config(&conf));
         s_pwr_gpio_inited = true;
     }
-    gpio_set_level(EPD_PWR_PIN, 0); // Low level = power on
-    vTaskDelay(pdMS_TO_TICKS(15));
+    if (gpio_get_level(EPD_PWR_PIN) != 0) {
+        gpio_set_level(EPD_PWR_PIN, 0);
+        vTaskDelay(pdMS_TO_TICKS(15));
+    }
 }
 
 void epaper_power_off(void) {

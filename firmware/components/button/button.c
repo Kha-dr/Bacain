@@ -4,6 +4,7 @@
 #include "driver/gpio.h"
 #include "esp_timer.h"
 #include "esp_log.h"
+#include "esp_system.h"
 
 #define TAG "BUTTON"
 
@@ -11,6 +12,7 @@
 #define DOWN_BUTTON_GPIO  BOARD_BTN_DOWN_PIN
 #define BOOT_BUTTON_GPIO  UP_BUTTON_GPIO
 #define PWR_BUTTON_GPIO   DOWN_BUTTON_GPIO
+#define CHORD_REBOOT_TICKS (2000 / 5) // 2000ms / 5ms per tick = 400 ticks
 
 static Button s_btn_boot;
 static Button s_btn_pwr;
@@ -49,6 +51,20 @@ static void on_pwr_double_click(Button *b) { send_event(BTN_ID_PWR, BTN_DOUBLE_C
 static void on_pwr_long_press(Button *b) { send_event(BTN_ID_PWR, BTN_LONG_PRESS); }
 
 static void button_timer_cb(void *arg) {
+    static uint16_t s_chord_ticks = 0;
+
+    if (gpio_get_level(BOOT_BUTTON_GPIO) == 0 && gpio_get_level(PWR_BUTTON_GPIO) == 0) {
+        s_chord_ticks++;
+        // Reset both button state machines so neither fires single clicks or long press
+        button_reset(&s_btn_boot);
+        button_reset(&s_btn_pwr);
+        if (s_chord_ticks >= CHORD_REBOOT_TICKS) {
+            esp_restart();
+        }
+    } else {
+        s_chord_ticks = 0;
+    }
+
     button_ticks();
 }
 

@@ -117,13 +117,13 @@ Build custom hardware profiles from the GitHub web interface without a local too
 
 #### Example Compiler Flags for `Extra IDF Build Args`:
 
-| Custom Requirement                                  | Compiler Macro Value                                                                                                                 |
-| :-------------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------- |
-| **Change Screen Resolution** (e.g. 250 x 122)       | `-DCONFIG_BOARD_DISPLAY_WIDTH=250 -DCONFIG_BOARD_DISPLAY_HEIGHT=122`                                                                 |
-| **Change Screen Orientation** (90 deg landscape)    | `-DCONFIG_BOARD_DISPLAY_ROTATION=1`                                                                                                  |
-| **Change Button Pins** (UP/BOOT=4, DOWN/PWR=5)       | `-DCONFIG_BOARD_BTN_UP_PIN=4 -DCONFIG_BOARD_BTN_DOWN_PIN=5`                                                                          |
-| **Change E-Paper SPI Pins**                          | `-DCONFIG_BOARD_EPD_DC_PIN=14 -DCONFIG_BOARD_EPD_CS_PIN=15`                                                                          |
-| **Combine Multiple Settings**                        | `-DCONFIG_BOARD_DISPLAY_WIDTH=296 -DCONFIG_BOARD_DISPLAY_HEIGHT=128 -DCONFIG_BOARD_DISPLAY_ROTATION=1 -DCONFIG_BOARD_BTN_UP_PIN=4`   |
+| Custom Requirement                               | Compiler Macro Value                                                                                                               |
+| :----------------------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------- |
+| **Change Screen Resolution** (e.g. 250 x 122)    | `-DCONFIG_BOARD_DISPLAY_WIDTH=250 -DCONFIG_BOARD_DISPLAY_HEIGHT=122`                                                               |
+| **Change Screen Orientation** (90 deg landscape) | `-DCONFIG_BOARD_DISPLAY_ROTATION=1`                                                                                                |
+| **Change Button Pins** (UP/BOOT=4, DOWN/PWR=5)   | `-DCONFIG_BOARD_BTN_UP_PIN=4 -DCONFIG_BOARD_BTN_DOWN_PIN=5`                                                                        |
+| **Change E-Paper SPI Pins**                      | `-DCONFIG_BOARD_EPD_DC_PIN=14 -DCONFIG_BOARD_EPD_CS_PIN=15`                                                                        |
+| **Combine Multiple Settings**                    | `-DCONFIG_BOARD_DISPLAY_WIDTH=296 -DCONFIG_BOARD_DISPLAY_HEIGHT=128 -DCONFIG_BOARD_DISPLAY_ROTATION=1 -DCONFIG_BOARD_BTN_UP_PIN=4` |
 
 ---
 
@@ -174,7 +174,48 @@ Windows note: Docker Desktop runs inside a WSL2 virtual machine that does not fo
 
 ---
 
-## 6. References & Links
+## 6. Power Management
+
+- **Auto-Sleep**: Enters deep sleep after 20 seconds of inactivity (`APP_INACTIVITY_SLEEP_SEC 20`).
+- **Sync Protection**: Inactivity sleep is inhibited on the Sync screen during active transfers.
+- **Static Screen Retention**: Screen content persists statically at 0.0 uA in deep sleep with instant wake (no clear flash).
+- **Power Off**: Selecting Power Off from the menu renders the logo before entering deep sleep.
+- **Ghosting Flush**: Automatic full refresh runs every 10 pages (`APP_FULL_REFRESH_INTERVAL 10`) to clear ghosting. Set to 0 to disable.
+- **Manual Refresh**: Trigger an immediate full refresh via the Refresh Screen menu item.
+
+---
+
+## 7. Navigation & Button Controls
+
+Navigation uses two physical buttons: UP (GPIO 0) and DOWN (GPIO 18).
+
+### Button Controls
+
+| Context | Action | Button | Function |
+| :--- | :--- | :--- | :--- |
+| **Reading** | Click | UP / DOWN | Previous / Next page |
+| | Double Click | UP | Toggle bookmark |
+| | Double Click | DOWN | Bookmarks list |
+| | Hold (>1.2s) | UP or DOWN | Open menu |
+| **Menu / Library / Bookmarks** | Click | UP / DOWN | Navigate |
+| | Double Click | UP or DOWN | Select / Open |
+| | Hold (>1.2s) | UP or DOWN | Back |
+| **Hardware Force Reboot** | Hold (2.0s) | UP + DOWN | Reboot device |
+| **Deep Sleep** | Click | UP or DOWN | Wake device |
+
+### On-Device Menu
+
+1. **Continue Reading**: Return to current book.
+2. **Book Library**: Browse and open books.
+3. **Font Size: [16px / 12px]**: Toggle reading font size.
+4. **Sync Books**: Web Bluetooth file transfer screen.
+5. **Nav Hints**: Toggle on-screen button hints.
+6. **Refresh Screen**: Full display refresh to clear ghosting.
+7. **Power Off**: Show sleep logo and enter deep sleep.
+
+---
+
+## 8. References & Links
 
 - **Hardware Reference Repository & Schematics**: [Waveshare ESP32-S3-ePaper-1.54](https://github.com/waveshareteam/ESP32-S3-ePaper-1.54)
 - **Windows USB Passthrough for WSL2**: [usbipd-win](https://github.com/dorssel/usbipd-win)

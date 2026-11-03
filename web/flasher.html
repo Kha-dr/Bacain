@@ -4,13 +4,78 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>BacaIn USB Flasher</title>
-  <meta name="description" content="Web Serial ESP32-S3 Firmware Flasher for BacaIn E-Reader">
+  <title>BacaIn Flasher</title>
+  <meta name="description" content="ESP32-S3 firmware installer for BacaIn">
   <meta name="theme-color" content="#2563eb">
   <link rel="icon" type="image/svg+xml" href="icon.svg">
   <link rel="apple-touch-icon" href="icon.svg">
   <link rel="manifest" href="manifest.json">
   <link rel="stylesheet" href="style.css">
+  <style>
+    .custom-file-details {
+      margin-top: 1rem;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      background: var(--bg-secondary);
+      transition: border-color var(--transition-fast);
+    }
+    .custom-file-details:hover {
+      border-color: var(--border-hover);
+    }
+    .custom-file-summary {
+      padding: 0.65rem 0.85rem;
+      font-size: 0.82rem;
+      font-weight: 500;
+      color: var(--text-secondary);
+      cursor: pointer;
+      user-select: none;
+    }
+    .custom-file-summary:focus-visible {
+      outline: 2px solid var(--accent-color);
+      outline-offset: -2px;
+      border-radius: var(--radius-sm);
+    }
+    .custom-file-content {
+      padding: 0.75rem;
+      border-top: 1px solid var(--border-color);
+    }
+    .release-select-group {
+      margin-bottom: 0.85rem;
+    }
+    .release-select-label {
+      display: block;
+      font-size: 0.76rem;
+      font-weight: 500;
+      color: var(--text-secondary);
+      margin-bottom: 0.35rem;
+    }
+    .release-meta-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 0.5rem;
+      margin-top: 0.75rem;
+      padding: 0.65rem 0.75rem;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      font-size: 0.8rem;
+    }
+    .release-meta-item .meta-label {
+      font-size: 0.68rem;
+      color: var(--text-muted);
+      display: block;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .release-meta-item .meta-value {
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+    .release-meta-item .meta-mono {
+      font-family: var(--font-mono);
+      color: var(--text-secondary);
+    }
+  </style>
   <script src="config.js" defer></script>
   <script>
     const savedTheme = localStorage.getItem('ereader_pwa_theme');
@@ -25,17 +90,17 @@
     <!-- Header Section -->
     <header class="app-header">
       <div class="brand-section">
-        <img src="icon.svg" alt="BacaIn Logo" class="brand-logo">
+        <img src="icon.svg" alt="BacaIn logo" class="brand-logo">
         <div class="brand-text">
           <h1><span>Baca<span style="color: var(--accent-color);">In</span></span> <span
               class="brand-badge">Flasher</span></h1>
-          <p>ESP32-S3 Web Serial Firmware Flashing Tool</p>
+          <p>ESP32-S3 firmware installer</p>
         </div>
       </div>
 
       <div class="header-actions">
         <a id="githubBtn" href="https://github.com/khad1r/BacaIn" target="_blank" rel="noopener noreferrer"
-          class="btn-icon" aria-label="GitHub Repository" title="GitHub Repository">
+          class="btn-icon" aria-label="GitHub repository" title="GitHub repository">
           <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
             stroke-linecap="round" stroke-linejoin="round">
             <path
@@ -50,13 +115,13 @@
             <line x1="19" y1="12" x2="5" y2="12"></line>
             <polyline points="12 19 5 12 12 5"></polyline>
           </svg>
-          <span>Back to Dashboard</span>
+          <span>Dashboard</span>
         </a>
       </div>
     </header>
 
     <!-- Main Flasher Content -->
-    <main>
+    <main id="main-content" role="main">
       <esp-web-flasher id="espFlasher"></esp-web-flasher>
     </main>
   </div>

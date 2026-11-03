@@ -32,3 +32,8 @@ CONFIG_FATFS_EXFAT=y
 # Power Management & Sleep
 CONFIG_PM_ENABLE=y
 CONFIG_RTC_CLK_SRC_EXT_CRYS=n
+
+# Main task stack size (default 3584 is too small for FATFS and text pager)
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=16384
+CONFIG_SPIRAM_IGNORE_NOTFOUND=y
+

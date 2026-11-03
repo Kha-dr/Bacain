@@ -99,7 +99,7 @@ static uint16_t s_current_mtu = 23;
 
 /* Storage Target State */
 static storage_target_t s_storage_target = STORAGE_TARGET_FLASH;
-static uint16_t         s_sleep_timeout_sec = 60;
+static uint16_t         s_sleep_timeout_sec = 20;
 
 /* File Upload State */
 static FILE    *s_upload_fp = NULL;
@@ -624,7 +624,16 @@ static void handle_cmd_set_storage_target(const ble_sync_cmd_msg_t *cmd)
 static void handle_cmd_set_font(uint8_t font_id)
 {
     ESP_LOGI(TAG, "Setting font: %u", (unsigned)font_id);
-    text_pager_set_font_size(font_id == 0 ? TEXT_PAGER_FONT_16 : TEXT_PAGER_FONT_12);
+    text_pager_font_size_t new_font = (font_id == 0 ? TEXT_PAGER_FONT_16 : TEXT_PAGER_FONT_12);
+    text_pager_set_font_size(new_font);
+    nvs_handle_t h;
+    if (nvs_open("settings", NVS_READWRITE, &h) == ESP_OK) {
+        nvs_set_u8(h, "font_size", new_font == TEXT_PAGER_FONT_12 ? 0 : 1);
+        nvs_commit(h);
+        nvs_close(h);
+    } else {
+        ESP_LOGE(TAG, "Failed to open NVS settings to save font_size");
+    }
     uint8_t resp[2] = { BLE_SYNC_OP_SET_FONT, BLE_SYNC_STATUS_OK };
     ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
     if (s_event_cb) {

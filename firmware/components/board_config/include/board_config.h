@@ -56,7 +56,7 @@ extern "C" {
 #ifdef CONFIG_BOARD_DISPLAY_ROTATION
 #define BOARD_DISPLAY_ROTATION      CONFIG_BOARD_DISPLAY_ROTATION
 #else
-#define BOARD_DISPLAY_ROTATION      0 // 0: upright portrait, 1: 90 deg, 2: 180 deg, 3: 270 deg
+#define BOARD_DISPLAY_ROTATION      0
 #endif
 #endif
 

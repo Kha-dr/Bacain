@@ -218,9 +218,14 @@ static esp_err_t parse_page_at_offset(size_t offset, text_pager_page_t *page) {
         return ESP_FAIL;
     }
 
-    uint8_t read_buf[2048];
-    size_t bytes_read = fread(read_buf, 1, sizeof(read_buf), s_book_fp);
+    uint8_t *read_buf = malloc(2048);
+    if (read_buf == NULL) {
+        ESP_LOGE(TAG, "Failed to allocate read buffer");
+        return ESP_ERR_NO_MEM;
+    }
+    size_t bytes_read = fread(read_buf, 1, 2048, s_book_fp);
     if (bytes_read == 0) {
+        free(read_buf);
         page->page_end_offset = s_pager.total_bytes;
         page->is_eof = true;
         page->is_bof = (offset == 0);
@@ -329,7 +334,7 @@ static esp_err_t parse_page_at_offset(size_t offset, text_pager_page_t *page) {
     }
 
     page->page_end_offset = offset + cursor;
-    if (page->page_end_offset >= s_pager.total_bytes || (bytes_read < sizeof(read_buf) && cursor >= bytes_read)) {
+    if (page->page_end_offset >= s_pager.total_bytes || (bytes_read < 2048 && cursor >= bytes_read)) {
         page->page_end_offset = s_pager.total_bytes;
         page->is_eof = true;
     } else {
@@ -349,6 +354,7 @@ static esp_err_t parse_page_at_offset(size_t offset, text_pager_page_t *page) {
         page->progress_pct = 0;
     }
 
+    free(read_buf);
     return ESP_OK;
 }
 
@@ -364,24 +370,31 @@ static size_t backtrack_prev_page_offset(size_t current_offset) {
     size_t backtrack = avg_page_bytes * 2;
     size_t candidate = (current_offset > backtrack) ? (current_offset - backtrack) : 0;
 
-    text_pager_page_t temp_page;
+    text_pager_page_t *temp_page = malloc(sizeof(text_pager_page_t));
+    if (temp_page == NULL) {
+        ESP_LOGE(TAG, "Failed to allocate temp_page in backtrack");
+        return candidate;
+    }
     size_t curr = candidate;
     size_t prev_start = candidate;
 
     while (curr < current_offset) {
-        if (parse_page_at_offset(curr, &temp_page) != ESP_OK) {
+        if (parse_page_at_offset(curr, temp_page) != ESP_OK) {
             break;
         }
-        if (temp_page.page_end_offset >= current_offset) {
-            return temp_page.page_start_offset;
+        if (temp_page->page_end_offset >= current_offset) {
+            size_t ret = temp_page->page_start_offset;
+            free(temp_page);
+            return ret;
         }
-        if (temp_page.page_end_offset <= curr) {
+        if (temp_page->page_end_offset <= curr) {
             break;
         }
-        prev_start = temp_page.page_start_offset;
-        curr = temp_page.page_end_offset;
+        prev_start = temp_page->page_start_offset;
+        curr = temp_page->page_end_offset;
     }
 
+    free(temp_page);
     return prev_start;
 }
 

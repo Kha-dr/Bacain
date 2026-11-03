@@ -7,6 +7,7 @@
 #include "nvs.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "esp_attr.h"
 #include "driver/gpio.h"
 
 #include "app_config.h"
@@ -24,14 +25,42 @@ extern void reader_ui_set_rotation(uint8_t rotation);
 #define TAG "MAIN"
 
 static QueueHandle_t s_btn_queue = NULL;
-static reader_view_t s_current_view = VIEW_READING;
+static reader_view_t s_current_view = VIEW_MENU;
 static int s_menu_index = 0;
 static int s_book_index = 0;
 static int s_bookmark_index = 0;
 static int64_t s_last_activity_us = 0;
 
+RTC_DATA_ATTR static reader_view_t s_rtc_last_view = VIEW_MENU;
+RTC_DATA_ATTR static int s_rtc_menu_index = 0;
+RTC_DATA_ATTR static int s_rtc_book_index = 0;
+RTC_DATA_ATTR static int s_rtc_bookmark_index = 0;
+RTC_DATA_ATTR static uint32_t s_redraw_counter = 0;
+RTC_DATA_ATTR static bool s_rtc_has_sdcard = false;
+
 static void update_activity(void) {
     s_last_activity_us = esp_timer_get_time();
+}
+
+static void enter_deep_sleep_with_state(void) {
+    s_rtc_last_view = s_current_view;
+    s_rtc_menu_index = s_menu_index;
+    s_rtc_book_index = s_book_index;
+    s_rtc_bookmark_index = s_bookmark_index;
+    book_library_update_offset(text_pager_get_current_offset());
+    book_library_flush_state();
+    vTaskDelay(pdMS_TO_TICKS(500));
+    power_mgr_enter_deep_sleep(0);
+}
+
+static void render_reading_page(void) {
+    s_redraw_counter++;
+    if (APP_FULL_REFRESH_INTERVAL > 0 && s_redraw_counter >= APP_FULL_REFRESH_INTERVAL) {
+        s_redraw_counter = 0;
+        reader_ui_render_reading_full();
+    } else {
+        reader_ui_render_reading();
+    }
 }
 
 static void on_ble_sync_event(ble_sync_event_t event, const void *param, void *user_data) {
@@ -44,13 +73,7 @@ static void on_ble_sync_event(ble_sync_event_t event, const void *param, void *u
     }
 
     if (event == BLE_SYNC_EVT_REQUEST_SLEEP) {
-        if (s_current_view != VIEW_READING) {
-            reader_ui_render_sleeping();
-        }
-        book_library_update_offset(text_pager_get_current_offset());
-        book_library_flush_state();
-        vTaskDelay(pdMS_TO_TICKS(500));
-        power_mgr_enter_deep_sleep(0);
+        enter_deep_sleep_with_state();
         return;
     }
 
@@ -80,6 +103,8 @@ void app_main(void) {
     nvs_handle_t nvs_handle;
     uint8_t rot = BOARD_DISPLAY_ROTATION;
     uint8_t btn_invert = 0;
+    uint8_t font_size = 1; // 0: 12px, 1: 16px (default TEXT_PAGER_FONT_16)
+    uint8_t show_hints = 1;
     if (nvs_open("settings", NVS_READWRITE, &nvs_handle) == ESP_OK) {
         if (nvs_get_u8(nvs_handle, "rotation", &rot) != ESP_OK) {
             rot = BOARD_DISPLAY_ROTATION;
@@ -87,9 +112,16 @@ void app_main(void) {
         if (nvs_get_u8(nvs_handle, "btn_invert", &btn_invert) != ESP_OK) {
             btn_invert = 0;
         }
+        if (nvs_get_u8(nvs_handle, "font_size", &font_size) != ESP_OK) {
+            font_size = 1;
+        }
+        if (nvs_get_u8(nvs_handle, "nav_hints", &show_hints) != ESP_OK) {
+            show_hints = 1;
+        }
         nvs_close(nvs_handle);
     }
     reader_ui_set_rotation(rot);
+    reader_ui_set_show_nav_hints(show_hints != 0);
     button_set_inverted(btn_invert != 0);
 
     // 3. Initialize Peripherals
@@ -99,14 +131,6 @@ void app_main(void) {
     } else {
         ESP_LOGE(TAG, "Internal Flash storage initialization failed (0x%x)", flash_ret);
     }
-
-    ret = sdcard_init();
-    if (ret != ESP_OK) {
-        ESP_LOGI(TAG, "MicroSD not detected, using internal Flash storage");
-    }
-
-    ESP_ERROR_CHECK(reader_ui_init());
-    ESP_ERROR_CHECK(button_init(&s_btn_queue));
 
     wakeup_reason_t wakeup = power_mgr_get_wakeup_cause();
     if (button_get_inverted()) {
@@ -118,17 +142,40 @@ void app_main(void) {
     }
     ESP_LOGI(TAG, "Wakeup reason: %d", wakeup);
 
+    if (wakeup == WAKEUP_REASON_COLD_BOOT) {
+        ret = sdcard_init();
+        if (ret == ESP_OK) {
+            s_rtc_has_sdcard = true;
+        } else {
+            s_rtc_has_sdcard = false;
+            ESP_LOGI(TAG, "MicroSD not detected, using internal Flash storage");
+        }
+    } else if (s_rtc_has_sdcard) {
+        ret = sdcard_init();
+        if (ret != ESP_OK) {
+            s_rtc_has_sdcard = false;
+            ESP_LOGI(TAG, "MicroSD not detected, using internal Flash storage");
+        }
+    }
+
+    ESP_ERROR_CHECK(reader_ui_init(wakeup == WAKEUP_REASON_COLD_BOOT));
+    ESP_ERROR_CHECK(button_init(&s_btn_queue));
+
     // Show splash screen with official BacaIn icon on cold boot before library scan
-    if (wakeup == WAKEUP_REASON_NONE) {
+    if (wakeup == WAKEUP_REASON_COLD_BOOT) {
         reader_ui_render_splash("BacaIn", "Loading library...");
+        vTaskDelay(pdMS_TO_TICKS(1000));
     }
 
     // 4. Initialize Reader Core
     book_library_init();
     book_library_set_storage_target(STORAGE_TARGET_FLASH);
     ble_sync_set_storage_target(STORAGE_TARGET_FLASH);
-    book_library_scan();
+    if (wakeup == WAKEUP_REASON_COLD_BOOT) {
+        book_library_scan();
+    }
     text_pager_init();
+    text_pager_set_font_size(font_size == 0 ? TEXT_PAGER_FONT_12 : TEXT_PAGER_FONT_16);
 
     // 5. Register BLE sync callback
     ble_sync_register_callback(on_ble_sync_event, NULL);
@@ -157,30 +204,106 @@ void app_main(void) {
     }
 
     if (opened) {
-        s_current_view = VIEW_READING;
-        if (wakeup == WAKEUP_REASON_BOOT_BUTTON) {
-            text_pager_prev_page();
-            book_library_update_offset(text_pager_get_current_offset());
-        } else if (wakeup == WAKEUP_REASON_PWR_BUTTON) {
-            text_pager_next_page();
-            book_library_update_offset(text_pager_get_current_offset());
-        }
-        reader_ui_render_reading();
-        ESP_LOGI(TAG, "Display force-render initiated successfully.");
-
         if (wakeup == WAKEUP_REASON_BOOT_BUTTON || wakeup == WAKEUP_REASON_PWR_BUTTON) {
-            while (gpio_get_level(GPIO_NUM_0) == 0 || gpio_get_level(GPIO_NUM_18) == 0) {
-                vTaskDelay(pdMS_TO_TICKS(10));
+            switch (s_rtc_last_view) {
+                case VIEW_READING:
+                    s_current_view = VIEW_READING;
+                    if (wakeup == WAKEUP_REASON_BOOT_BUTTON) {
+                        text_pager_prev_page();
+                    } else if (wakeup == WAKEUP_REASON_PWR_BUTTON) {
+                        text_pager_next_page();
+                    }
+                    book_library_update_offset(text_pager_get_current_offset());
+                    render_reading_page();
+                    break;
+
+                case VIEW_MENU:
+                    s_current_view = VIEW_MENU;
+                    s_menu_index = s_rtc_menu_index;
+                    if (wakeup == WAKEUP_REASON_BOOT_BUTTON) {
+                        s_menu_index = (s_menu_index - 1 + 7) % 7;
+                    } else if (wakeup == WAKEUP_REASON_PWR_BUTTON) {
+                        s_menu_index = (s_menu_index + 1) % 7;
+                    }
+                    reader_ui_render_menu(s_menu_index);
+                    break;
+
+                case VIEW_BOOK_LIST:
+                    s_current_view = VIEW_BOOK_LIST;
+                    s_book_index = s_rtc_book_index;
+                    {
+                        int count = (int)book_library_get_count();
+                        if (count > 0) {
+                            if (wakeup == WAKEUP_REASON_BOOT_BUTTON) {
+                                s_book_index = (s_book_index - 1 + count) % count;
+                            } else if (wakeup == WAKEUP_REASON_PWR_BUTTON) {
+                                s_book_index = (s_book_index + 1) % count;
+                            }
+                        }
+                    }
+                    reader_ui_render_book_list(s_book_index);
+                    break;
+
+                case VIEW_BOOKMARKS:
+                    s_current_view = VIEW_BOOKMARKS;
+                    s_bookmark_index = s_rtc_bookmark_index;
+                    {
+                        const reading_state_t *st = book_library_get_state();
+                        int count = (st != NULL) ? (int)st->bookmark_count : 0;
+                        if (count > 0) {
+                            if (wakeup == WAKEUP_REASON_BOOT_BUTTON) {
+                                s_bookmark_index = (s_bookmark_index - 1 + count) % count;
+                            } else if (wakeup == WAKEUP_REASON_PWR_BUTTON) {
+                                s_bookmark_index = (s_bookmark_index + 1) % count;
+                            }
+                        }
+                    }
+                    reader_ui_render_bookmarks(s_bookmark_index);
+                    break;
+
+                case VIEW_NAV_HINTS:
+                    s_current_view = VIEW_NAV_HINTS;
+                    reader_ui_render_nav_hints();
+                    break;
+
+                case VIEW_BLE_SYNC:
+                    s_current_view = VIEW_BLE_SYNC;
+                    ble_sync_start();
+                    reader_ui_render_ble_sync(ble_sync_is_connected(), ble_sync_get_bytes_received());
+                    break;
+
+                default:
+                    s_rtc_last_view = VIEW_MENU;
+                    s_rtc_menu_index = 0;
+                    s_current_view = VIEW_MENU;
+                    s_menu_index = 0;
+                    reader_ui_render_menu(s_menu_index);
+                    break;
             }
-            if (s_btn_queue) {
-                xQueueReset(s_btn_queue);
-            }
+        } else {
+            s_rtc_last_view = VIEW_MENU;
+            s_rtc_menu_index = 0;
+            s_current_view = VIEW_MENU;
+            s_menu_index = 0;
+            reader_ui_render_menu(s_menu_index);
         }
+        ESP_LOGI(TAG, "Display force-render initiated successfully.");
     } else {
+        s_rtc_last_view = VIEW_MENU;
+        s_rtc_menu_index = 0;
         s_current_view = VIEW_BLE_SYNC;
         ble_sync_start();
         reader_ui_render_ble_sync(false, 0);
         ESP_LOGI(TAG, "Display force-render initiated successfully.");
+    }
+
+    if (wakeup == WAKEUP_REASON_BOOT_BUTTON || wakeup == WAKEUP_REASON_PWR_BUTTON) {
+        while (gpio_get_level(GPIO_NUM_0) == 0 || gpio_get_level(GPIO_NUM_18) == 0) {
+            vTaskDelay(pdMS_TO_TICKS(10));
+        }
+        if (s_btn_queue) {
+            xQueueReset(s_btn_queue);
+        }
     }
 
     update_activity();
@@ -203,17 +326,23 @@ void app_main(void) {
                     reader_ui_render_menu(s_menu_index);
                 } else if (s_current_view == VIEW_BOOK_LIST) {
                     reader_ui_render_book_list(s_book_index);
+                } else if (s_current_view == VIEW_NAV_HINTS) {
+                    reader_ui_render_nav_hints();
                 }
                 continue;
             }
 
             switch (s_current_view) {
                 case VIEW_READING:
-                    if (evt.button == BTN_ID_BOOT) {
+                    if (evt.type == BTN_LONG_PRESS) {
+                        s_current_view = VIEW_MENU;
+                        s_menu_index = 0;
+                        reader_ui_render_menu(s_menu_index);
+                    } else if (evt.button == BTN_ID_BOOT) {
                         if (evt.type == BTN_CLICK) {
                             if (text_pager_prev_page() == ESP_OK) {
-                                reader_ui_render_reading();
                                 book_library_update_offset(text_pager_get_current_offset());
+                                render_reading_page();
                             }
                         } else if (evt.type == BTN_DOUBLE_CLICK) {
                             size_t off = text_pager_get_current_offset();
@@ -223,16 +352,12 @@ void app_main(void) {
                                 book_library_add_bookmark(off);
                             }
                             reader_ui_render_reading();
-                        } else if (evt.type == BTN_LONG_PRESS) {
-                            s_current_view = VIEW_MENU;
-                            s_menu_index = 0;
-                            reader_ui_render_menu(s_menu_index);
                         }
                     } else if (evt.button == BTN_ID_PWR) {
                         if (evt.type == BTN_CLICK) {
                             if (text_pager_next_page() == ESP_OK) {
-                                reader_ui_render_reading();
                                 book_library_update_offset(text_pager_get_current_offset());
+                                render_reading_page();
                             }
                         } else if (evt.type == BTN_DOUBLE_CLICK) {
                             s_current_view = VIEW_BOOKMARKS;
@@ -245,10 +370,10 @@ void app_main(void) {
                 case VIEW_MENU:
                     if (evt.type == BTN_CLICK) {
                         if (evt.button == BTN_ID_BOOT) {
-                            s_menu_index = (s_menu_index - 1 + 6) % 6;
+                            s_menu_index = (s_menu_index - 1 + 7) % 7;
                             reader_ui_render_menu(s_menu_index);
                         } else if (evt.button == BTN_ID_PWR) {
-                            s_menu_index = (s_menu_index + 1) % 6;
+                            s_menu_index = (s_menu_index + 1) % 7;
                             reader_ui_render_menu(s_menu_index);
                         }
                     } else if (evt.type == BTN_DOUBLE_CLICK) {
@@ -256,26 +381,37 @@ void app_main(void) {
                             s_current_view = VIEW_READING;
                             reader_ui_render_reading();
                         } else if (s_menu_index == 1) { // Book Library
+                            book_library_scan();
                             s_current_view = VIEW_BOOK_LIST;
                             s_book_index = 0;
                             reader_ui_render_book_list(s_book_index);
                         } else if (s_menu_index == 2) { // Font Size Toggle
                             text_pager_font_size_t f = text_pager_get_font_size();
-                            text_pager_set_font_size(f == TEXT_PAGER_FONT_16 ? TEXT_PAGER_FONT_12 : TEXT_PAGER_FONT_16);
+                            text_pager_font_size_t new_font = (f == TEXT_PAGER_FONT_16 ? TEXT_PAGER_FONT_12 : TEXT_PAGER_FONT_16);
+                            text_pager_set_font_size(new_font);
+                            nvs_handle_t h;
+                            if (nvs_open("settings", NVS_READWRITE, &h) == ESP_OK) {
+                                nvs_set_u8(h, "font_size", new_font == TEXT_PAGER_FONT_12 ? 0 : 1);
+                                nvs_commit(h);
+                                nvs_close(h);
+                            } else {
+                                ESP_LOGE(TAG, "Failed to open NVS settings to save font_size");
+                            }
                             reader_ui_render_menu(s_menu_index);
                         } else if (s_menu_index == 3) { // Sync BLE
+                            book_library_scan();
                             s_current_view = VIEW_BLE_SYNC;
                             ble_sync_start();
                             reader_ui_render_ble_sync(ble_sync_is_connected(), ble_sync_get_bytes_received());
-                        } else if (s_menu_index == 4) { // Nav Hints Toggle
-                            reader_ui_set_show_nav_hints(!reader_ui_get_show_nav_hints());
-                            reader_ui_render_menu(s_menu_index);
-                        } else if (s_menu_index == 5) { // Power Off / Sleep
+                        } else if (s_menu_index == 4) { // Nav Hints Screen
+                            s_current_view = VIEW_NAV_HINTS;
+                            reader_ui_render_nav_hints();
+                        } else if (s_menu_index == 5) { // Refresh Screen
+                            s_redraw_counter = 0;
+                            reader_ui_render_menu_full(s_menu_index);
+                        } else if (s_menu_index == 6) { // Power Off
                             reader_ui_render_sleeping();
-                            book_library_update_offset(text_pager_get_current_offset());
-                            book_library_flush_state();
-                            vTaskDelay(pdMS_TO_TICKS(500));
-                            power_mgr_enter_deep_sleep(0);
+                            enter_deep_sleep_with_state();
                         }
                     }
                     break;
@@ -314,50 +450,18 @@ void app_main(void) {
                                 }
                             }
                         } else if (evt.type == BTN_LONG_PRESS) {
-                            if (evt.button == BTN_ID_BOOT) {
-                                s_current_view = VIEW_MENU;
-                                reader_ui_render_menu(s_menu_index);
-                            } else if (evt.button == BTN_ID_PWR) {
-                                reader_ui_render_sleeping();
-                                book_library_update_offset(text_pager_get_current_offset());
-                                book_library_flush_state();
-                                vTaskDelay(pdMS_TO_TICKS(500));
-                                power_mgr_enter_deep_sleep(0);
-                            }
+                            s_current_view = VIEW_MENU;
+                            reader_ui_render_menu(s_menu_index);
                         }
                     }
                     break;
 
                 case VIEW_BLE_SYNC:
-                    if (evt.button == BTN_ID_BOOT && evt.type == BTN_LONG_PRESS) {
+                    if (evt.type == BTN_LONG_PRESS) {
                         ble_sync_stop();
                         book_library_scan();
-                        const text_pager_page_t *p = text_pager_get_current_page();
-                        if (!p && book_library_get_count() > 0) {
-                            reading_state_t st;
-                            if (book_library_load_state(&st) == ESP_OK && strlen(st.active_book_path) > 0) {
-                                text_pager_open_book(st.active_book_path, st.byte_offset);
-                            } else {
-                                size_t bcount = book_library_get_count();
-                                for (size_t bi = 0; bi < bcount; bi++) {
-                                    const book_info_t *b = book_library_get_book(bi);
-                                    if (b && b->type == LIBRARY_ENTRY_FILE) {
-                                        if (text_pager_open_book(b->path, 0) == ESP_OK) {
-                                            book_library_set_active_book(b->path, true);
-                                            break;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        if (book_library_get_count() > 0) {
-                            s_current_view = VIEW_READING;
-                            reader_ui_render_reading();
-                        } else {
-                            s_current_view = VIEW_BLE_SYNC;
-                            ble_sync_start();
-                            reader_ui_render_ble_sync(false, 0);
-                        }
+                        s_current_view = VIEW_MENU;
+                        reader_ui_render_menu(s_menu_index);
                     }
                     break;
 
@@ -388,22 +492,36 @@ void app_main(void) {
                         }
                     }
                     break;
+
+                case VIEW_NAV_HINTS:
+                    if (evt.type == BTN_DOUBLE_CLICK) {
+                        bool new_hints = !reader_ui_get_show_nav_hints();
+                        reader_ui_set_show_nav_hints(new_hints);
+                        nvs_handle_t h;
+                        if (nvs_open("settings", NVS_READWRITE, &h) == ESP_OK) {
+                            nvs_set_u8(h, "nav_hints", new_hints ? 1 : 0);
+                            nvs_commit(h);
+                            nvs_close(h);
+                        } else {
+                            ESP_LOGE(TAG, "Failed to open NVS settings to save nav_hints");
+                        }
+                        reader_ui_render_nav_hints();
+                    } else if (evt.type == BTN_LONG_PRESS) {
+                        s_current_view = VIEW_MENU;
+                        reader_ui_render_menu(s_menu_index);
+                    }
+                    break;
             }
         }
 
-        // Auto-sleep check for inactivity (active in all views except active BLE transfer)
-        if (s_current_view != VIEW_BLE_SYNC) {
+        if (s_current_view == VIEW_BLE_SYNC) {
+            s_last_activity_us = esp_timer_get_time();
+        } else {
             int64_t elapsed_sec = (esp_timer_get_time() - s_last_activity_us) / 1000000LL;
             uint16_t timeout_sec = ble_sync_get_sleep_timeout();
             if (timeout_sec > 0 && elapsed_sec >= timeout_sec) {
                 ESP_LOGI(TAG, "Inactivity timeout (%llds >= %us). Entering deep sleep...", elapsed_sec, timeout_sec);
-                if (s_current_view != VIEW_READING) {
-                    reader_ui_render_sleeping();
-                }
-                book_library_update_offset(text_pager_get_current_offset());
-                book_library_flush_state();
-                vTaskDelay(pdMS_TO_TICKS(500));
-                power_mgr_enter_deep_sleep(0);
+                enter_deep_sleep_with_state();
             }
         }
     }

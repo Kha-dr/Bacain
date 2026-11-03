@@ -38,8 +38,12 @@ void power_mgr_early_init(void) {
 
     // 2. Disable audio amplifier rails (active-low PMOS: 1 = OFF) and LED to prevent power waste
     gpio_reset_pin(LED_GREEN_PIN);
+    uint64_t audio_pin_mask = (1ULL << AUDIO_PWR_PIN) | (1ULL << LED_GREEN_PIN);
+    if (GPIO_IS_VALID_OUTPUT_GPIO(AUDIO_PA_PIN)) {
+        audio_pin_mask |= (1ULL << AUDIO_PA_PIN);
+    }
     gpio_config_t audio_conf = {
-        .pin_bit_mask = (1ULL << AUDIO_PWR_PIN) | (1ULL << AUDIO_PA_PIN) | (1ULL << LED_GREEN_PIN),
+        .pin_bit_mask = audio_pin_mask,
         .mode = GPIO_MODE_OUTPUT,
         .pull_up_en = GPIO_PULLUP_ENABLE,
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
@@ -47,7 +51,9 @@ void power_mgr_early_init(void) {
     };
     gpio_config(&audio_conf);
     gpio_set_level(AUDIO_PWR_PIN, 1); // 1 = OFF
-    gpio_set_level(AUDIO_PA_PIN, 0);  // 0 = Mute
+    if (GPIO_IS_VALID_OUTPUT_GPIO(AUDIO_PA_PIN)) {
+        gpio_set_level(AUDIO_PA_PIN, 0);  // 0 = Mute
+    }
     gpio_set_level(LED_GREEN_PIN, 1); // 1 = OFF (Active-Low)
 
     // 3. Release any hold from prior deep sleep now that pins are driven HIGH
