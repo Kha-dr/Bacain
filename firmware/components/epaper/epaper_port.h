@@ -14,8 +14,8 @@
 #define EPD_COLOR_WHITE    0xFF
 
 // Backward-compatible color aliases
-#define EPD_1IN54G_BLACK   0x00
-#define EPD_1IN54G_WHITE   0xFF
+#define EPD_1IN54G_BLACK   EPD_COLOR_BLACK
+#define EPD_1IN54G_WHITE   EPD_COLOR_WHITE
 
 #ifdef __cplusplus
 extern "C" {

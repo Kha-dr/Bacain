@@ -90,11 +90,11 @@ static inline size_t get_max_lines(text_pager_font_size_t font_size, uint16_t di
 }
 
 static inline UWORD get_color_black(void) {
-    return (Paint.Scale == 4) ? EPD_1IN54G_BLACK : BLACK;
+    return (Paint.Scale == 4) ? EPD_COLOR_BLACK : BLACK;
 }
 
 static inline UWORD get_color_white(void) {
-    return (Paint.Scale == 4) ? EPD_1IN54G_WHITE : WHITE;
+    return (Paint.Scale == 4) ? EPD_COLOR_WHITE : WHITE;
 }
 
 static void draw_safe_char(UWORD x, UWORD y, char c, sFONT *font, UWORD fg, UWORD bg) {

@@ -49,16 +49,28 @@ extern "C" {
 #define BOARD_EPD_PWR_PIN           6
 #endif
 
+#ifndef BOARD_SDMMC_CLK_PIN
+#define BOARD_SDMMC_CLK_PIN         39
+#endif
+
+#ifndef BOARD_SDMMC_CMD_PIN
+#define BOARD_SDMMC_CMD_PIN         41
+#endif
+
+#ifndef BOARD_SDMMC_D0_PIN
+#define BOARD_SDMMC_D0_PIN          40
+#endif
+
 #ifndef BOARD_SD_CLK_PIN
-#define BOARD_SD_CLK_PIN            14
+#define BOARD_SD_CLK_PIN            BOARD_SDMMC_CLK_PIN
 #endif
 
 #ifndef BOARD_SD_CMD_PIN
-#define BOARD_SD_CMD_PIN            15
+#define BOARD_SD_CMD_PIN            BOARD_SDMMC_CMD_PIN
 #endif
 
 #ifndef BOARD_SD_D0_PIN
-#define BOARD_SD_D0_PIN             16
+#define BOARD_SD_D0_PIN             BOARD_SDMMC_D0_PIN
 #endif
 
 #ifndef BOARD_BTN_UP_PIN

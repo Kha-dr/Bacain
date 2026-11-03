@@ -1,40 +1,47 @@
-# Project Agent Rules & Workflow (`AGENTS.md`)
+# Agent Rules & Workflow (`AGENTS.md`)
 
-Aturan ini bersifat **WAJIB (`always_on`)** untuk setiap agent dan subagent yang bekerja di repositori ini.
+These rules are mandatory for all agents and subagents operating in this repository.
 
-## 1. Filosofi Kode (`ponytail` + Zero-Mock)
+## 1. Code Standards (Ponytail & Zero-Mock)
 
 1. **Zero Mock / Zero Fake Data**:
-   - Dilarang keras membuat implementasi mock, dummy return, progress bar palsu, atau angka telemetri tiruan (`Math.random()`, `setTimeout` palsu, dsb.) agar fitur terlihat "jadi".
-   - Jika suatu engine atau fitur belum diimplementasikan (`direct-ort`, `wasm-ggml`, `webnn`), tandai `this.available = false` dan lempar `new Error('... belum tersedia.')` secara jujur dan eksplisit.
+   - Never implement mocks, dummy returns, simulated progress, or fake metrics (`Math.random()`, fake timers).
+   - If a feature or driver is not implemented, set `this.available = false` and throw `new Error('... not implemented')`.
 2. **Zero Silent Fallback**:
-   - Dilarang keras melakukan fallback diam-diam ke engine/metode lain saat inisialisasi, warmup, atau transkripsi gagal, serta dilarang membuat blok `catch {}` kosong yang menelan error.
-3. **Ponytail (Smallest Complete Change)**:
-   - Tulis perubahan terkecil yang menyelesaikan akar masalah secara tuntas tanpa abstraksi berlapis, dead code, atau spekulasi fitur masa depan.
+   - Never catch errors silently or fall back without logging and throwing. Empty `catch {}` blocks are forbidden.
+3. **Ponytail (Minimal Complete Change)**:
+   - Make the smallest complete change that solves the issue. Avoid speculative abstractions, unused code, and unnecessary layers.
+4. **KISS (Keep It Stupid Simple)**:
+   - Prefer the simplest workable solution in code, architecture, and documentation.
+   - Avoid verbose explanations, unnecessary wrapper layers, and convoluted logic when a straightforward solution exists.
 
-## 2. Protokol Delegasi Multi-Subagent (Anti-Context-Poisoning & Anti-Halusinasi)
+## 2. Multi-Subagent Protocol
 
-Untuk menjaga context window main agent tetap ringan dan mencegah _context poisoning_ / halusinasi pada subagent:
+To prevent context exhaustion and hallucination:
 
-1. **Granularitas Sempit & Non-Overlapping**:
-   - Saat mendelegasikan tugas ke subagent (`invoke_subagent`), pecah pekerjaan menjadi unit-unit kecil yang **spesifik pada 1–4 berkas saja** dan **tidak saling tumpang-tindih (non-overlapping file scope)** antar subagent paralel.
-   - Cantumkan daftar berkas yang boleh diubah (`RUANG LINGKUP BERKAS`) dan larang menyentuh berkas di luar daftar tersebut.
-2. **Instruksi Baris & Spesifikasi Eksplisit (Zero-Ambiguity Prompting)**:
-   - Jangan memberi instruksi kabur kepada subagent. Berikan lokasi fungsi/baris target dan spesifikasi logika/kontrak yang eksak.
-   - Gunakan `Model: 'flash'` untuk tugas implementasi dan verifikasi yang sudah terdefinisi secara presisi.
-3. **Pemisahan Ketat: Implementor ≠ Verifier (Zero-Trust Verification)**:
-   - **Dilarang keras** menggunakan subagent yang sama untuk memverifikasi kode yang baru saja ditulisnya sendiri.
-   - Setiap batch perubahan **WAJIB** diverifikasi oleh subagent verifikator independen (atau skrip pengujian whitebox Node.js terpisah) dengan cakupan verifikasi yang kecil, spesifik, dan menguji modul asli (bukan mock test) ditambah pemeriksaan `git diff` bahwa tidak ada jalan pintas/mock.
-4. **Audit Final Wajib oleh Main Agent**:
-   - Setelah subagent implementor dan subagent verifikator selesai, **Main Agent WAJIB melakukan verifikasi akhir sendiri** (membaca kode yang diubah, memeriksa `git status` / `git diff`, dan menjalankan ulang skrip tes verifikasi secara langsung) sebelum melaporkan tugas selesai kepada user.
+1. **Scoped Granularity**:
+   - Delegate tasks to subagents scoped to 1 to 4 files only.
+   - Keep file scopes between parallel subagents strictly non-overlapping.
+   - Explicitly list target files (`FILE SCOPE`) and forbid edits outside that list.
+2. **Contract Specifications**:
+   - Provide exact target functions, line references, and contracts.
+   - Use `Model: 'flash'` for concrete implementation and verification tasks.
+3. **Proactive Delegation (No Manual File Traversal)**:
+   - Delegate any task that can be handled by a subagent, including exploratory codebase searches and reading file subsets to understand subsystems.
+   - Do not iterate through files manually in the main context before delegating. Formulate the scope and objective, then delegate exploration directly.
+4. **Independent Verification**:
+   - Implementors must not verify their own changes.
+   - Every change must be verified by an independent verifier subagent or automated test script without mocks.
+5. **Main Agent Final Audit**:
+   - The main agent conducts the final audit directly by inspecting files, reviewing `git diff`, and running test scripts before completing the task.
 
-## 3. Gaya Komunikasi & Kode (Lugas, Teknis, Anti-AI-Slop)
+## 3. Communication & Style
 
-1. **Tanpa Jargon Berlebihan / AI Slop**:
-   - Gunakan bahasa sederhana, langsung ke inti teknis, dan terukur.
-   - Hindari istilah pemasaran/buzzword yang tidak perlu dan mengotori konteks (_context poisoning_). Jika menjelaskan hal teknis, sebutkan langsung nama berkas, fungsi, ukuran data, atau angka waktunya.
-2. **Dilarang Menggunakan Kata/Penamaan Menggelembung (Zero Inflated Words)**:
-   - Dilarang memberi nama variabel, objek, konstanta, atau modul dengan gaya bombastis atau pemasaran (seperti `BACA_CONFIG`, `ENTERPRISE_SUITE`, dsb.). Gunakan nama standar, rendah hati, dan fungsional seperti `CONFIG`, `state`, `options`.
-   - Dilarang menulis komentar, docstring, atau log yang bernada iklan atau promosi (seperti "World-class", "Single source of truth", "Next-gen", "Ultra-fast"). Tulis langsung apa yang dilakukan kode secara faktual tanpa kata sifat berlebihan.
-3. **Tanpa Tanda Baca Berlebihan (No Period/Exclamation Slop)**:
-   - Dilarang menggunakan titik beruntun berlebihan (`...`, `???`), tanda seru berulang (`!!!`), atau gaya penulisan dramatis. Jaga komentar kode dan teks antarmuka tetap bersih, tenang, dan profesional.
+1. **Direct Technical Language**:
+   - Use concise technical terms. Avoid marketing buzzwords and filler phrases.
+   - Reference exact filenames, line numbers, function names, and measured numbers.
+2. **Clean Identifiers & Copy**:
+   - Use functional variable and constant names (`config`, `state`, `options`).
+   - Write factual comments and documentation without promotional adjectives.
+3. **Calm Punctuation**:
+   - Avoid ellipses (`...`), repeated exclamation points (`!!`), and em dashes (`—`). Use commas, colons, or parentheses.

@@ -1,146 +1,181 @@
 # BacaIn Firmware (ESP32-S3)
 
-Direktori ini berisi kode sumber firmware ESP-IDF untuk perangkat e-reader **BacaIn** berbasis modul **Waveshare ESP32-S3-ePaper-1.54** (ESP32-S3-WROOM-1-N8R8, 8MB Quad SPI Flash, 8MB Octal PSRAM).
+ESP-IDF firmware source code for the **BacaIn** e-reader. Hardware definitions are decoupled from application logic into board profiles under `firmware/boards/`.
 
 ---
 
-## 1. Hardware Pinout & Fungsi
+## 1. Hardware Architecture & Supported Boards
 
-Semua definisi pin dan parameter layar dikelola terpusat di komponen `board_config` (`firmware/components/board_config/include/board_config.h`).
+BacaIn firmware uses a modular hardware abstraction layer supporting multiple ESP32-S3 boards. Pin mappings and hardware constants reside in `firmware/boards/<board_id>/board_def.h`, while `firmware/components/board_config/include/board_config.h` provides runtime abstraction for display parameters, buttons, and peripherals.
 
-| Fungsi | Pin / GPIO | Keterangan |
-| :--- | :--- | :--- |
-| **E-Paper DC** | GPIO 10 | Data / Command control line |
-| **E-Paper CS** | GPIO 11 | SPI Chip Select (Active LOW) |
-| **E-Paper SCK** | GPIO 12 | SPI Clock |
-| **E-Paper MOSI** | GPIO 13 | SPI Master Out Slave In |
-| **E-Paper RST** | GPIO 9 | Display hardware reset (Active LOW) |
-| **E-Paper BUSY** | GPIO 8 | Busy status indicator (Active HIGH saat refresh) |
-| **E-Paper PWR** | GPIO 6 | E-Paper power switch gate (Active HIGH) |
-| **MicroSD CLK** | GPIO 39 | 1-line SDMMC Clock |
-| **MicroSD CMD** | GPIO 41 | 1-line SDMMC Command |
-| **MicroSD D0** | GPIO 40 | 1-line SDMMC Data 0 |
-| **Tombol DOWN / BOOT** | GPIO 0 | Input tombol bawah / BOOT (Active LOW, internal pull-up) |
-| **Tombol UP / PWR** | GPIO 18 | Input tombol atas / Power key (Active LOW, internal pull-up) |
-| **Power Hold** | GPIO 17 | Latch daya sistem (harus dijaga HIGH agar board tetap hidup) |
-| **Status LED** | GPIO 3 | Indikator LED hijau |
-| **Battery ADC** | ADC1_CH3 (GPIO 4) | Pemantauan tegangan baterai melalui voltage divider (rasio 2.0x) |
-| **Audio I2S BCLK** | GPIO 47 | Bit Clock untuk audio |
-| **Audio I2S LRCK** | GPIO 48 | Left/Right Word Select |
-| **Audio I2S DOUT** | GPIO 45 | Serial Data Out |
-| **Audio Power** | GPIO 42 | Audio subsystem power switch |
-| **Audio PA** | GPIO 46 | Power Amplifier enable |
+See [BOARDS.md](BOARDS.md) for supported boards, hardware profiles, and GPIO pinout tables.
 
 ---
 
-## 2. Cara Mengubah Konfigurasi Pin & Layar
+## 2. Hardware Configuration
 
-Konfigurasi hardware mengikuti urutan prioritas 3 tingkat:
-1. **Compiler Flags (`-D...`)**: Prioritas tertinggi, mengesampingkan Kconfig dan default.
-2. **Kconfig (`CONFIG_BOARD_*`)**: Konfigurasi berbasis menu ESP-IDF.
-3. **Default Standar**: Nilai bawaan Waveshare ESP32-S3-ePaper-1.54.
+Hardware settings follow a 3-tier precedence order:
 
-### A. Menggunakan `menuconfig` (Kconfig)
-Buka menu konfigurasi melalui terminal:
+1. **Compiler Flags (`-D<macro>`)**: Highest priority, overrides Kconfig and board defaults.
+2. **Kconfig (`BOARD_PROFILE_*` / `CONFIG_BOARD_*`)**: Menu-driven configuration via ESP-IDF.
+3. **Board Profile Defaults**: Hardware constants declared in `firmware/boards/<board_id>/board_def.h`.
+
+### A. Using `menuconfig` (Kconfig)
+
+Open the configuration menu:
+
 ```bash
 idf.py menuconfig
 ```
-Navigasi ke menu **Board & Hardware Configuration**:
-- Atur dimensi display (`BOARD_DISPLAY_WIDTH`, `BOARD_DISPLAY_HEIGHT`, rotasi 0–3).
-- Atur pin SPI E-Paper, pin MicroSD SDMMC, pin tombol, atau pin audio.
-- Simpan perubahan ke `sdkconfig`.
 
-### B. Menggunakan Variabel Lingkungan di Docker Compose
-Anda dapat mengompilasi profil kustom tanpa mengubah berkas sumber:
+Navigate to **Board & Hardware Configuration**:
+
+- **Hardware Board Profile (`choice BOARD_PROFILE`)**: Select a target board profile or choose `Custom / Manual Configuration` to set GPIO allocations and display parameters manually.
+- **Display Dimensions & Orientation**: Set dimensions (`BOARD_DISPLAY_WIDTH`, `BOARD_DISPLAY_HEIGHT`) and orientation (`BOARD_DISPLAY_ROTATION`).
+- **Peripherals & Pins**: Configure E-Paper SPI pins, MicroSD SDMMC pins, navigation buttons (`BOARD_BTN_UP_PIN`, `BOARD_BTN_DOWN_PIN`), power latch, status LED, or audio pins.
+- Save changes to `sdkconfig`.
+
+### B. Dynamic CI Multi-Board Matrix
+
+CI dynamically parses `firmware/boards/boards.json` to generate the build matrix. For each cataloged board profile, CI sets `CONFIG_BOARD_PROFILE_<ID>=y`, compiles the project, and packages the release factory binary. Adding a board entry to `boards.json` automatically enables CI builds for that target without workflow changes.
+
+### C. Environment Variables in Docker Compose
+
+Build custom hardware configurations without modifying source files:
+
 ```bash
 EXTRA_IDF_ARGS="-DCONFIG_BOARD_DISPLAY_WIDTH=250" BOARD_NAME="Custom-Board" docker compose run --rm firmware
 ```
 
 ---
 
-## 3. Cara Build & Menggabungkan Binary (Packaging)
+## 3. Building & Packaging Binaries
 
-### Opsi A: Menggunakan Docker Compose (Direkomendasikan)
-Tidak memerlukan instalasi ESP-IDF lokal di host:
+The build generates a single factory binary per board (`bacain_<board_id>_factory.bin`) flashed directly at offset `0x0`.
+
+### Option A: Using Docker Compose (Recommended)
+
+Requires no local ESP-IDF installation:
+
 ```bash
 cd firmware
-docker compose up
+docker compose run --rm firmware
 ```
-Docker Compose akan:
-1. Menjalankan image `espressif/idf:v5.3.1`.
-2. Mengompilasi proyek untuk target `esp32s3` ke folder `/project/build`.
-3. Menjalankan `python3 package_firmware.py /project/build -o bacain_factory.bin --board "Waveshare ESP32-S3-ePaper-1.54"`.
-4. Menghasilkan biner pabrik gabungan `build/bacain_factory.bin` dan berkas metadata `build/manifest.json`.
 
-### Opsi B: Build Manual via Native ESP-IDF
-Jika ESP-IDF v5.2+ sudah terpasang di host:
+Docker Compose executes the following steps:
+
+1. Runs the `espressif/idf:v5.3.1` container.
+2. Compiles the project for `esp32s3` into `/project/build`.
+3. Runs `python3 package_firmware.py /project/build -o bacain_<board_id>_factory.bin --board "Waveshare ESP32-S3-ePaper-1.54"`.
+4. Outputs the factory binary at `build/bacain_<board_id>_factory.bin` and manifest at `build/manifest.json`.
+
+### Option B: Native ESP-IDF
+
+Requires ESP-IDF v5.3+ installed locally:
+
 ```bash
 cd firmware
 idf.py set-target esp32s3
 idf.py build
-python3 package_firmware.py build -o bacain_factory.bin --board "Waveshare ESP32-S3-ePaper-1.54"
+python3 package_firmware.py build -o bacain_<board_id>_factory.bin --board "Waveshare ESP32-S3-ePaper-1.54"
 ```
 
-### Parameter Skrip Pengemasan (`package_firmware.py`)
-Skrip pengemasan menerima argumen berikut:
-- `build_dir`: Path direktori build (default: `build`).
-- `-o, --output`: Nama file binary hasil penggabungan (default: `bacain_factory.bin`).
-- `--board`: Nama profil board di dalam manifest (default: `Waveshare ESP32-S3-ePaper-1.54`).
-- `--chip`: Target chip esptool (default: `esp32s3`).
-- `--flash-size`: Ukuran memori flash (default: `8MB`).
-- `--name`: Nama firmware di dalam manifest (default: `BacaIn Firmware`).
+### Packaging Script Parameters (`package_firmware.py`)
 
-### Alur Penggabungan Binary
-Skrip menggunakan `esptool merge_bin` untuk menyatukan partisi ke dalam satu file biner tunggal:
-- `0x0000`: `bootloader.bin`
-- `0x8000`: `partition-table.bin`
-- `0x20000`: `bacain.bin`
+The packaging script merges build artifacts into a single factory binary and creates the release manifest:
+
+- `build_dir`: Path to build directory (default: `build`).
+- `-o, --output`: Factory binary filename (default: `bacain_factory.bin`).
+- `--board`: Board profile name stored in the manifest (default: `Waveshare ESP32-S3-ePaper-1.54`).
+- `--chip`: esptool target chip (default: `esp32s3`).
+- `--flash-size`: Flash memory size (default: `8MB`).
+- `--name`: Firmware name stored in the manifest (default: `BacaIn Firmware`).
 
 ---
 
-## 4. Alur Otomasi CI/CD & Build Kustom via GitHub Actions
+## 4. CI/CD Automation & Custom Builds via GitHub Actions
 
-Workflow `.github/workflows/firmware_ci.yml` mendukung build otomatis dan build kustom via manual trigger:
+The workflow `.github/workflows/firmware_ci.yml` handles automated builds and on-demand custom builds.
 
-### A. Triggers Otomatis
-- **Push ke `main` & Pull Request**: Memvalidasi build firmware dengan konfigurasi standar.
-- **Tag Rilis (`v*`)**: Mengompilasi dan mengunggah seluruh artefak biner (`bacain_factory.bin`, `manifest.json`, dll.) ke GitHub Releases publik.
+### A. Automatic Matrix Builds
 
-### B. Build Firmware Kustom via `workflow_dispatch` (Manual Trigger)
-Anda dapat memicu kompilasi profil hardware kustom langsung dari web GitHub tanpa menginstal toolchain:
+- **Push to `main` & Pull Request**: CI reads `firmware/boards/boards.json`, generates a dynamic matrix, and compiles firmware for every cataloged board profile.
+- **Release Tags (`v*`)**: Builds and attaches factory binaries for all cataloged boards (such as `bacain_waveshare_154_factory.bin`), along with manifest metadata, to GitHub Releases.
 
-1. Buka tab **Actions** di repositori GitHub.
-2. Pilih workflow **BacaIn Firmware CI/CD**.
-3. Klik menu drop-down **Run workflow**.
-4. Isi parameter yang diinginkan:
-   - **Board Profile Name**: Nama profil board (default: `Waveshare ESP32-S3-ePaper-1.54`).
-   - **Extra IDF Build Args / Compiler Macros**: Opsi compiler flag `-D...` untuk memodifikasi pin, resolusi, atau rotasi.
-   - **Output Factory Binary Name**: Nama file biner gabungan (default: `bacain_factory.bin`).
-5. Klik **Run workflow**. Setelah selesai, unduh artefak zip `bacain-firmware` dari halaman workflow run.
+### B. Custom Firmware Build via `workflow_dispatch` (Manual Trigger)
 
-#### Contoh Flag untuk Form `Extra IDF Build Args`:
+Build custom hardware profiles from the GitHub web interface without a local toolchain:
 
-| Kebutuhan Kustom | Nilai Compiler Macro |
-| :--- | :--- |
-| **Ubah Ukuran Layar** (misal 250 $\times$ 122) | `-DCONFIG_BOARD_DISPLAY_WIDTH=250 -DCONFIG_BOARD_DISPLAY_HEIGHT=122` |
-| **Ubah Orientasi Layar** (90 derajat landscape) | `-DCONFIG_BOARD_DISPLAY_ROTATION=1` |
-| **Ubah Pin Tombol** (misal BOOT=4, PWR=5) | `-DCONFIG_BOARD_BTN_DOWN_PIN=4 -DCONFIG_BOARD_BTN_UP_PIN=5` |
-| **Ubah Pin SPI E-Paper** | `-DCONFIG_BOARD_EPD_DC_PIN=14 -DCONFIG_BOARD_EPD_CS_PIN=15` |
-| **Kombinasi Beberapa Pengaturan** | `-DCONFIG_BOARD_DISPLAY_WIDTH=296 -DCONFIG_BOARD_DISPLAY_HEIGHT=128 -DCONFIG_BOARD_DISPLAY_ROTATION=1 -DCONFIG_BOARD_BTN_DOWN_PIN=4` |
+1. Navigate to the **Actions** tab in the repository.
+2. Select the **BacaIn Firmware CI/CD** workflow.
+3. Click **Run workflow**.
+4. Fill in parameters:
+   - **Board Profile Name**: Name of the target board profile (default: `Waveshare ESP32-S3-ePaper-1.54`).
+   - **Extra IDF Build Args / Compiler Macros**: Compiler macro flags (`-D<macro>`) to adjust pins, resolution, or rotation.
+   - **Output Factory Binary Name**: Filename for the merged factory binary (default: `bacain_factory.bin`).
+5. Click **Run workflow**. Download the `bacain-firmware` artifact zip from the workflow summary after the run finishes.
+
+#### Example Compiler Flags for `Extra IDF Build Args`:
+
+| Custom Requirement                                  | Compiler Macro Value                                                                                                                 |
+| :-------------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------- |
+| **Change Screen Resolution** (e.g. 250 x 122)       | `-DCONFIG_BOARD_DISPLAY_WIDTH=250 -DCONFIG_BOARD_DISPLAY_HEIGHT=122`                                                                 |
+| **Change Screen Orientation** (90 deg landscape)    | `-DCONFIG_BOARD_DISPLAY_ROTATION=1`                                                                                                  |
+| **Change Button Pins** (UP/BOOT=4, DOWN/PWR=5)       | `-DCONFIG_BOARD_BTN_UP_PIN=4 -DCONFIG_BOARD_BTN_DOWN_PIN=5`                                                                          |
+| **Change E-Paper SPI Pins**                          | `-DCONFIG_BOARD_EPD_DC_PIN=14 -DCONFIG_BOARD_EPD_CS_PIN=15`                                                                          |
+| **Combine Multiple Settings**                        | `-DCONFIG_BOARD_DISPLAY_WIDTH=296 -DCONFIG_BOARD_DISPLAY_HEIGHT=128 -DCONFIG_BOARD_DISPLAY_ROTATION=1 -DCONFIG_BOARD_BTN_UP_PIN=4`   |
 
 ---
 
-## 5. Flashing ke Perangkat
+## 5. Flashing the Device
 
-### A. Melalui Web Serial PWA
-Buka PWA di browser Chromium (Chrome/Edge):
-1. Sambungkan perangkat ke komputer via USB-C.
-2. Buka tab **Firmware Flasher**.
-3. Klik **Unduh Firmware Terbaru dari GitHub Release** atau pilih berkas `bacain_factory.bin` lokal.
-4. Klik **Connect Serial Port**, pilih port ESP32-S3, lalu klik **Flash Firmware**.
+Flashing requires writing only the single factory binary (`bacain_<board_id>_factory.bin`) at offset `0x0`. Partition fragments do not need to be flashed separately.
 
-### B. Melalui Serial Terminal (ESP-IDF)
+### A. Web Serial Flasher (Browser)
+
+Open the web flasher in a Chromium browser (Chrome or Edge):
+
+1. Connect the ESP32-S3 board via USB-C.
+2. Open `web/flasher.html` (or the **Firmware Flasher** tab in the web interface).
+3. Select your board to download the latest release binary, or load a local `bacain_<board_id>_factory.bin` file (flashed at offset `0x0`).
+4. Click **Connect Serial Port**, select the ESP32-S3 port, and click **Flash Firmware**.
+
+### B. Command Line via `esptool`
+
+Flash the single factory binary directly to offset `0x0`:
+
 ```bash
-idf.py -p COM3 flash monitor          # Windows (sesuaikan port)
+# Windows (replace COM3 with your port)
+esptool.py -p COM3 -b 460800 --chip esp32s3 write_flash 0x0 build/bacain_<board_id>_factory.bin
+
+# Linux / macOS (replace /dev/ttyACM0 with your port)
+esptool.py -p /dev/ttyACM0 -b 460800 --chip esp32s3 write_flash 0x0 build/bacain_<board_id>_factory.bin
+```
+
+### C. Serial Terminal (ESP-IDF)
+
+For development builds within the ESP-IDF toolchain:
+
+```bash
+idf.py -p COM3 flash monitor          # Windows (adjust COM port)
 idf.py -p /dev/ttyUSB0 flash monitor  # Linux / macOS
 ```
+
+### D. Docker Compose (Linux / WSL2)
+
+To flash directly from the Docker container (requires host serial device access):
+
+```bash
+# Linux (or WSL2 with usbipd):
+ESP_PORT=/dev/ttyACM0 docker compose run --rm flash
+```
+
+Windows note: Docker Desktop runs inside a WSL2 virtual machine that does not forward host COM ports by default without [usbipd-win](https://github.com/dorssel/usbipd-win). For Windows hosts, Option A (Web Serial Flasher) or Option B (esptool) is recommended to access COM ports directly without VM passthrough.
+
+---
+
+## 6. References & Links
+
+- **Hardware Reference Repository & Schematics**: [Waveshare ESP32-S3-ePaper-1.54](https://github.com/waveshareteam/ESP32-S3-ePaper-1.54)
+- **Windows USB Passthrough for WSL2**: [usbipd-win](https://github.com/dorssel/usbipd-win)
+- **Official ESP-IDF v5.3 Programming Guide**: [Espressif Documentation](https://docs.espressif.com/projects/esp-idf/en/v5.3.1/esp32s3/)
