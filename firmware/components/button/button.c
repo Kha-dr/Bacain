@@ -7,20 +7,21 @@
 
 #define TAG "BUTTON"
 
-#define DOWN_BUTTON_GPIO  BOARD_BTN_DOWN_PIN
 #define UP_BUTTON_GPIO    BOARD_BTN_UP_PIN
-#define BOOT_BUTTON_GPIO  DOWN_BUTTON_GPIO
-#define PWR_BUTTON_GPIO   UP_BUTTON_GPIO
+#define DOWN_BUTTON_GPIO  BOARD_BTN_DOWN_PIN
+#define BOOT_BUTTON_GPIO  UP_BUTTON_GPIO
+#define PWR_BUTTON_GPIO   DOWN_BUTTON_GPIO
 
 static Button s_btn_boot;
 static Button s_btn_pwr;
 static esp_timer_handle_t s_timer = NULL;
 static QueueHandle_t s_event_queue = NULL;
+static bool s_btn_inverted = false;
 
 static uint8_t read_button_gpio(uint8_t button_id) {
-    if (button_id == BTN_ID_BOOT) {
+    if (button_id == BTN_ID_UP || button_id == BTN_ID_BOOT) {
         return gpio_get_level(BOOT_BUTTON_GPIO);
-    } else if (button_id == BTN_ID_PWR) {
+    } else if (button_id == BTN_ID_DOWN || button_id == BTN_ID_PWR) {
         return gpio_get_level(PWR_BUTTON_GPIO);
     }
     return 1;
@@ -28,7 +29,12 @@ static uint8_t read_button_gpio(uint8_t button_id) {
 
 static void send_event(btn_id_t btn, btn_press_type_t type) {
     if (!s_event_queue) return;
-    button_event_t evt = { .button = btn, .type = type };
+    btn_id_t effective_btn = btn;
+    if (s_btn_inverted) {
+        if (btn == BTN_ID_UP) effective_btn = BTN_ID_DOWN;
+        else if (btn == BTN_ID_DOWN) effective_btn = BTN_ID_UP;
+    }
+    button_event_t evt = { .button = effective_btn, .type = type };
     xQueueSend(s_event_queue, &evt, 0);
 }
 
@@ -79,7 +85,7 @@ esp_err_t button_init(QueueHandle_t *out_queue) {
     ESP_ERROR_CHECK(esp_timer_create(&timer_args, &s_timer));
     ESP_ERROR_CHECK(esp_timer_start_periodic(s_timer, 5 * 1000)); // 5ms tick matches TICKS_INTERVAL
 
-    ESP_LOGI(TAG, "Buttons initialized (DOWN: GPIO %d, UP: GPIO %d)", DOWN_BUTTON_GPIO, UP_BUTTON_GPIO);
+    ESP_LOGI(TAG, "Buttons initialized (UP/BOOT: GPIO %d, DOWN/PWR: GPIO %d)", UP_BUTTON_GPIO, DOWN_BUTTON_GPIO);
     return ESP_OK;
 }
 
@@ -95,4 +101,12 @@ void button_deinit(void) {
         vQueueDelete(s_event_queue);
         s_event_queue = NULL;
     }
+}
+
+void button_set_inverted(bool inverted) {
+    s_btn_inverted = inverted;
+}
+
+bool button_get_inverted(void) {
+    return s_btn_inverted;
 }

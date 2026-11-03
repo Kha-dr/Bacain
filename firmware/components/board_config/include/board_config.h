@@ -13,6 +13,16 @@
 #include "esp_adc/adc_oneshot.h"
 #endif
 
+#if defined(CONFIG_BOARD_PROFILE_WAVESHARE_154) || !defined(CONFIG_BOARD_PROFILE_CUSTOM)
+#if __has_include("../../boards/waveshare_154/board_def.h")
+#include "../../boards/waveshare_154/board_def.h"
+#elif __has_include("../../../boards/waveshare_154/board_def.h")
+#include "../../../boards/waveshare_154/board_def.h"
+#else
+#include "../../boards/waveshare_154/board_def.h"
+#endif
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -111,30 +121,30 @@ extern "C" {
 #endif
 #endif
 
-// Navigation Buttons (Default: Waveshare ESP32-S3-ePaper-1.54)
-#ifndef BOARD_BTN_DOWN_PIN
-#ifdef CONFIG_BOARD_BTN_DOWN_PIN
-#define BOARD_BTN_DOWN_PIN          CONFIG_BOARD_BTN_DOWN_PIN
-#else
-#define BOARD_BTN_DOWN_PIN          0
-#endif
-#endif
-
+// Navigation Buttons (Default: Waveshare ESP32-S3-ePaper-1.54: BOOT = UP, PWR = DOWN)
 #ifndef BOARD_BTN_UP_PIN
 #ifdef CONFIG_BOARD_BTN_UP_PIN
 #define BOARD_BTN_UP_PIN            CONFIG_BOARD_BTN_UP_PIN
 #else
-#define BOARD_BTN_UP_PIN            18
+#define BOARD_BTN_UP_PIN            0
+#endif
+#endif
+
+#ifndef BOARD_BTN_DOWN_PIN
+#ifdef CONFIG_BOARD_BTN_DOWN_PIN
+#define BOARD_BTN_DOWN_PIN          CONFIG_BOARD_BTN_DOWN_PIN
+#else
+#define BOARD_BTN_DOWN_PIN          18
 #endif
 #endif
 
 // Aliases
 #ifndef BOARD_BTN_BOOT_PIN
-#define BOARD_BTN_BOOT_PIN          BOARD_BTN_DOWN_PIN
+#define BOARD_BTN_BOOT_PIN          BOARD_BTN_UP_PIN
 #endif
 
 #ifndef BOARD_BTN_PWR_PIN
-#define BOARD_BTN_PWR_PIN           BOARD_BTN_UP_PIN
+#define BOARD_BTN_PWR_PIN           BOARD_BTN_DOWN_PIN
 #endif
 
 // MicroSD SDMMC Pinout (Default: Waveshare ESP32-S3-ePaper-1.54)
@@ -162,12 +172,45 @@ extern "C" {
 #endif
 #endif
 
+// MicroSD SD Pinout
+#ifndef BOARD_SD_CLK_PIN
+#ifdef CONFIG_BOARD_SD_CLK_PIN
+#define BOARD_SD_CLK_PIN            CONFIG_BOARD_SD_CLK_PIN
+#else
+#define BOARD_SD_CLK_PIN            14
+#endif
+#endif
+
+#ifndef BOARD_SD_CMD_PIN
+#ifdef CONFIG_BOARD_SD_CMD_PIN
+#define BOARD_SD_CMD_PIN            CONFIG_BOARD_SD_CMD_PIN
+#else
+#define BOARD_SD_CMD_PIN            15
+#endif
+#endif
+
+#ifndef BOARD_SD_D0_PIN
+#ifdef CONFIG_BOARD_SD_D0_PIN
+#define BOARD_SD_D0_PIN             CONFIG_BOARD_SD_D0_PIN
+#else
+#define BOARD_SD_D0_PIN             16
+#endif
+#endif
+
 // Power Management & Battery ADC (Default: Waveshare ESP32-S3-ePaper-1.54)
 #ifndef BOARD_VBAT_PWR_HOLD_PIN
 #ifdef CONFIG_BOARD_VBAT_PWR_HOLD_PIN
 #define BOARD_VBAT_PWR_HOLD_PIN     CONFIG_BOARD_VBAT_PWR_HOLD_PIN
 #else
 #define BOARD_VBAT_PWR_HOLD_PIN     17
+#endif
+#endif
+
+#ifndef BOARD_PWR_LATCH_PIN
+#ifdef CONFIG_BOARD_PWR_LATCH_PIN
+#define BOARD_PWR_LATCH_PIN         CONFIG_BOARD_PWR_LATCH_PIN
+#else
+#define BOARD_PWR_LATCH_PIN         BOARD_VBAT_PWR_HOLD_PIN
 #endif
 #endif
 
@@ -203,6 +246,14 @@ extern "C" {
 #endif
 #endif
 
+#ifndef BOARD_BATTERY_ADC_ATTEN
+#ifdef CONFIG_BOARD_BATTERY_ADC_ATTEN
+#define BOARD_BATTERY_ADC_ATTEN     CONFIG_BOARD_BATTERY_ADC_ATTEN
+#else
+#define BOARD_BATTERY_ADC_ATTEN     ADC_ATTEN_DB_12
+#endif
+#endif
+
 #ifndef BOARD_BATTERY_MAX_MV
 #define BOARD_BATTERY_MAX_MV        4200
 #endif
@@ -213,6 +264,31 @@ extern "C" {
 
 #ifndef BOARD_VOLTAGE_DIVIDER_RATIO
 #define BOARD_VOLTAGE_DIVIDER_RATIO 2.0f
+#endif
+
+// Audio I2S Pinout
+#ifndef BOARD_I2S_BCLK_PIN
+#ifdef CONFIG_BOARD_I2S_BCLK_PIN
+#define BOARD_I2S_BCLK_PIN          CONFIG_BOARD_I2S_BCLK_PIN
+#else
+#define BOARD_I2S_BCLK_PIN          4
+#endif
+#endif
+
+#ifndef BOARD_I2S_LRCK_PIN
+#ifdef CONFIG_BOARD_I2S_LRCK_PIN
+#define BOARD_I2S_LRCK_PIN          CONFIG_BOARD_I2S_LRCK_PIN
+#else
+#define BOARD_I2S_LRCK_PIN          5
+#endif
+#endif
+
+#ifndef BOARD_I2S_DOUT_PIN
+#ifdef CONFIG_BOARD_I2S_DOUT_PIN
+#define BOARD_I2S_DOUT_PIN          CONFIG_BOARD_I2S_DOUT_PIN
+#else
+#define BOARD_I2S_DOUT_PIN          7
+#endif
 #endif
 
 #ifdef __cplusplus

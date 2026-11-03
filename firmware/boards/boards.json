@@ -1,0 +1,19 @@
+{
+  "boards": [
+    {
+      "id": "waveshare_154",
+      "name": "Waveshare ESP32-S3-ePaper-1.54",
+      "chip": "esp32s3",
+      "flash_size": "8MB",
+      "display": {
+        "width": 200,
+        "height": 200,
+        "rotation": 0,
+        "controller": "SSD1681"
+      },
+      "config_header": "boards/waveshare_154/board_def.h",
+      "output_bin": "bacain_waveshare_154_factory.bin",
+      "status": "supported"
+    }
+  ]
+}

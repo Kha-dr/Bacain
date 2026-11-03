@@ -25,6 +25,8 @@ class DeviceSettingsModal extends HTMLElement {
     super();
     this._sdAvailable = false;
     this._logCount = 0;
+    this._orientation = 0;
+    this._buttonInvert = false;
     this._handleKeyDown = this._handleKeyDown.bind(this);
   }
 
@@ -34,6 +36,22 @@ class DeviceSettingsModal extends HTMLElement {
     }
     const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
     this._updateThemeUI(currentTheme);
+
+    try {
+      const savedRot = localStorage.getItem('bacain_orientation');
+      if (savedRot !== null) {
+        this.setOrientation(parseInt(savedRot, 10));
+      } else {
+        this.setOrientation(this._orientation);
+      }
+      const savedBtnInv = localStorage.getItem('bacain_btn_invert');
+      if (savedBtnInv !== null) {
+        this.setButtonInvert(savedBtnInv === '1' || savedBtnInv === 'true');
+      } else {
+        this.setButtonInvert(this._buttonInvert);
+      }
+    } catch (_) {}
+
     this.bindEvents();
     document.addEventListener('keydown', this._handleKeyDown);
   }
@@ -171,6 +189,42 @@ class DeviceSettingsModal extends HTMLElement {
                 <button id="navHintsHideBtn" class="btn-control" type="button"><span>Hide</span></button>
               </div>
               <div class="control-hint">Show or hide bottom navigation hints for more screen area.</div>
+            </div>
+
+            <!-- Screen Orientation -->
+            <div class="control-card">
+              <div class="control-card-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;">
+                  <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path>
+                </svg>
+                Screen Orientation
+              </div>
+              <div class="control-inline-row" style="justify-content: space-between;">
+                <label for="settingOrientation" class="control-label">Orientation</label>
+                <select id="settingOrientation" class="control-select">
+                  <option value="0">0° (Portrait Upright - Default)</option>
+                  <option value="1">90° (Landscape Clockwise)</option>
+                  <option value="2">180° (Inverted Portrait)</option>
+                  <option value="3">270° (Landscape Counter-Clockwise)</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Button Navigation -->
+            <div class="control-card">
+              <div class="control-card-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;">
+                  <polyline points="7 13 12 18 17 13"></polyline>
+                  <polyline points="7 6 12 11 17 6"></polyline>
+                </svg>
+                Button Navigation
+              </div>
+              <div class="control-inline-row">
+                <label class="checkbox-label" for="settingButtonInvert">
+                  <input type="checkbox" id="settingButtonInvert">
+                  <span>Swap UP / DOWN buttons (UP=PWR / DOWN=BOOT)</span>
+                </label>
+              </div>
             </div>
 
             <!-- Power Management -->
@@ -380,6 +434,33 @@ class DeviceSettingsModal extends HTMLElement {
       });
     }
 
+    // Screen Orientation
+    const settingOrientation = this.querySelector('#settingOrientation');
+    if (settingOrientation) {
+      settingOrientation.addEventListener('change', () => {
+        const rot = parseInt(settingOrientation.value, 10);
+        this._orientation = rot;
+        this.dispatchEvent(new CustomEvent('orientation-change', {
+          detail: { rotation: rot },
+          bubbles: true,
+          composed: true
+        }));
+      });
+    }
+
+    // Button Navigation
+    const settingButtonInvert = this.querySelector('#settingButtonInvert');
+    if (settingButtonInvert) {
+      settingButtonInvert.addEventListener('change', () => {
+        this._buttonInvert = settingButtonInvert.checked;
+        this.dispatchEvent(new CustomEvent('button-invert-change', {
+          detail: { inverted: settingButtonInvert.checked },
+          bubbles: true,
+          composed: true
+        }));
+      });
+    }
+
     // Power Management
     const sleepTimeoutSelect = this.querySelector('#sleepTimeoutSelect');
     if (sleepTimeoutSelect) {
@@ -563,6 +644,71 @@ class DeviceSettingsModal extends HTMLElement {
 
     if (showBtn) showBtn.classList.toggle('active', isShow);
     if (hideBtn) hideBtn.classList.toggle('active', !isShow);
+  }
+
+  /**
+   * Set Screen Orientation
+   * @param {number|string} rotation (0=0°, 1=90°, 2=180°, 3=270°)
+   */
+  setOrientation(rotation) {
+    const val = parseInt(rotation, 10);
+    this._orientation = isNaN(val) ? 0 : val;
+    const select = this.querySelector('#settingOrientation');
+    if (select) {
+      select.value = String(this._orientation);
+    }
+  }
+
+  /**
+   * Get Screen Orientation
+   * @returns {number}
+   */
+  getOrientation() {
+    const select = this.querySelector('#settingOrientation');
+    if (select) {
+      return parseInt(select.value, 10);
+    }
+    return this._orientation;
+  }
+
+  get orientation() {
+    return this.getOrientation();
+  }
+
+  set orientation(val) {
+    this.setOrientation(val);
+  }
+
+  /**
+   * Set Button Inversion
+   * @param {boolean} inverted
+   */
+  setButtonInvert(inverted) {
+    this._buttonInvert = Boolean(inverted);
+    const checkbox = this.querySelector('#settingButtonInvert');
+    if (checkbox) {
+      checkbox.checked = this._buttonInvert;
+    }
+  }
+
+  /**
+   * Get Button Inversion
+   * @returns {boolean}
+   */
+  getButtonInvert() {
+    const checkbox = this.querySelector('#settingButtonInvert');
+    if (checkbox) {
+      return checkbox.checked;
+    }
+    return this._buttonInvert;
+  }
+
+  get buttonInvert() {
+    return this.getButtonInvert();
+  }
+
+  set buttonInvert(val) {
+    this.setButtonInvert(val);
   }
 
   /**

@@ -74,6 +74,8 @@ class EspWebFlasher extends HTMLElement {
     this.releaseTag = '';
     this.isFetchingRelease = false;
     this.showCustomRepo = false;
+    this.availableReleaseAssets = [];
+    this.selectedAssetUrl = null;
 
     // Terminal log records
     this.terminalLogs = [];
@@ -153,6 +155,29 @@ class EspWebFlasher extends HTMLElement {
     `;
   }
 
+  renderDeviceOptions() {
+    if (!this.availableReleaseAssets || this.availableReleaseAssets.length === 0) {
+      return '<option value="" disabled selected>Pilih target board firmware</option>';
+    }
+
+    const hasSelected = this.availableReleaseAssets.some(a => 
+      this.selectedAssetUrl && (this.selectedAssetUrl === a.browser_download_url || this.selectedAssetUrl === a.name)
+    );
+
+    const options = this.availableReleaseAssets.map(asset => {
+      const isSelected = Boolean(
+        this.selectedAssetUrl && (this.selectedAssetUrl === asset.browser_download_url || this.selectedAssetUrl === asset.name)
+      );
+      const sizeStr = asset.size ? ` (${this.formatBytes(asset.size)})` : '';
+      return `<option value="${this.escapeHtml(asset.browser_download_url)}" data-name="${this.escapeHtml(asset.name)}" data-url="${this.escapeHtml(asset.browser_download_url)}" ${isSelected ? 'selected' : ''}>${this.escapeHtml(asset.name + sizeStr)}</option>`;
+    });
+
+    return `
+      <option value="" disabled ${!hasSelected ? 'selected' : ''}>Pilih target board firmware</option>
+      ${options.join('')}
+    `;
+  }
+
   updateUI() {
     // Status Badge
     const badge = this.querySelector('#flasherStatusBadge');
@@ -208,6 +233,28 @@ class EspWebFlasher extends HTMLElement {
           ? 'Mengunduh Firmware...'
           : 'Unduh Firmware Terbaru dari GitHub Release';
       }
+    }
+
+    // Device Select Controls for Multi-Board Releases
+    const deviceContainer = this.querySelector('#flasherDeviceSelectContainer');
+    const deviceSelect = this.querySelector('#flasherDeviceSelect');
+    const downloadDeviceBtn = this.querySelector('#downloadSelectedDeviceBtn');
+
+    if (deviceContainer) {
+      deviceContainer.style.display = (this.availableReleaseAssets && this.availableReleaseAssets.length > 1) ? 'block' : 'none';
+    }
+
+    if (deviceSelect) {
+      deviceSelect.disabled = this.isFlashing || this.isFetchingRelease;
+      const currentVal = this.selectedAssetUrl || deviceSelect.value;
+      deviceSelect.innerHTML = this.renderDeviceOptions();
+      if (currentVal) {
+        deviceSelect.value = currentVal;
+      }
+    }
+
+    if (downloadDeviceBtn) {
+      downloadDeviceBtn.disabled = this.isFlashing || this.isFetchingRelease || (deviceSelect && !deviceSelect.value);
     }
 
     const customContainer = this.querySelector('#customReleaseContainer');
@@ -309,6 +356,21 @@ class EspWebFlasher extends HTMLElement {
                 </svg>
                 <span id="fetchReleaseBtnText">${this.isFetchingRelease ? 'Mengunduh Firmware...' : 'Unduh Firmware Terbaru dari GitHub Release'}</span>
               </button>
+
+              <!-- Device / Board Binary Selector for Multi-Board Releases -->
+              <div id="flasherDeviceSelectContainer" style="display: ${this.availableReleaseAssets && this.availableReleaseAssets.length > 1 ? 'block' : 'none'}; margin-top: 0.6rem; padding: 0.65rem 0.75rem; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+                <label for="flasherDeviceSelect" style="display: block; font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.4rem;">
+                  Target Board Firmware:
+                </label>
+                <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                  <select id="flasherDeviceSelect" class="control-select" style="flex: 1; min-width: 180px; padding: 0.4rem 0.6rem; font-size: 0.8rem; background: var(--bg-input); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: var(--radius-sm); outline: none;" ${this.isFlashing || this.isFetchingRelease ? 'disabled' : ''}>
+                    ${this.renderDeviceOptions()}
+                  </select>
+                  <button id="downloadSelectedDeviceBtn" type="button" class="btn-sm btn-primary" style="padding: 0.4rem 0.75rem; font-size: 0.8rem; cursor: pointer;" ${this.isFlashing || this.isFetchingRelease ? 'disabled' : ''}>
+                    Unduh
+                  </button>
+                </div>
+              </div>
 
               <!-- Custom Repo & Tag Input Form -->
               <div id="customReleaseContainer" style="display: ${this.showCustomRepo ? 'block' : 'none'}; margin-top: 0.6rem; padding: 0.65rem 0.75rem; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
@@ -465,6 +527,90 @@ class EspWebFlasher extends HTMLElement {
       });
     }
 
+    // Multi-Board Device Select dropdown
+    const deviceSelect = this.querySelector('#flasherDeviceSelect');
+    if (deviceSelect) {
+      if (typeof HTMLSelectElement !== 'undefined' && !deviceSelect._hooked) {
+        deviceSelect._hooked = true;
+        const originalValueDesc = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value');
+        if (originalValueDesc) {
+          Object.defineProperty(deviceSelect, 'value', {
+            get() {
+              return originalValueDesc.get.call(this);
+            },
+            set(newVal) {
+              const options = this.options ? Array.from(this.options) : [];
+              const match = options.find(opt => 
+                opt.value === newVal || 
+                (typeof opt.getAttribute === 'function' && (
+                  opt.getAttribute('data-name') === newVal ||
+                  opt.getAttribute('data-url') === newVal
+                ))
+              );
+              if (match) {
+                originalValueDesc.set.call(this, match.value);
+              } else {
+                originalValueDesc.set.call(this, newVal);
+              }
+            },
+            configurable: true
+          });
+        }
+      }
+
+      const handleDeviceSelect = async (val) => {
+        if (!val || this.isFetchingRelease || this.isFlashing) return;
+        const asset = this.availableReleaseAssets.find(a => 
+          a.browser_download_url === val || 
+          a.name === val || 
+          (a.browser_download_url && a.browser_download_url.endsWith('/' + val))
+        );
+        if (asset) {
+          try {
+            await this.downloadReleaseAsset(asset);
+          } catch (err) {
+            // Handled and logged in downloadReleaseAsset
+          }
+        }
+      };
+
+      deviceSelect.addEventListener('change', (e) => {
+        handleDeviceSelect(e.target.value);
+      });
+
+      deviceSelect.addEventListener('click', (e) => {
+        if (e.target && e.target.tagName === 'OPTION' && e.target.value) {
+          handleDeviceSelect(e.target.value);
+        } else if (deviceSelect.value && deviceSelect.value !== this.selectedAssetUrl) {
+          handleDeviceSelect(deviceSelect.value);
+        }
+      });
+    }
+
+    const downloadSelectedDeviceBtn = this.querySelector('#downloadSelectedDeviceBtn');
+    if (downloadSelectedDeviceBtn) {
+      downloadSelectedDeviceBtn.addEventListener('click', async () => {
+        const selectEl = this.querySelector('#flasherDeviceSelect');
+        const val = selectEl ? selectEl.value : '';
+        if (!val) {
+          this.appendTerminal('Silakan pilih target board firmware dari dropdown terlebih dahulu.\n', 'warning');
+          return;
+        }
+        const asset = this.availableReleaseAssets.find(a => 
+          a.browser_download_url === val || 
+          a.name === val ||
+          (a.browser_download_url && a.browser_download_url.endsWith('/' + val))
+        );
+        if (asset) {
+          try {
+            await this.downloadReleaseAsset(asset);
+          } catch (err) {
+            // Handled and logged in downloadReleaseAsset
+          }
+        }
+      });
+    }
+
     // Toggle custom repo/tag settings
     const toggleCustomBtn = this.querySelector('#toggleCustomReleaseBtn');
     if (toggleCustomBtn) {
@@ -527,6 +673,7 @@ class EspWebFlasher extends HTMLElement {
         fileName: file.name,
         fileSize: file.size
       };
+      this.selectedAssetUrl = null;
       this.appendTerminal(`Selected combined firmware binary [${file.name}] (${this.formatBytes(file.size)}) for flash @ 0x0\n`, 'info');
       this.updateUI();
     } catch (err) {
@@ -544,11 +691,13 @@ class EspWebFlasher extends HTMLElement {
     this.isFetchingRelease = true;
     this.updateUI();
 
+    let targetAssetToDownload = null;
+
     try {
       if (targetTag) {
-        this.appendTerminal(`Mengambil informasi rilis ${targetTag} dari GitHub (${targetRepo})...\n`, 'info');
+        this.appendTerminal(`Mengambil informasi rilis ${targetTag} dari GitHub (${targetRepo})\n`, 'info');
       } else {
-        this.appendTerminal(`Mengambil informasi rilis terbaru dari GitHub (${targetRepo})...\n`, 'info');
+        this.appendTerminal(`Mengambil informasi rilis terbaru dari GitHub (${targetRepo})\n`, 'info');
       }
 
       const releaseUrl = targetTag
@@ -568,17 +717,52 @@ class EspWebFlasher extends HTMLElement {
 
       const releaseData = await releaseRes.json();
       const assets = Array.isArray(releaseData.assets) ? releaseData.assets : [];
+      const binAssets = assets.filter(a => a && typeof a.name === 'string' && a.name.toLowerCase().endsWith('.bin') && Boolean(a.browser_download_url));
 
-      let asset = assets.find(a => a && a.name === 'bacain_factory.bin');
-      if (!asset) {
-        asset = assets.find(a => a && typeof a.name === 'string' && a.name.endsWith('.bin'));
+      let factoryAssets = binAssets.filter(a => /^bacain_.*factory\.bin$/i.test(a.name));
+      if (factoryAssets.length === 0) {
+        factoryAssets = binAssets;
       }
 
-      if (!asset || !asset.browser_download_url) {
-        throw new Error('Asset firmware .bin tidak ditemukan pada rilis terbaru.');
+      if (factoryAssets.length === 0) {
+        throw new Error('Asset firmware .bin tidak ditemukan pada rilis GitHub.');
       }
 
-      this.appendTerminal(`Mengunduh firmware asset: ${asset.name} (${this.formatBytes(asset.size || 0)})...\n`, 'info');
+      this.availableReleaseAssets = factoryAssets;
+
+      if (factoryAssets.length === 1) {
+        targetAssetToDownload = factoryAssets[0];
+      } else {
+        this.selectedAssetUrl = '';
+        this.appendTerminal(`Ditemukan ${factoryAssets.length} binary firmware board pada rilis ini. Silakan pilih target board dari dropdown.\n`, 'info');
+        return factoryAssets;
+      }
+    } catch (err) {
+      this.appendTerminal(`[GitHub Release Error] ${err.message}\n`, 'error');
+      throw err;
+    } finally {
+      this.isFetchingRelease = false;
+      this.updateUI();
+    }
+
+    if (targetAssetToDownload) {
+      return await this.downloadReleaseAsset(targetAssetToDownload);
+    }
+  }
+
+  async downloadReleaseAsset(asset) {
+    if (!asset || !asset.browser_download_url) {
+      const err = new Error('Asset firmware tidak valid atau URL download tidak ditemukan.');
+      this.appendTerminal(`[GitHub Release Error] ${err.message}\n`, 'error');
+      throw err;
+    }
+
+    this.isFetchingRelease = true;
+    this.selectedAssetUrl = asset.browser_download_url;
+    this.updateUI();
+
+    try {
+      this.appendTerminal(`Mengunduh firmware asset: ${asset.name} (${this.formatBytes(asset.size || 0)})\n`, 'info');
 
       const downloadRes = await fetch(asset.browser_download_url);
       if (!downloadRes.ok) {
@@ -605,6 +789,23 @@ class EspWebFlasher extends HTMLElement {
       this.isFetchingRelease = false;
       this.updateUI();
     }
+  }
+
+  async selectDevice(nameOrUrl) {
+    if (!nameOrUrl) return;
+    const asset = this.availableReleaseAssets.find(a => 
+      a.browser_download_url === nameOrUrl || 
+      a.name === nameOrUrl ||
+      (a.browser_download_url && a.browser_download_url.endsWith('/' + nameOrUrl))
+    );
+    if (!asset) {
+      throw new Error(`Device firmware '${nameOrUrl}' tidak ditemukan.`);
+    }
+    const selectEl = this.querySelector('#flasherDeviceSelect');
+    if (selectEl) {
+      selectEl.value = asset.browser_download_url;
+    }
+    return await this.downloadReleaseAsset(asset);
   }
 
   // ==========================================================================

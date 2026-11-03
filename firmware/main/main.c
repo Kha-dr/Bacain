@@ -4,6 +4,7 @@
 #include "freertos/task.h"
 #include "freertos/queue.h"
 #include "nvs_flash.h"
+#include "nvs.h"
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "driver/gpio.h"
@@ -17,6 +18,8 @@
 #include "text_pager.h"
 #include "ble_sync.h"
 #include "reader_ui.h"
+
+extern void reader_ui_set_rotation(uint8_t rotation);
 
 #define TAG "MAIN"
 
@@ -74,6 +77,21 @@ void app_main(void) {
 
     ESP_LOGI(TAG, "Starting BacaIn firmware...");
 
+    nvs_handle_t nvs_handle;
+    uint8_t rot = BOARD_DISPLAY_ROTATION;
+    uint8_t btn_invert = 0;
+    if (nvs_open("settings", NVS_READWRITE, &nvs_handle) == ESP_OK) {
+        if (nvs_get_u8(nvs_handle, "rotation", &rot) != ESP_OK) {
+            rot = BOARD_DISPLAY_ROTATION;
+        }
+        if (nvs_get_u8(nvs_handle, "btn_invert", &btn_invert) != ESP_OK) {
+            btn_invert = 0;
+        }
+        nvs_close(nvs_handle);
+    }
+    reader_ui_set_rotation(rot);
+    button_set_inverted(btn_invert != 0);
+
     // 3. Initialize Peripherals
     esp_err_t flash_ret = flash_storage_init();
     if (flash_ret == ESP_OK) {
@@ -91,6 +109,13 @@ void app_main(void) {
     ESP_ERROR_CHECK(button_init(&s_btn_queue));
 
     wakeup_reason_t wakeup = power_mgr_get_wakeup_cause();
+    if (button_get_inverted()) {
+        if (wakeup == WAKEUP_REASON_BOOT_BUTTON) {
+            wakeup = WAKEUP_REASON_PWR_BUTTON;
+        } else if (wakeup == WAKEUP_REASON_PWR_BUTTON) {
+            wakeup = WAKEUP_REASON_BOOT_BUTTON;
+        }
+    }
     ESP_LOGI(TAG, "Wakeup reason: %d", wakeup);
 
     // Show splash screen with official BacaIn icon on cold boot before library scan
@@ -134,10 +159,10 @@ void app_main(void) {
     if (opened) {
         s_current_view = VIEW_READING;
         if (wakeup == WAKEUP_REASON_BOOT_BUTTON) {
-            text_pager_next_page();
+            text_pager_prev_page();
             book_library_update_offset(text_pager_get_current_offset());
         } else if (wakeup == WAKEUP_REASON_PWR_BUTTON) {
-            text_pager_prev_page();
+            text_pager_next_page();
             book_library_update_offset(text_pager_get_current_offset());
         }
         reader_ui_render_reading();
@@ -186,7 +211,7 @@ void app_main(void) {
                 case VIEW_READING:
                     if (evt.button == BTN_ID_BOOT) {
                         if (evt.type == BTN_CLICK) {
-                            if (text_pager_next_page() == ESP_OK) {
+                            if (text_pager_prev_page() == ESP_OK) {
                                 reader_ui_render_reading();
                                 book_library_update_offset(text_pager_get_current_offset());
                             }
@@ -205,7 +230,7 @@ void app_main(void) {
                         }
                     } else if (evt.button == BTN_ID_PWR) {
                         if (evt.type == BTN_CLICK) {
-                            if (text_pager_prev_page() == ESP_OK) {
+                            if (text_pager_next_page() == ESP_OK) {
                                 reader_ui_render_reading();
                                 book_library_update_offset(text_pager_get_current_offset());
                             }
@@ -213,12 +238,6 @@ void app_main(void) {
                             s_current_view = VIEW_BOOKMARKS;
                             s_bookmark_index = 0;
                             reader_ui_render_bookmarks(s_bookmark_index);
-                        } else if (evt.type == BTN_LONG_PRESS) {
-                            ESP_LOGI(TAG, "PWR long press in reading view: entering deep sleep (keeping page on screen)...");
-                            book_library_update_offset(text_pager_get_current_offset());
-                            book_library_flush_state();
-                            vTaskDelay(pdMS_TO_TICKS(100));
-                            power_mgr_enter_deep_sleep(0);
                         }
                     }
                     break;
@@ -226,10 +245,10 @@ void app_main(void) {
                 case VIEW_MENU:
                     if (evt.type == BTN_CLICK) {
                         if (evt.button == BTN_ID_BOOT) {
-                            s_menu_index = (s_menu_index + 1) % 6;
+                            s_menu_index = (s_menu_index - 1 + 6) % 6;
                             reader_ui_render_menu(s_menu_index);
                         } else if (evt.button == BTN_ID_PWR) {
-                            s_menu_index = (s_menu_index - 1 + 6) % 6;
+                            s_menu_index = (s_menu_index + 1) % 6;
                             reader_ui_render_menu(s_menu_index);
                         }
                     } else if (evt.type == BTN_DOUBLE_CLICK) {
@@ -258,17 +277,6 @@ void app_main(void) {
                             vTaskDelay(pdMS_TO_TICKS(500));
                             power_mgr_enter_deep_sleep(0);
                         }
-                    } else if (evt.type == BTN_LONG_PRESS) {
-                        if (evt.button == BTN_ID_BOOT) {
-                            s_current_view = VIEW_READING;
-                            reader_ui_render_reading();
-                        } else if (evt.button == BTN_ID_PWR) {
-                            reader_ui_render_sleeping();
-                            book_library_update_offset(text_pager_get_current_offset());
-                            book_library_flush_state();
-                            vTaskDelay(pdMS_TO_TICKS(500));
-                            power_mgr_enter_deep_sleep(0);
-                        }
                     }
                     break;
 
@@ -278,9 +286,9 @@ void app_main(void) {
                         if (evt.type == BTN_CLICK) {
                             if (count > 0) {
                                 if (evt.button == BTN_ID_BOOT) {
-                                    s_book_index = (s_book_index + 1) % count;
-                                } else if (evt.button == BTN_ID_PWR) {
                                     s_book_index = (s_book_index - 1 + count) % count;
+                                } else if (evt.button == BTN_ID_PWR) {
+                                    s_book_index = (s_book_index + 1) % count;
                                 }
                                 reader_ui_render_book_list(s_book_index);
                             }
@@ -354,30 +362,26 @@ void app_main(void) {
                     break;
 
                 case VIEW_BOOKMARKS:
-                    if (evt.button == BTN_ID_PWR) {
+                    {
+                        const reading_state_t *st = book_library_get_state();
+                        size_t count = (st != NULL) ? st->bookmark_count : 0;
                         if (evt.type == BTN_CLICK) {
-                            const reading_state_t *st = book_library_get_state();
-                            if (st && st->bookmark_count > 0) {
-                                s_bookmark_index = (s_bookmark_index + 1) % st->bookmark_count;
+                            if (count > 0) {
+                                if (evt.button == BTN_ID_BOOT) {
+                                    s_bookmark_index = (s_bookmark_index - 1 + count) % count;
+                                } else if (evt.button == BTN_ID_PWR) {
+                                    s_bookmark_index = (s_bookmark_index + 1) % count;
+                                }
                                 reader_ui_render_bookmarks(s_bookmark_index);
                             }
-                        } else if (evt.type == BTN_LONG_PRESS) {
-                            s_current_view = VIEW_READING;
-                            reader_ui_render_reading();
-                        }
-                    } else if (evt.button == BTN_ID_BOOT) {
-                        if (evt.type == BTN_CLICK) {
-                            const reading_state_t *st = book_library_get_state();
-                            if (st && st->bookmark_count > 0 && s_bookmark_index >= 0 && s_bookmark_index < st->bookmark_count) {
+                        } else if (evt.type == BTN_DOUBLE_CLICK) {
+                            if (count > 0 && s_bookmark_index >= 0 && s_bookmark_index < (int)count) {
                                 size_t target_offset = st->bookmarks[s_bookmark_index];
                                 text_pager_open_offset(target_offset);
                                 book_library_update_offset(target_offset);
-                                s_current_view = VIEW_READING;
-                                reader_ui_render_reading();
-                            } else {
-                                s_current_view = VIEW_READING;
-                                reader_ui_render_reading();
                             }
+                            s_current_view = VIEW_READING;
+                            reader_ui_render_reading();
                         } else if (evt.type == BTN_LONG_PRESS) {
                             s_current_view = VIEW_READING;
                             reader_ui_render_reading();

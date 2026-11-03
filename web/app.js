@@ -25,9 +25,13 @@ const OPCODES = appConfig?.ble?.opcodes || {
   FORCE_REFRESH: 0x12,
   SET_SLEEP_TIMEOUT: 0x13,
   TRIGGER_SLEEP: 0x14,
-  SET_NAV_HINTS: 0x15
+  SET_NAV_HINTS: 0x15,
+  SET_ROTATION: 0x16,
+  SET_BUTTON_INVERT: 0x17
 };
 OPCODES.SET_NAV_HINTS = OPCODES.SET_NAV_HINTS || 0x15;
+OPCODES.SET_ROTATION = OPCODES.SET_ROTATION || 0x16;
+OPCODES.SET_BUTTON_INVERT = OPCODES.SET_BUTTON_INVERT || 0x17;
 
 const CHUNK_SIZE = appConfig?.ble?.chunkSize || 506;
 const CHUNK_DELAY_MS = appConfig?.ble?.chunkDelayMs || 6;
@@ -352,6 +356,9 @@ async function connectDevice() {
     updateConnectionUI('connected');
     showToast(`Connected to ${bleDevice.name || 'BacaIn'}`, 'success');
     log('Connection established successfully.', 'success');
+
+    // Sync saved orientation and button inversion to device
+    await syncSavedSettings();
 
     // Read initial status
     await readDeviceStatus();
@@ -1428,6 +1435,102 @@ async function setNavHints(show) {
 }
 const sendSetNavHints = setNavHints;
 
+async function sendSetOrientation(rotation) {
+  const rot = parseInt(rotation, 10);
+  try {
+    localStorage.setItem('bacain_orientation', String(rot));
+  } catch (_) {}
+
+  const modal = document.getElementById('settingsModal') || document.getElementById('deviceSettingsModal');
+  if (modal && typeof modal.setOrientation === 'function') {
+    modal.setOrientation(rot);
+  }
+
+  if (isConnected && controlChar) {
+    try {
+      log(`Setting screen orientation to ${rot} (OpCode 0x16)...`, 'info');
+      const packet = new Uint8Array([OPCODES.SET_ROTATION, rot]);
+      if (controlChar.writeValueWithResponse) {
+        await controlChar.writeValueWithResponse(packet);
+      } else {
+        await controlChar.writeValue(packet);
+      }
+      showToast('Screen orientation updated', 'success');
+    } catch (err) {
+      log(`Failed to set orientation: ${err.message}`, 'error');
+      showToast('Failed to update orientation', 'error');
+    }
+  }
+}
+const setOrientation = sendSetOrientation;
+
+async function sendSetButtonInvert(inverted) {
+  const inv = Boolean(inverted);
+  try {
+    localStorage.setItem('bacain_btn_invert', inv ? '1' : '0');
+  } catch (_) {}
+
+  const modal = document.getElementById('settingsModal') || document.getElementById('deviceSettingsModal');
+  if (modal && typeof modal.setButtonInvert === 'function') {
+    modal.setButtonInvert(inv);
+  }
+
+  if (isConnected && controlChar) {
+    try {
+      log(`Setting button inversion to ${inv ? 1 : 0} (OpCode 0x17)...`, 'info');
+      const packet = new Uint8Array([OPCODES.SET_BUTTON_INVERT, inv ? 1 : 0]);
+      if (controlChar.writeValueWithResponse) {
+        await controlChar.writeValueWithResponse(packet);
+      } else {
+        await controlChar.writeValue(packet);
+      }
+      showToast('Button navigation updated', 'success');
+    } catch (err) {
+      log(`Failed to set button inversion: ${err.message}`, 'error');
+      showToast('Failed to update button navigation', 'error');
+    }
+  }
+}
+const setButtonInvert = sendSetButtonInvert;
+
+async function syncSavedSettings() {
+  if (!isConnected || !controlChar) return;
+
+  try {
+    const savedRot = localStorage.getItem('bacain_orientation');
+    if (savedRot !== null) {
+      const rot = parseInt(savedRot, 10);
+      if (!isNaN(rot) && rot >= 0 && rot <= 3) {
+        log(`Syncing saved orientation (${rot}) to device (OpCode 0x16)...`, 'info');
+        const packet = new Uint8Array([OPCODES.SET_ROTATION, rot]);
+        if (controlChar.writeValueWithResponse) {
+          await controlChar.writeValueWithResponse(packet);
+        } else {
+          await controlChar.writeValue(packet);
+        }
+      }
+    }
+  } catch (err) {
+    log(`Failed to sync orientation: ${err.message}`, 'warning');
+  }
+
+  try {
+    const savedBtnInv = localStorage.getItem('bacain_btn_invert');
+    if (savedBtnInv !== null) {
+      const inv = (savedBtnInv === '1' || savedBtnInv === 'true') ? 1 : 0;
+      log(`Syncing saved button inversion (${inv}) to device (OpCode 0x17)...`, 'info');
+      const packet = new Uint8Array([OPCODES.SET_BUTTON_INVERT, inv]);
+      if (controlChar.writeValueWithResponse) {
+        await controlChar.writeValueWithResponse(packet);
+      } else {
+        await controlChar.writeValue(packet);
+      }
+    }
+  } catch (err) {
+    log(`Failed to sync button inversion: ${err.message}`, 'warning');
+  }
+}
+
 // ============================================================================
 // Event Listeners Initialization
 // ============================================================================
@@ -1617,6 +1720,18 @@ function initEventListeners() {
     }
   });
 
+  document.addEventListener('orientation-change', (e) => {
+    if (e.detail && e.detail.rotation !== undefined) {
+      sendSetOrientation(e.detail.rotation);
+    }
+  });
+
+  document.addEventListener('button-invert-change', (e) => {
+    if (e.detail && e.detail.inverted !== undefined) {
+      sendSetButtonInvert(e.detail.inverted);
+    }
+  });
+
   document.addEventListener('sleep-timeout-change', (e) => {
     if (e.detail && e.detail.timeout !== undefined) {
       setSleepTimeout(e.detail.timeout);
@@ -1644,8 +1759,29 @@ function init() {
   checkBluetoothCompatibility();
   initEventListeners();
   updateStorageTargetUI(1);
+
+  // Initialize orientation and button invert from localStorage on modal
+  const modal = document.getElementById('settingsModal') || document.getElementById('deviceSettingsModal');
+  if (modal) {
+    try {
+      const savedRot = localStorage.getItem('bacain_orientation');
+      if (savedRot !== null && typeof modal.setOrientation === 'function') {
+        modal.setOrientation(parseInt(savedRot, 10));
+      }
+      const savedBtnInv = localStorage.getItem('bacain_btn_invert');
+      if (savedBtnInv !== null && typeof modal.setButtonInvert === 'function') {
+        modal.setButtonInvert(savedBtnInv === '1' || savedBtnInv === 'true');
+      }
+    } catch (_) {}
+  }
+
   registerServiceWorker();
   log('BacaIn Web Bluetooth PWA initialized.', 'info');
+}
+
+if (typeof window !== 'undefined') {
+  window.sendSetOrientation = sendSetOrientation;
+  window.sendSetButtonInvert = sendSetButtonInvert;
 }
 
 document.addEventListener('DOMContentLoaded', init);

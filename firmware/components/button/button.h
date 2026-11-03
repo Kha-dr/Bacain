@@ -11,8 +11,8 @@ extern "C" {
 #endif
 
 typedef enum {
-    BTN_ID_DOWN = 0,    // Navigasi Turun / Lanjut Halaman (GPIO 0)
-    BTN_ID_UP   = 1,    // Navigasi Naik / Balik Halaman (GPIO 18)
+    BTN_ID_UP   = 0,    // Navigation Up (BOOT, GPIO 0)
+    BTN_ID_DOWN = 1,    // Navigation Down (PWR, GPIO 18)
     // Aliases backward-compatible
     BTN_ID_BOOT = BTN_ID_UP,
     BTN_ID_PWR  = BTN_ID_DOWN,
@@ -35,6 +35,9 @@ esp_err_t button_init(QueueHandle_t *out_queue);
 
 // Deinitializes timer and button resources
 void button_deinit(void);
+
+void button_set_inverted(bool inverted);
+bool button_get_inverted(void);
 
 #ifdef __cplusplus
 }

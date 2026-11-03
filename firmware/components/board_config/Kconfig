@@ -1,5 +1,18 @@
 menu "Board & Hardware Configuration"
 
+    choice BOARD_PROFILE
+        prompt "Hardware Board Profile"
+        default BOARD_PROFILE_WAVESHARE_154
+        help
+            Select the target hardware board profile.
+
+        config BOARD_PROFILE_WAVESHARE_154
+            bool "Waveshare ESP32-S3-ePaper-1.54"
+
+        config BOARD_PROFILE_CUSTOM
+            bool "Custom / Manual Configuration"
+    endchoice
+
     config BOARD_DISPLAY_WIDTH
         int "Display width in pixels"
         default 200
@@ -22,7 +35,7 @@ menu "Board & Hardware Configuration"
         range 0 3
         help
             Default display orientation.
-            Default: 0 (Waveshare ESP32-S3-ePaper-1.54).
+            Default: 0 (upright portrait, Waveshare ESP32-S3-ePaper-1.54).
 
     config BOARD_EPD_DC_PIN
         int "E-Paper DC GPIO pin"
@@ -73,19 +86,19 @@ menu "Board & Hardware Configuration"
             GPIO pin to control E-Paper power rail.
             Default: 6 (Waveshare ESP32-S3-ePaper-1.54).
 
-    config BOARD_BTN_DOWN_PIN
-        int "Navigation Down / Prev Button GPIO pin"
+    config BOARD_BTN_UP_PIN
+        int "Navigation Up / Prev Button GPIO pin (BOOT)"
         default 0
         help
-            GPIO pin for navigation down button.
-            Default: 0 (Waveshare ESP32-S3-ePaper-1.54).
+            GPIO pin for navigation up button.
+            Default: 0 (BOOT button on Waveshare ESP32-S3-ePaper-1.54).
 
-    config BOARD_BTN_UP_PIN
-        int "Navigation Up / Next Button GPIO pin"
+    config BOARD_BTN_DOWN_PIN
+        int "Navigation Down / Next Button GPIO pin (PWR)"
         default 18
         help
-            GPIO pin for navigation up button.
-            Default: 18 (Waveshare ESP32-S3-ePaper-1.54).
+            GPIO pin for navigation down button.
+            Default: 18 (PWR button on Waveshare ESP32-S3-ePaper-1.54).
 
     config BOARD_SDMMC_D0_PIN
         int "MicroSD SDMMC D0 GPIO pin"
@@ -108,12 +121,40 @@ menu "Board & Hardware Configuration"
             GPIO pin for SDMMC Command.
             Default: 41 (Waveshare ESP32-S3-ePaper-1.54).
 
+    config BOARD_SD_CLK_PIN
+        int "MicroSD SD CLK GPIO pin"
+        default 14
+        help
+            GPIO pin for SD Clock.
+            Default: 14.
+
+    config BOARD_SD_CMD_PIN
+        int "MicroSD SD CMD GPIO pin"
+        default 15
+        help
+            GPIO pin for SD Command.
+            Default: 15.
+
+    config BOARD_SD_D0_PIN
+        int "MicroSD SD D0 GPIO pin"
+        default 16
+        help
+            GPIO pin for SD Data 0.
+            Default: 16.
+
     config BOARD_VBAT_PWR_HOLD_PIN
         int "VBAT Power Hold GPIO pin"
         default 17
         help
             GPIO pin to maintain battery power.
             Default: 17 (Waveshare ESP32-S3-ePaper-1.54).
+
+    config BOARD_PWR_LATCH_PIN
+        int "Power Latch GPIO pin"
+        default 17
+        help
+            GPIO pin to maintain system power latch.
+            Default: 17.
 
     config BOARD_AUDIO_PWR_PIN
         int "Audio Power Control GPIO pin"
@@ -142,5 +183,26 @@ menu "Board & Hardware Configuration"
         help
             ADC1 channel used for battery voltage sensing.
             Default: 3 (Waveshare ESP32-S3-ePaper-1.54).
+
+    config BOARD_I2S_BCLK_PIN
+        int "Audio I2S BCLK GPIO pin"
+        default 4
+        help
+            GPIO pin for Audio I2S Bit Clock.
+            Default: 4.
+
+    config BOARD_I2S_LRCK_PIN
+        int "Audio I2S LRCK GPIO pin"
+        default 5
+        help
+            GPIO pin for Audio I2S Left/Right Clock.
+            Default: 5.
+
+    config BOARD_I2S_DOUT_PIN
+        int "Audio I2S DOUT GPIO pin"
+        default 7
+        help
+            GPIO pin for Audio I2S Data Out.
+            Default: 7.
 
 endmenu

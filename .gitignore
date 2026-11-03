@@ -54,6 +54,7 @@ waveshare_v2_ref/
 *.bak
 *.swp
 *~
+verify_*.js
 
 # Operating System Files
 .DS_Store

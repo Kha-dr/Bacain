@@ -18,6 +18,7 @@
 #include "esp_err.h"
 #include "esp_idf_version.h"
 #include "nvs_flash.h"
+#include "nvs.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -48,6 +49,8 @@
 #else
 extern void reader_ui_set_show_nav_hints(bool show);
 #endif
+extern void reader_ui_set_rotation(uint8_t rotation);
+extern void button_set_inverted(bool inverted);
 
 static const char *TAG = "ble_sync";
 
@@ -124,6 +127,8 @@ typedef enum {
     CMD_SET_SLEEP_TIMEOUT,
     CMD_TRIGGER_SLEEP,
     CMD_SET_NAV_HINTS,
+    CMD_SET_ROTATION,
+    CMD_SET_BUTTON_INVERT,
 } ble_sync_cmd_type_t;
 
 typedef struct {
@@ -666,6 +671,43 @@ static void handle_cmd_set_nav_hints(uint8_t show)
     }
 }
 
+static void handle_cmd_set_rotation(uint8_t rot)
+{
+    ESP_LOGI(TAG, "Setting rotation: %u", (unsigned)rot);
+    nvs_handle_t nvs_hdl;
+    esp_err_t err = nvs_open("settings", NVS_READWRITE, &nvs_hdl);
+    if (err == ESP_OK) {
+        nvs_set_u8(nvs_hdl, "rotation", rot);
+        nvs_commit(nvs_hdl);
+        nvs_close(nvs_hdl);
+    } else {
+        ESP_LOGE(TAG, "Failed to open NVS namespace settings: 0x%x", err);
+    }
+    reader_ui_set_rotation(rot);
+    uint8_t resp[2] = { BLE_SYNC_OP_SET_ROTATION, BLE_SYNC_STATUS_OK };
+    ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
+    if (s_event_cb) {
+        s_event_cb(BLE_SYNC_EVT_REQUEST_REFRESH, NULL, s_event_cb_arg);
+    }
+}
+
+static void handle_cmd_set_button_invert(uint8_t inverted)
+{
+    ESP_LOGI(TAG, "Setting button invert: %u", (unsigned)inverted);
+    nvs_handle_t nvs_hdl;
+    esp_err_t err = nvs_open("settings", NVS_READWRITE, &nvs_hdl);
+    if (err == ESP_OK) {
+        nvs_set_u8(nvs_hdl, "btn_invert", inverted != 0 ? 1 : 0);
+        nvs_commit(nvs_hdl);
+        nvs_close(nvs_hdl);
+    } else {
+        ESP_LOGE(TAG, "Failed to open NVS namespace settings: 0x%x", err);
+    }
+    button_set_inverted(inverted != 0);
+    uint8_t resp[2] = { BLE_SYNC_OP_SET_BUTTON_INVERT, BLE_SYNC_STATUS_OK };
+    ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
+}
+
 static void ble_sync_worker_task(void *pvParameters)
 {
     ESP_LOGI(TAG, "Worker task started");
@@ -709,6 +751,12 @@ static void ble_sync_worker_task(void *pvParameters)
                 case CMD_SET_NAV_HINTS:
                     handle_cmd_set_nav_hints(cmd.param8);
                     break;
+                case CMD_SET_ROTATION:
+                    handle_cmd_set_rotation(cmd.param8);
+                    break;
+                case CMD_SET_BUTTON_INVERT:
+                    handle_cmd_set_button_invert(cmd.param8);
+                    break;
                 default:
                     break;
                 }
@@ -743,6 +791,12 @@ static void ble_sync_worker_task(void *pvParameters)
                     continue;
                 case CMD_SET_NAV_HINTS:
                     handle_cmd_set_nav_hints(cmd.param8);
+                    continue;
+                case CMD_SET_ROTATION:
+                    handle_cmd_set_rotation(cmd.param8);
+                    continue;
+                case CMD_SET_BUTTON_INVERT:
+                    handle_cmd_set_button_invert(cmd.param8);
                     continue;
                 default:
                     break;
@@ -903,6 +957,36 @@ static int ble_sync_control_access_cb(uint16_t conn_handle, uint16_t attr_handle
         cmd.param8 = (buf[1] != 0) ? 1 : 0;
         reader_ui_set_show_nav_hints(buf[1] != 0);
         xQueueSend(s_cmd_queue, &cmd, pdMS_TO_TICKS(50));
+        break;
+
+    case BLE_SYNC_OP_SET_ROTATION:
+        if (copied < 2) {
+            ESP_LOGE(TAG, "SET_ROTATION payload too short: %u bytes", copied);
+            return BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN;
+        }
+        cmd.type = CMD_SET_ROTATION;
+        cmd.param8 = buf[1];
+        reader_ui_set_rotation(buf[1]);
+        if (s_cmd_queue != NULL) {
+            xQueueSend(s_cmd_queue, &cmd, pdMS_TO_TICKS(50));
+        } else {
+            handle_cmd_set_rotation(cmd.param8);
+        }
+        break;
+
+    case BLE_SYNC_OP_SET_BUTTON_INVERT:
+        if (copied < 2) {
+            ESP_LOGE(TAG, "SET_BUTTON_INVERT payload too short: %u bytes", copied);
+            return BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN;
+        }
+        cmd.type = CMD_SET_BUTTON_INVERT;
+        cmd.param8 = (buf[1] != 0) ? 1 : 0;
+        button_set_inverted(buf[1] != 0);
+        if (s_cmd_queue != NULL) {
+            xQueueSend(s_cmd_queue, &cmd, pdMS_TO_TICKS(50));
+        } else {
+            handle_cmd_set_button_invert(cmd.param8);
+        }
         break;
 
     default:

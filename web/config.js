@@ -21,7 +21,10 @@
         SET_FONT: 0x10,
         FORCE_REFRESH: 0x12,
         SET_SLEEP_TIMEOUT: 0x13,
-        TRIGGER_SLEEP: 0x14
+        TRIGGER_SLEEP: 0x14,
+        SET_NAV_HINTS: 0x15,
+        SET_ROTATION: 0x16,
+        SET_BUTTON_INVERT: 0x17
       }
     },
     storage: {

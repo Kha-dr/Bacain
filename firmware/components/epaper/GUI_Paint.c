@@ -142,6 +142,13 @@ void Paint_SetRotate(UWORD Rotate)
     if(Rotate == ROTATE_0 || Rotate == ROTATE_90 || Rotate == ROTATE_180 || Rotate == ROTATE_270) {
         ESP_LOGI(TAG,"Set image Rotate %d", Rotate);
         Paint.Rotate = Rotate;
+        if(Rotate == ROTATE_0 || Rotate == ROTATE_180) {
+            Paint.Width = Paint.WidthMemory;
+            Paint.Height = Paint.HeightMemory;
+        } else {
+            Paint.Width = Paint.HeightMemory;
+            Paint.Height = Paint.WidthMemory;
+        }
     } else {
         ESP_LOGI(TAG,"rotate = 0, 90, 180, 270");
     }

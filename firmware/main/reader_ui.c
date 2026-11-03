@@ -20,6 +20,32 @@ static int s_reading_page_turns = 0;
 static reading_state_t s_cached_reading_state;
 static size_t s_book_list_start_idx = 0;
 static bool s_show_nav_hints = true;
+static uint8_t s_rotation = BOARD_DISPLAY_ROTATION;
+
+void reader_ui_set_rotation(uint8_t rotation) {
+    s_rotation = rotation % 4;
+    UWORD mapped_rotate = ROTATE_0;
+    switch (s_rotation) {
+        case 1:
+            mapped_rotate = ROTATE_90;
+            break;
+        case 2:
+            mapped_rotate = ROTATE_180;
+            break;
+        case 3:
+            mapped_rotate = ROTATE_270;
+            break;
+        case 0:
+        default:
+            mapped_rotate = ROTATE_0;
+            break;
+    }
+    Paint_SetRotate(mapped_rotate);
+}
+
+uint8_t reader_ui_get_rotation(void) {
+    return s_rotation;
+}
 
 bool reader_ui_get_show_nav_hints(void) {
     return s_show_nav_hints;
@@ -122,10 +148,11 @@ esp_err_t reader_ui_init(void) {
         }
     }
 
-    UWORD rotation = (BOARD_DISPLAY_ROTATION == 1) ? ROTATE_90 :
-                     (BOARD_DISPLAY_ROTATION == 2) ? ROTATE_180 :
-                     (BOARD_DISPLAY_ROTATION == 3) ? ROTATE_270 : BOARD_DISPLAY_ROTATION;
+    UWORD rotation = (s_rotation == 1) ? ROTATE_90 :
+                     (s_rotation == 2) ? ROTATE_180 :
+                     (s_rotation == 3) ? ROTATE_270 : ROTATE_0;
     Paint_NewImage(s_canvas, DISPLAY_WIDTH, DISPLAY_HEIGHT, rotation, WHITE);
+    Paint_SetRotate(rotation);
     Paint_SetScale(2);
     Paint_SelectImage(s_canvas);
     Paint_Clear(WHITE);

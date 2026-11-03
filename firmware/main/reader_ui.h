@@ -34,6 +34,8 @@ typedef enum {
 } menu_action_t;
 
 esp_err_t reader_ui_init(void);
+void      reader_ui_set_rotation(uint8_t rotation);
+uint8_t   reader_ui_get_rotation(void);
 bool      reader_ui_get_show_nav_hints(void);
 void      reader_ui_set_show_nav_hints(bool show);
 void      reader_ui_render_reading(void);

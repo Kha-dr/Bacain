@@ -14,7 +14,7 @@ on:
       board_name:
         description: 'Board Profile Name'
         required: false
-        default: 'Waveshare ESP32-S3-ePaper-1.54'
+        default: ''
         type: string
       extra_idf_args:
         description: 'Extra IDF Build Args / Compiler Macros (e.g. -DCONFIG_BOARD_DISPLAY_WIDTH=250)'
@@ -24,25 +24,43 @@ on:
       output_bin:
         description: 'Output Factory Binary Name'
         required: false
-        default: 'bacain_factory.bin'
+        default: ''
         type: string
 
 permissions:
   contents: write
 
 jobs:
+  prepare-matrix:
+    name: Generate Board Build Matrix
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Parse boards.json
+        id: set-matrix
+        run: |
+          MATRIX_JSON=$(jq -c '[.boards[] | {id: .id, name: .name, output_bin: .output_bin, extra_args: ("-DCONFIG_BOARD_PROFILE_" + (.id | ascii_upcase) + "=y")}]' firmware/boards/boards.json)
+          echo "matrix={\"board\":$MATRIX_JSON}" >> "$GITHUB_OUTPUT"
+
   build:
-    name: Build & Package BacaIn ESP32-S3 Firmware
+    name: Build & Package BacaIn ESP32-S3 Firmware (${{ matrix.board.id }})
+    needs: prepare-matrix
     runs-on: ubuntu-latest
     container:
-      image: espressif/idf:release-v5.2
+      image: espressif/idf:v5.3.1
     defaults:
       run:
         shell: bash
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prepare-matrix.outputs.matrix) }}
     env:
-      BOARD_NAME: ${{ inputs.board_name || 'Waveshare ESP32-S3-ePaper-1.54' }}
-      EXTRA_IDF_ARGS: ${{ inputs.extra_idf_args || '' }}
-      FACTORY_BIN: ${{ inputs.output_bin || 'bacain_factory.bin' }}
+      BOARD_NAME: ${{ inputs.board_name || matrix.board.name }}
+      EXTRA_IDF_ARGS: ${{ inputs.extra_idf_args || matrix.board.extra_args }}
+      FACTORY_BIN: ${{ inputs.output_bin || matrix.board.output_bin }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -87,7 +105,7 @@ jobs:
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: bacain-firmware
+          name: bacain-firmware-${{ matrix.board.id }}
           path: |
             firmware/build/${{ env.FACTORY_BIN }}
             firmware/build/reader_firmware.bin
