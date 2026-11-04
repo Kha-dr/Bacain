@@ -48,9 +48,11 @@
 #include "reader_ui.h"
 #else
 extern void reader_ui_set_show_nav_hints(bool show);
+extern bool reader_ui_get_show_nav_hints(void);
 #endif
 extern void reader_ui_set_rotation(uint8_t rotation);
 extern void button_set_inverted(bool inverted);
+#include "status_led.h"
 
 static const char *TAG = "ble_sync";
 
@@ -100,6 +102,7 @@ static uint16_t s_current_mtu = 23;
 /* Storage Target State */
 static storage_target_t s_storage_target = STORAGE_TARGET_FLASH;
 static uint16_t         s_sleep_timeout_sec = 20;
+static bool             s_sleep_timeout_loaded = false;
 
 /* File Upload State */
 static FILE    *s_upload_fp = NULL;
@@ -655,6 +658,16 @@ static void handle_cmd_set_sleep_timeout(uint16_t timeout_sec)
 {
     ESP_LOGI(TAG, "Setting sleep timeout: %u sec", (unsigned)timeout_sec);
     s_sleep_timeout_sec = timeout_sec;
+    s_sleep_timeout_loaded = true;
+    nvs_handle_t nvs_hdl;
+    esp_err_t err = nvs_open("settings", NVS_READWRITE, &nvs_hdl);
+    if (err == ESP_OK) {
+        nvs_set_u16(nvs_hdl, "sleep_timeout", timeout_sec);
+        nvs_commit(nvs_hdl);
+        nvs_close(nvs_hdl);
+    } else {
+        ESP_LOGE(TAG, "Failed to open NVS namespace settings: 0x%x", err);
+    }
     uint8_t resp[2] = { BLE_SYNC_OP_SET_SLEEP_TIMEOUT, BLE_SYNC_STATUS_OK };
     ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
 }
@@ -997,6 +1010,69 @@ static int ble_sync_control_access_cb(uint16_t conn_handle, uint16_t attr_handle
             handle_cmd_set_button_invert(cmd.param8);
         }
         break;
+
+    case BLE_SYNC_OP_SET_STATUS_LED: {
+        if (copied < 2) {
+            ESP_LOGE(TAG, "SET_STATUS_LED payload too short: %u bytes", copied);
+            uint8_t resp[2] = { BLE_SYNC_OP_SET_STATUS_LED, BLE_SYNC_STATUS_ERROR };
+            ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
+            break;
+        }
+        if (!status_led_is_available()) {
+            ESP_LOGW(TAG, "Status LED not supported on this device");
+            uint8_t resp[2] = { BLE_SYNC_OP_SET_STATUS_LED, BLE_SYNC_STATUS_NOT_SUPPORTED };
+            ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
+            break;
+        }
+        status_led_set_enabled(buf[1] != 0);
+        uint8_t resp[2] = { BLE_SYNC_OP_SET_STATUS_LED, BLE_SYNC_STATUS_OK };
+        ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
+        break;
+    }
+
+    case BLE_SYNC_OP_GET_CONFIG: {
+        uint8_t nvs_font = 0;
+        uint8_t nav_hints = 1;
+        uint8_t rotation = 0;
+        uint8_t btn_invert = 0;
+        uint16_t sleep_timeout = 20;
+        nvs_handle_t nvs_hdl;
+        if (nvs_open("settings", NVS_READONLY, &nvs_hdl) == ESP_OK) {
+            nvs_get_u8(nvs_hdl, "font_size", &nvs_font);
+            if (nvs_get_u8(nvs_hdl, "nav_hints", &nav_hints) != ESP_OK) {
+                nav_hints = reader_ui_get_show_nav_hints() ? 1 : 0;
+            }
+            nvs_get_u8(nvs_hdl, "rotation", &rotation);
+            nvs_get_u8(nvs_hdl, "btn_invert", &btn_invert);
+            if (nvs_get_u16(nvs_hdl, "sleep_timeout", &sleep_timeout) != ESP_OK) {
+                sleep_timeout = 20;
+            }
+            nvs_close(nvs_hdl);
+        } else {
+            nav_hints = reader_ui_get_show_nav_hints() ? 1 : 0;
+            sleep_timeout = 20;
+        }
+        s_sleep_timeout_sec = sleep_timeout;
+        s_sleep_timeout_loaded = true;
+        uint8_t pwa_font_id = (nvs_font == 0) ? 1 : 0;
+        uint8_t status_led = status_led_is_enabled() ? 1 : 0;
+        uint8_t storage_target = (s_storage_target == STORAGE_TARGET_FLASH) ? 1 : 0;
+
+        uint8_t resp[10] = {
+            BLE_SYNC_OP_GET_CONFIG,
+            BLE_SYNC_STATUS_OK,
+            pwa_font_id,
+            nav_hints,
+            rotation,
+            btn_invert,
+            status_led,
+            storage_target,
+            (uint8_t)(sleep_timeout & 0xFF),
+            (uint8_t)(sleep_timeout >> 8)
+        };
+        ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
+        break;
+    }
 
     default:
         ESP_LOGW(TAG, "Unknown control opcode: 0x%02x", opcode);
@@ -1476,10 +1552,22 @@ void ble_sync_register_callback(ble_sync_event_cb_t cb, void *user_data)
 
 uint16_t ble_sync_get_sleep_timeout(void)
 {
+    if (!s_sleep_timeout_loaded) {
+        nvs_handle_t nvs_hdl;
+        if (nvs_open("settings", NVS_READONLY, &nvs_hdl) == ESP_OK) {
+            uint16_t val = 20;
+            if (nvs_get_u16(nvs_hdl, "sleep_timeout", &val) == ESP_OK) {
+                s_sleep_timeout_sec = val;
+            }
+            nvs_close(nvs_hdl);
+        }
+        s_sleep_timeout_loaded = true;
+    }
     return s_sleep_timeout_sec;
 }
 
 void ble_sync_set_sleep_timeout(uint16_t sec)
 {
     s_sleep_timeout_sec = sec;
+    s_sleep_timeout_loaded = true;
 }

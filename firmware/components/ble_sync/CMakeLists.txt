@@ -14,4 +14,5 @@ idf_component_register(
         vfs
         log
         nvs_flash
+        status_led
 )

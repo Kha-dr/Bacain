@@ -44,10 +44,28 @@ typedef enum {
 #define BLE_SYNC_OP_SET_NAV_HINTS        0x15
 #define BLE_SYNC_OP_SET_ROTATION         0x16
 #define BLE_SYNC_OP_SET_BUTTON_INVERT    0x17
+#define BLE_SYNC_OP_SET_STATUS_LED       0x18
+#define BLE_SYNC_OP_GET_CONFIG           0x19
 /* Control Response Status Codes */
 #define BLE_SYNC_STATUS_OK               0x00
 #define BLE_SYNC_STATUS_ERROR            0x01
 #define BLE_SYNC_STATUS_STORAGE_ERR      0x07
+#define BLE_SYNC_STATUS_NOT_SUPPORTED    0x08
+
+/**
+ * @brief GET_CONFIG Control Characteristic 10-byte response payload layout (OpCode 0x19)
+ */
+typedef struct __attribute__((packed)) {
+    uint8_t  opcode;         /*!< BLE_SYNC_OP_GET_CONFIG (0x19) */
+    uint8_t  status;         /*!< BLE_SYNC_STATUS_OK (0x00) */
+    uint8_t  font_id;        /*!< 0 = Large (16px), 1 = Small (12px) */
+    uint8_t  nav_hints;      /*!< 0 = disabled, 1 = enabled */
+    uint8_t  rotation;       /*!< Display rotation (0-3) */
+    uint8_t  btn_invert;     /*!< 0 = normal, 1 = inverted */
+    uint8_t  status_led;     /*!< 0 = disabled, 1 = enabled */
+    uint8_t  storage_target; /*!< 0 = SD card, 1 = Flash */
+    uint16_t sleep_timeout;  /*!< Sleep timeout in seconds (little-endian) */
+} ble_sync_config_response_t;
 
 /**
  * @brief Status Characteristic 12-byte packed binary payload layout
