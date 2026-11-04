@@ -17,6 +17,7 @@ idf_component_register(
         epaper
         reader_core
         ble_sync
+        status_led
 )
 
 idf_build_get_property(python_cmd PYTHON)

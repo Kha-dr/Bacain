@@ -230,11 +230,44 @@ extern "C" {
 #endif
 #endif
 
+// Status LED Configuration
+#ifndef BOARD_HAS_STATUS_LED
+#ifdef CONFIG_BOARD_HAS_STATUS_LED
+#define BOARD_HAS_STATUS_LED        CONFIG_BOARD_HAS_STATUS_LED
+#else
+#define BOARD_HAS_STATUS_LED        1
+#endif
+#endif
+
+#ifndef BOARD_LED_ACTIVE_LEVEL
+#ifdef CONFIG_BOARD_LED_ACTIVE_LEVEL
+#define BOARD_LED_ACTIVE_LEVEL      CONFIG_BOARD_LED_ACTIVE_LEVEL
+#else
+#define BOARD_LED_ACTIVE_LEVEL      0 // Active low (0 = ON, 1 = OFF) on Waveshare ESP32-S3-ePaper-1.54
+#endif
+#endif
+
+#ifndef BOARD_LED_RED_PIN
+#ifdef CONFIG_BOARD_LED_RED_PIN
+#define BOARD_LED_RED_PIN           CONFIG_BOARD_LED_RED_PIN
+#else
+#define BOARD_LED_RED_PIN           -1
+#endif
+#endif
+
 #ifndef BOARD_LED_GREEN_PIN
 #ifdef CONFIG_BOARD_LED_GREEN_PIN
 #define BOARD_LED_GREEN_PIN         CONFIG_BOARD_LED_GREEN_PIN
 #else
 #define BOARD_LED_GREEN_PIN         3
+#endif
+#endif
+
+#ifndef BOARD_LED_BLUE_PIN
+#ifdef CONFIG_BOARD_LED_BLUE_PIN
+#define BOARD_LED_BLUE_PIN          CONFIG_BOARD_LED_BLUE_PIN
+#else
+#define BOARD_LED_BLUE_PIN          -1
 #endif
 #endif
 
@@ -271,7 +304,7 @@ extern "C" {
 #ifdef CONFIG_BOARD_I2S_BCLK_PIN
 #define BOARD_I2S_BCLK_PIN          CONFIG_BOARD_I2S_BCLK_PIN
 #else
-#define BOARD_I2S_BCLK_PIN          4
+#define BOARD_I2S_BCLK_PIN          15
 #endif
 #endif
 
@@ -279,7 +312,7 @@ extern "C" {
 #ifdef CONFIG_BOARD_I2S_LRCK_PIN
 #define BOARD_I2S_LRCK_PIN          CONFIG_BOARD_I2S_LRCK_PIN
 #else
-#define BOARD_I2S_LRCK_PIN          5
+#define BOARD_I2S_LRCK_PIN          38
 #endif
 #endif
 
@@ -287,7 +320,7 @@ extern "C" {
 #ifdef CONFIG_BOARD_I2S_DOUT_PIN
 #define BOARD_I2S_DOUT_PIN          CONFIG_BOARD_I2S_DOUT_PIN
 #else
-#define BOARD_I2S_DOUT_PIN          7
+#define BOARD_I2S_DOUT_PIN          45
 #endif
 #endif
 

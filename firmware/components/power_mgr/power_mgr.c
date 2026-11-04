@@ -2,6 +2,7 @@
 #include "board_config.h"
 #include "driver/gpio.h"
 #include "driver/rtc_io.h"
+#include "esp_sleep.h"
 #include "esp_adc/adc_oneshot.h"
 #include "esp_adc/adc_cali.h"
 #include "esp_adc/adc_cali_scheme.h"
@@ -19,6 +20,7 @@
 #define LED_GREEN_PIN      BOARD_LED_GREEN_PIN
 
 #define BATTERY_ADC_CHANNEL BOARD_BATTERY_ADC_CHANNEL
+#define BATTERY_ADC_SAMPLE_COUNT 16
 
 static adc_oneshot_unit_handle_t s_adc_handle = NULL;
 static adc_cali_handle_t         s_cali_handle = NULL;
@@ -106,26 +108,86 @@ wakeup_reason_t power_mgr_get_wakeup_cause(void) {
 }
 
 uint32_t power_mgr_get_battery_voltage_mv(void) {
-    if (!s_adc_handle) return 3700;
-    int raw = 0;
-    int mv = 0;
-    if (adc_oneshot_read(s_adc_handle, BATTERY_ADC_CHANNEL, &raw) == ESP_OK) {
-        if (s_cali_enabled && s_cali_handle) {
-            adc_cali_raw_to_voltage(s_cali_handle, raw, &mv);
-        } else {
-            mv = (raw * 3300) / 4095;
-        }
-        // Hardware voltage divider: 2x multiplier
-        return (uint32_t)(mv * 2);
+    if (!s_adc_handle) {
+        ESP_LOGE(TAG, "ADC unit uninitialized");
+        return 0;
     }
-    return 3700;
+
+    uint32_t sum_raw = 0;
+    uint32_t valid_samples = 0;
+    for (int i = 0; i < BATTERY_ADC_SAMPLE_COUNT; i++) {
+        int raw = 0;
+        if (adc_oneshot_read(s_adc_handle, BATTERY_ADC_CHANNEL, &raw) == ESP_OK) {
+            sum_raw += (uint32_t)raw;
+            valid_samples++;
+        }
+    }
+
+    if (valid_samples == 0) {
+        ESP_LOGE(TAG, "Battery ADC read failed");
+        return 0;
+    }
+
+    int avg_raw = (int)(sum_raw / valid_samples);
+    int mv = 0;
+    if (s_cali_enabled && s_cali_handle) {
+        if (adc_cali_raw_to_voltage(s_cali_handle, avg_raw, &mv) != ESP_OK) {
+            mv = (avg_raw * 3300) / 4095;
+        }
+    } else {
+        mv = (avg_raw * 3300) / 4095;
+    }
+
+    return (uint32_t)((float)mv * BOARD_VOLTAGE_DIVIDER_RATIO);
 }
+
+typedef struct {
+    uint32_t mv;
+    uint8_t  pct;
+} battery_ocv_point_t;
+
+static const battery_ocv_point_t s_battery_ocv_table[] = {
+    { 4180, 100 },
+    { 4060,  90 },
+    { 3980,  80 },
+    { 3900,  70 },
+    { 3840,  60 },
+    { 3800,  50 },
+    { 3760,  40 },
+    { 3730,  30 },
+    { 3680,  20 },
+    { 3600,  10 },
+    { 3450,   5 },
+    { 3300,   0 },
+};
 
 uint8_t power_mgr_get_battery_percentage(void) {
     uint32_t mv = power_mgr_get_battery_voltage_mv();
-    if (mv >= BOARD_BATTERY_MAX_MV) return 100;
-    if (mv <= BOARD_BATTERY_MIN_MV) return 0;
-    return (uint8_t)((mv - BOARD_BATTERY_MIN_MV) * 100 / (BOARD_BATTERY_MAX_MV - BOARD_BATTERY_MIN_MV));
+    const size_t table_size = sizeof(s_battery_ocv_table) / sizeof(s_battery_ocv_table[0]);
+
+    if (mv >= s_battery_ocv_table[0].mv) {
+        return 100;
+    }
+    if (mv <= s_battery_ocv_table[table_size - 1].mv) {
+        return 0;
+    }
+
+    for (size_t i = 0; i < table_size - 1; i++) {
+        if (s_battery_ocv_table[i].mv > mv && mv >= s_battery_ocv_table[i + 1].mv) {
+            uint32_t mv_high = s_battery_ocv_table[i].mv;
+            uint32_t mv_low  = s_battery_ocv_table[i + 1].mv;
+            uint32_t pct_high = s_battery_ocv_table[i].pct;
+            uint32_t pct_low  = s_battery_ocv_table[i + 1].pct;
+
+            uint32_t pct = pct_low + ((mv - mv_low) * (pct_high - pct_low)) / (mv_high - mv_low);
+            if (pct > 100) {
+                pct = 100;
+            }
+            return (uint8_t)pct;
+        }
+    }
+
+    return 0;
 }
 
 void power_mgr_enter_deep_sleep(uint32_t sleep_seconds) {
@@ -143,6 +205,8 @@ void power_mgr_enter_deep_sleep(uint32_t sleep_seconds) {
     rtc_gpio_pullup_en(BOOT_BUTTON_PIN);
     rtc_gpio_pulldown_dis(PWR_BUTTON_PIN);
     rtc_gpio_pullup_en(PWR_BUTTON_PIN);
+
+    esp_sleep_pd_config(ESP_PD_DOMAIN_MAX, ESP_PD_OPTION_AUTO);
 
     if (sleep_seconds > 0) {
         esp_sleep_enable_timer_wakeup(((uint64_t)sleep_seconds) * 1000000ULL);
