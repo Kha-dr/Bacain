@@ -87,6 +87,11 @@ storage_target_t book_library_get_storage_target(void);
 esp_err_t book_library_scan(void);
 
 /**
+ * @brief Invalidate scanned book library cache.
+ */
+void book_library_invalidate_cache(void);
+
+/**
  * @brief Enter a subdirectory within current directory and rescan.
  *
  * @param subdir_name Name of subdirectory or subfolder path.

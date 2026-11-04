@@ -321,6 +321,17 @@ void Paint_ClearWindows(UWORD Xstart, UWORD Ystart, UWORD Xend, UWORD Yend, UWOR
     if (Yend > Paint.Height) {
         Yend = Paint.Height;
     }
+
+    if (Xstart == 0 && (Xend == Paint.Width || Xend >= Paint.Width - 1) &&
+        Paint.Rotate == ROTATE_0 && Paint.Mirror == MIRROR_NONE && Paint.Scale == 2 &&
+        Paint.Image != NULL && Yend > Ystart) {
+        uint8_t fill = (Color == BLACK) ? 0x00 : 0xFF;
+        size_t offset = (size_t)Ystart * Paint.WidthByte;
+        size_t bytes = (size_t)(Yend - Ystart) * Paint.WidthByte;
+        memset(&Paint.Image[offset], fill, bytes);
+        return;
+    }
+
     UWORD X, Y;
     for (Y = Ystart; Y < Yend; Y++) {
         for (X = Xstart; X < Xend; X++) {

@@ -421,24 +421,28 @@ void epaper_port_display_full(const uint8_t *Image) {
 
     epaper_port_init();
     epaper_port_display(Image);
-    epaper_port_init_partial();
 
-    // Set Image as baseline in both buffers for subsequent partial updates
-    epaper_SendCommand(0x4E);  // Set Cursor X
+    // Switch LUT to partial refresh for subsequent partial updates without hardware reset
+    epaper_set_lut(WF_PARTIAL_1IN54_0);
+    epaper_SendCommand(0x37);
     epaper_SendData(0x00);
-    epaper_SendCommand(0x4F);  // Set Cursor Y
-    epaper_SendData(0xC7);
     epaper_SendData(0x00);
-    epaper_SendCommand(0x24);
-    epaper_write_bytes(Image, 5000);
+    epaper_SendData(0x00);
+    epaper_SendData(0x00);
+    epaper_SendData(0x00);
+    epaper_SendData(0x40);
+    epaper_SendData(0x00);
+    epaper_SendData(0x00);
+    epaper_SendData(0x00);
+    epaper_SendData(0x00);
 
-    epaper_SendCommand(0x4E);  // Set Cursor X
-    epaper_SendData(0x00);
-    epaper_SendCommand(0x4F);  // Set Cursor Y
-    epaper_SendData(0xC7);
-    epaper_SendData(0x00);
-    epaper_SendCommand(0x26);
-    epaper_write_bytes(Image, 5000);
+    epaper_SendCommand(0x3C);
+    epaper_SendData(0x80);
+
+    epaper_SendCommand(0x22);
+    epaper_SendData(0xC0);
+    epaper_SendCommand(0x20);
+    epaper_readbusyh();
 }
 
 void epaper_port_sleep(void) {

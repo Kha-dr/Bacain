@@ -8,11 +8,13 @@
 
 #define TAG "BUTTON"
 
-#define UP_BUTTON_GPIO    BOARD_BTN_UP_PIN
-#define DOWN_BUTTON_GPIO  BOARD_BTN_DOWN_PIN
-#define BOOT_BUTTON_GPIO  UP_BUTTON_GPIO
-#define PWR_BUTTON_GPIO   DOWN_BUTTON_GPIO
-#define CHORD_REBOOT_TICKS (2000 / 5) // 2000ms / 5ms per tick = 400 ticks
+#define UP_BUTTON_GPIO            BOARD_BTN_UP_PIN
+#define DOWN_BUTTON_GPIO          BOARD_BTN_DOWN_PIN
+#define BOOT_BUTTON_GPIO          UP_BUTTON_GPIO
+#define PWR_BUTTON_GPIO           DOWN_BUTTON_GPIO
+#define BUTTON_SAMPLE_INTERVAL_MS 10
+#define BUTTON_SAMPLE_INTERVAL_US (BUTTON_SAMPLE_INTERVAL_MS * 1000)
+#define CHORD_REBOOT_TICKS        (2000 / BUTTON_SAMPLE_INTERVAL_MS)
 
 static Button s_btn_boot;
 static Button s_btn_pwr;
@@ -65,6 +67,16 @@ static void button_timer_cb(void *arg) {
         s_chord_ticks = 0;
     }
 
+#if (BUTTON_SAMPLE_INTERVAL_MS > TICKS_INTERVAL)
+    // Scale tick accumulation to match TICKS_INTERVAL timing specifications
+    if (s_btn_boot.state > BTN_STATE_IDLE) {
+        s_btn_boot.ticks += (BUTTON_SAMPLE_INTERVAL_MS / TICKS_INTERVAL - 1);
+    }
+    if (s_btn_pwr.state > BTN_STATE_IDLE) {
+        s_btn_pwr.ticks += (BUTTON_SAMPLE_INTERVAL_MS / TICKS_INTERVAL - 1);
+    }
+#endif
+
     button_ticks();
 }
 
@@ -99,7 +111,7 @@ esp_err_t button_init(QueueHandle_t *out_queue) {
         .name = "btn_timer"
     };
     ESP_ERROR_CHECK(esp_timer_create(&timer_args, &s_timer));
-    ESP_ERROR_CHECK(esp_timer_start_periodic(s_timer, 5 * 1000)); // 5ms tick matches TICKS_INTERVAL
+    ESP_ERROR_CHECK(esp_timer_start_periodic(s_timer, BUTTON_SAMPLE_INTERVAL_US));
 
     ESP_LOGI(TAG, "Buttons initialized (UP/BOOT: GPIO %d, DOWN/PWR: GPIO %d)", UP_BUTTON_GPIO, DOWN_BUTTON_GPIO);
     return ESP_OK;

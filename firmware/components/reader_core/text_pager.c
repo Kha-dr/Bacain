@@ -576,7 +576,6 @@ esp_err_t text_pager_next_page(void) {
     xSemaphoreGive(s_mutex);
 
     book_library_update_offset(s_pager.current_offset);
-    text_pager_render_page();
 
     return ESP_OK;
 }
@@ -605,7 +604,6 @@ esp_err_t text_pager_prev_page(void) {
     xSemaphoreGive(s_mutex);
 
     book_library_update_offset(s_pager.current_offset);
-    text_pager_render_page();
 
     return ESP_OK;
 }

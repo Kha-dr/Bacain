@@ -37,6 +37,8 @@ static char              s_state_file[80] = "/spiflash/.reader/state.json";
 static char              s_current_dir[BOOK_PATH_MAX_LEN] = "/spiflash/books";
 static char              s_rel_path[BOOK_PATH_MAX_LEN] = "";
 static bool              s_state_dirty = false;
+static bool              s_scanned = false;
+static bool              s_state_loaded = false;
 
 static bool is_root_dir_locked(void) {
     return (strcmp(s_current_dir, s_books_dir) == 0);
@@ -132,8 +134,12 @@ esp_err_t book_library_init(void) {
         ensure_dir_exists("/spiflash/.reader");
         ensure_dir_exists(s_books_dir);
         ensure_dir_exists(s_state_dir);
-        book_library_scan();
-        book_library_load_state(&s_reading_state);
+        if (!s_scanned || s_book_count == 0) {
+            book_library_scan();
+        }
+        if (!s_state_loaded) {
+            book_library_load_state(&s_reading_state);
+        }
     } else {
         ESP_LOGW(TAG, "Initial storage target (%s) not mounted at init",
                  s_storage_target == STORAGE_TARGET_FLASH ? "FLASH" : "SDCARD");
@@ -149,6 +155,8 @@ void book_library_deinit(void) {
 
         xSemaphoreTake(s_mutex, portMAX_DELAY);
         s_book_count = 0;
+        s_scanned = false;
+        s_state_loaded = false;
         memset(&s_reading_state, 0, sizeof(s_reading_state));
         s_state_dirty = false;
         s_initialized = false;
@@ -181,8 +189,15 @@ esp_err_t book_library_set_storage_target(storage_target_t target) {
 
     xSemaphoreTake(s_mutex, portMAX_DELAY);
 
+    if (s_storage_target == target && s_scanned && s_book_count > 0) {
+        xSemaphoreGive(s_mutex);
+        return ESP_OK;
+    }
+
     s_storage_target = target;
     update_target_paths(target);
+    s_scanned = false;
+    s_state_loaded = false;
 
     ensure_dir_exists(s_books_dir);
     ensure_dir_exists(s_state_dir);
@@ -217,10 +232,16 @@ esp_err_t book_library_scan(void) {
 
     xSemaphoreTake(s_mutex, portMAX_DELAY);
 
+    if (s_scanned && s_book_count > 0) {
+        xSemaphoreGive(s_mutex);
+        return ESP_OK;
+    }
+
     if (!check_storage_mounted(s_storage_target)) {
         ESP_LOGE(TAG, "Storage target %s not mounted, cannot scan books",
                  s_storage_target == STORAGE_TARGET_FLASH ? "FLASH" : "SDCARD");
         s_book_count = 0;
+        s_scanned = false;
         xSemaphoreGive(s_mutex);
         return ESP_ERR_INVALID_STATE;
     }
@@ -260,6 +281,7 @@ esp_err_t book_library_scan(void) {
     DIR *dir = opendir(s_current_dir);
     if (!dir) {
         ESP_LOGW(TAG, "Cannot open books directory: %s", s_current_dir);
+        s_scanned = false;
         xSemaphoreGive(s_mutex);
         return ESP_ERR_NOT_FOUND;
     }
@@ -325,10 +347,22 @@ esp_err_t book_library_scan(void) {
         qsort(s_books, s_book_count, sizeof(book_info_t), compare_books);
     }
 
+    s_scanned = true;
+
     ESP_LOGI(TAG, "Scanned %u entries in %s", (unsigned int)s_book_count, s_current_dir);
 
     xSemaphoreGive(s_mutex);
     return ESP_OK;
+}
+
+void book_library_invalidate_cache(void) {
+    if (s_mutex) {
+        xSemaphoreTake(s_mutex, portMAX_DELAY);
+        s_scanned = false;
+        xSemaphoreGive(s_mutex);
+    } else {
+        s_scanned = false;
+    }
 }
 
 esp_err_t book_library_enter_dir(const char *subdir_name) {
@@ -392,6 +426,7 @@ esp_err_t book_library_enter_dir(const char *subdir_name) {
     strncpy(s_current_dir, target_path, sizeof(s_current_dir) - 1);
     s_current_dir[sizeof(s_current_dir) - 1] = '\0';
     update_current_rel_path();
+    s_scanned = false;
     xSemaphoreGive(s_mutex);
 
     return book_library_scan();
@@ -429,6 +464,7 @@ esp_err_t book_library_navigate_up(void) {
     strncpy(s_current_dir, parent_path, sizeof(s_current_dir) - 1);
     s_current_dir[sizeof(s_current_dir) - 1] = '\0';
     update_current_rel_path();
+    s_scanned = false;
 
     xSemaphoreGive(s_mutex);
 
@@ -500,6 +536,14 @@ esp_err_t book_library_load_state(reading_state_t *state) {
 
     xSemaphoreTake(s_mutex, portMAX_DELAY);
 
+    if (s_state_loaded) {
+        if (state) {
+            *state = s_reading_state;
+        }
+        xSemaphoreGive(s_mutex);
+        return ESP_OK;
+    }
+
     if (!check_storage_mounted(s_storage_target)) {
         ESP_LOGE(TAG, "Storage target %s not mounted, cannot load state",
                  s_storage_target == STORAGE_TARGET_FLASH ? "FLASH" : "SDCARD");
@@ -522,6 +566,7 @@ esp_err_t book_library_load_state(reading_state_t *state) {
             *state = s_reading_state;
         }
         s_state_dirty = false;
+        s_state_loaded = true;
         xSemaphoreGive(s_mutex);
         return ESP_OK;
     }
@@ -623,6 +668,7 @@ esp_err_t book_library_load_state(reading_state_t *state) {
     }
 
     s_state_dirty = false;
+    s_state_loaded = true;
 
     ESP_LOGI(TAG, "Loaded state: active=%s, offset=%u, total=%u, bookmarks=%u",
              s_reading_state.active_book_path,
@@ -725,6 +771,7 @@ esp_err_t book_library_save_state(const reading_state_t *state) {
 
     s_reading_state = *state;
     s_state_dirty = false;
+    s_state_loaded = true;
 
     xSemaphoreGive(s_mutex);
     return ESP_OK;
@@ -803,6 +850,7 @@ esp_err_t book_library_update_offset(size_t offset) {
     xSemaphoreTake(s_mutex, portMAX_DELAY);
     s_reading_state.byte_offset = offset;
     s_state_dirty = true;
+    s_state_loaded = true;
     xSemaphoreGive(s_mutex);
 
     return ESP_OK;

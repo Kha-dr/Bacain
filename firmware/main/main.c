@@ -37,6 +37,42 @@ RTC_DATA_ATTR static int s_rtc_book_index = 0;
 RTC_DATA_ATTR static int s_rtc_bookmark_index = 0;
 RTC_DATA_ATTR static uint32_t s_redraw_counter = 0;
 RTC_DATA_ATTR static bool s_rtc_has_sdcard = false;
+RTC_DATA_ATTR static bool s_rtc_settings_cached = false;
+RTC_DATA_ATTR static uint8_t s_rtc_rot = BOARD_DISPLAY_ROTATION;
+RTC_DATA_ATTR static uint8_t s_rtc_btn_invert = 0;
+RTC_DATA_ATTR static uint8_t s_rtc_font_size = 1;
+RTC_DATA_ATTR static uint8_t s_rtc_show_hints = 1;
+
+static void load_settings(bool force_nvs_reload) {
+    if (!s_rtc_settings_cached || force_nvs_reload) {
+        nvs_handle_t nvs_handle;
+        if (nvs_open("settings", NVS_READWRITE, &nvs_handle) == ESP_OK) {
+            if (nvs_get_u8(nvs_handle, "rotation", &s_rtc_rot) != ESP_OK) {
+                s_rtc_rot = BOARD_DISPLAY_ROTATION;
+            }
+            if (nvs_get_u8(nvs_handle, "btn_invert", &s_rtc_btn_invert) != ESP_OK) {
+                s_rtc_btn_invert = 0;
+            }
+            if (nvs_get_u8(nvs_handle, "font_size", &s_rtc_font_size) != ESP_OK) {
+                s_rtc_font_size = 1;
+            }
+            if (nvs_get_u8(nvs_handle, "nav_hints", &s_rtc_show_hints) != ESP_OK) {
+                s_rtc_show_hints = 1;
+            }
+            nvs_close(nvs_handle);
+        } else {
+            s_rtc_rot = BOARD_DISPLAY_ROTATION;
+            s_rtc_btn_invert = 0;
+            s_rtc_font_size = 1;
+            s_rtc_show_hints = 1;
+        }
+        s_rtc_settings_cached = true;
+    }
+    reader_ui_set_rotation(s_rtc_rot);
+    reader_ui_set_show_nav_hints(s_rtc_show_hints != 0);
+    button_set_inverted(s_rtc_btn_invert != 0);
+    text_pager_set_font_size(s_rtc_font_size == 0 ? TEXT_PAGER_FONT_12 : TEXT_PAGER_FONT_16);
+}
 
 static void update_activity(void) {
     s_last_activity_us = esp_timer_get_time();
@@ -49,7 +85,8 @@ static void enter_deep_sleep_with_state(void) {
     s_rtc_bookmark_index = s_bookmark_index;
     book_library_update_offset(text_pager_get_current_offset());
     book_library_flush_state();
-    vTaskDelay(pdMS_TO_TICKS(500));
+    epaper_port_sleep();
+    epaper_power_off();
     power_mgr_enter_deep_sleep(0);
 }
 
@@ -100,29 +137,8 @@ void app_main(void) {
 
     ESP_LOGI(TAG, "Starting BacaIn firmware...");
 
-    nvs_handle_t nvs_handle;
-    uint8_t rot = BOARD_DISPLAY_ROTATION;
-    uint8_t btn_invert = 0;
-    uint8_t font_size = 1; // 0: 12px, 1: 16px (default TEXT_PAGER_FONT_16)
-    uint8_t show_hints = 1;
-    if (nvs_open("settings", NVS_READWRITE, &nvs_handle) == ESP_OK) {
-        if (nvs_get_u8(nvs_handle, "rotation", &rot) != ESP_OK) {
-            rot = BOARD_DISPLAY_ROTATION;
-        }
-        if (nvs_get_u8(nvs_handle, "btn_invert", &btn_invert) != ESP_OK) {
-            btn_invert = 0;
-        }
-        if (nvs_get_u8(nvs_handle, "font_size", &font_size) != ESP_OK) {
-            font_size = 1;
-        }
-        if (nvs_get_u8(nvs_handle, "nav_hints", &show_hints) != ESP_OK) {
-            show_hints = 1;
-        }
-        nvs_close(nvs_handle);
-    }
-    reader_ui_set_rotation(rot);
-    reader_ui_set_show_nav_hints(show_hints != 0);
-    button_set_inverted(btn_invert != 0);
+    wakeup_reason_t wakeup = power_mgr_get_wakeup_cause();
+    load_settings(wakeup == WAKEUP_REASON_COLD_BOOT);
 
     // 3. Initialize Peripherals
     esp_err_t flash_ret = flash_storage_init();
@@ -132,7 +148,6 @@ void app_main(void) {
         ESP_LOGE(TAG, "Internal Flash storage initialization failed (0x%x)", flash_ret);
     }
 
-    wakeup_reason_t wakeup = power_mgr_get_wakeup_cause();
     if (button_get_inverted()) {
         if (wakeup == WAKEUP_REASON_BOOT_BUTTON) {
             wakeup = WAKEUP_REASON_PWR_BUTTON;
@@ -175,7 +190,7 @@ void app_main(void) {
         book_library_scan();
     }
     text_pager_init();
-    text_pager_set_font_size(font_size == 0 ? TEXT_PAGER_FONT_12 : TEXT_PAGER_FONT_16);
+    text_pager_set_font_size(s_rtc_font_size == 0 ? TEXT_PAGER_FONT_12 : TEXT_PAGER_FONT_16);
 
     // 5. Register BLE sync callback
     ble_sync_register_callback(on_ble_sync_event, NULL);
@@ -311,8 +326,27 @@ void app_main(void) {
     // 7. Event Loop
     button_event_t evt;
     for (;;) {
-        // Wait for button event with 500ms timeout to monitor sleep inactivity
-        if (xQueueReceive(s_btn_queue, &evt, pdMS_TO_TICKS(500)) == pdTRUE) {
+        TickType_t wait_ticks = pdMS_TO_TICKS(5000);
+        if (s_current_view != VIEW_BLE_SYNC) {
+            uint16_t timeout_sec = ble_sync_get_sleep_timeout();
+            if (timeout_sec > 0) {
+                int64_t elapsed_us = esp_timer_get_time() - s_last_activity_us;
+                int64_t total_us = (int64_t)timeout_sec * 1000000LL;
+                if (elapsed_us >= total_us) {
+                    ESP_LOGI(TAG, "Inactivity timeout reached. Entering deep sleep...");
+                    enter_deep_sleep_with_state();
+                }
+                int64_t remaining_ms = (total_us - elapsed_us) / 1000LL;
+                if (remaining_ms <= 0) {
+                    wait_ticks = 0;
+                } else if (remaining_ms > 5000) {
+                    wait_ticks = pdMS_TO_TICKS(5000);
+                } else {
+                    wait_ticks = pdMS_TO_TICKS(remaining_ms);
+                }
+            }
+        }
+        if (xQueueReceive(s_btn_queue, &evt, wait_ticks) == pdTRUE) {
             update_activity();
             ESP_LOGI(TAG, "Btn evt: button=%d, type=%d, view=%d", evt.button, evt.type, s_current_view);
             if (evt.type == BTN_EVENT_CUSTOM_REFRESH) {
@@ -389,9 +423,10 @@ void app_main(void) {
                             text_pager_font_size_t f = text_pager_get_font_size();
                             text_pager_font_size_t new_font = (f == TEXT_PAGER_FONT_16 ? TEXT_PAGER_FONT_12 : TEXT_PAGER_FONT_16);
                             text_pager_set_font_size(new_font);
+                            s_rtc_font_size = (new_font == TEXT_PAGER_FONT_12 ? 0 : 1);
                             nvs_handle_t h;
                             if (nvs_open("settings", NVS_READWRITE, &h) == ESP_OK) {
-                                nvs_set_u8(h, "font_size", new_font == TEXT_PAGER_FONT_12 ? 0 : 1);
+                                nvs_set_u8(h, "font_size", s_rtc_font_size);
                                 nvs_commit(h);
                                 nvs_close(h);
                             } else {
@@ -459,7 +494,9 @@ void app_main(void) {
                 case VIEW_BLE_SYNC:
                     if (evt.type == BTN_LONG_PRESS) {
                         ble_sync_stop();
+                        book_library_invalidate_cache();
                         book_library_scan();
+                        load_settings(true);
                         s_current_view = VIEW_MENU;
                         reader_ui_render_menu(s_menu_index);
                     }
@@ -497,9 +534,10 @@ void app_main(void) {
                     if (evt.type == BTN_DOUBLE_CLICK) {
                         bool new_hints = !reader_ui_get_show_nav_hints();
                         reader_ui_set_show_nav_hints(new_hints);
+                        s_rtc_show_hints = new_hints ? 1 : 0;
                         nvs_handle_t h;
                         if (nvs_open("settings", NVS_READWRITE, &h) == ESP_OK) {
-                            nvs_set_u8(h, "nav_hints", new_hints ? 1 : 0);
+                            nvs_set_u8(h, "nav_hints", s_rtc_show_hints);
                             nvs_commit(h);
                             nvs_close(h);
                         } else {

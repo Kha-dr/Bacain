@@ -146,9 +146,12 @@ static void draw_centered_string(int y, const char *str, sFONT *font) {
 
 esp_err_t reader_ui_init(bool is_cold_boot) {
     if (!s_canvas) {
-        s_canvas = (uint8_t *)heap_caps_malloc(DISPLAY_BUFFER_SIZE, MALLOC_CAP_SPIRAM);
+        s_canvas = (uint8_t *)heap_caps_malloc(DISPLAY_BUFFER_SIZE, MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
         if (!s_canvas) {
             s_canvas = (uint8_t *)malloc(DISPLAY_BUFFER_SIZE);
+        }
+        if (!s_canvas) {
+            s_canvas = (uint8_t *)heap_caps_malloc(DISPLAY_BUFFER_SIZE, MALLOC_CAP_SPIRAM);
         }
         if (!s_canvas) {
             ESP_LOGE(TAG, "Failed to allocate display canvas buffer");
