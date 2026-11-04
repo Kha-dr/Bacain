@@ -30,6 +30,7 @@ void epaper_port_init_partial(void);
 void epaper_port_clear(uint8_t color);
 void epaper_port_display(const uint8_t *Image);
 void epaper_port_display_part(const uint8_t *Image);
+void epaper_port_display_part_diff(const uint8_t *prev_image, const uint8_t *new_image);
 void epaper_port_display_full(const uint8_t *Image);
 void epaper_port_sleep(void);
 void epaper_power_on(void);

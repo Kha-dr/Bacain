@@ -5,8 +5,6 @@ idf_component_register(
         "Fonts/font8.c"
         "Fonts/font12.c"
         "Fonts/font16.c"
-        "Fonts/font20.c"
-        "Fonts/font24.c"
     INCLUDE_DIRS
         "."
         "Fonts"

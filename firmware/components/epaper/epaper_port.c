@@ -414,6 +414,30 @@ void epaper_port_display_part(const uint8_t *Image) {
     epaper_TurnOnDisplayPart();
 }
 
+void epaper_port_display_part_diff(const uint8_t *prev_image, const uint8_t *new_image) {
+    if (!new_image) {
+        return;
+    }
+    if (prev_image) {
+        epaper_SendCommand(0x4E);  // Set Cursor X
+        epaper_SendData(0x00);
+        epaper_SendCommand(0x4F);  // Set Cursor Y
+        epaper_SendData(0xC7);
+        epaper_SendData(0x00);
+        epaper_SendCommand(0x26);  // Old data RAM 0x26
+        epaper_write_bytes(prev_image, 5000);
+    }
+    epaper_SendCommand(0x4E);      // Set Cursor X
+    epaper_SendData(0x00);
+    epaper_SendCommand(0x4F);      // Set Cursor Y
+    epaper_SendData(0xC7);
+    epaper_SendData(0x00);
+    epaper_SendCommand(0x24);      // New data RAM 0x24
+    epaper_write_bytes(new_image, 5000);
+
+    epaper_TurnOnDisplayPart();
+}
+
 void epaper_port_display_full(const uint8_t *Image) {
     if (!Image) {
         return;
