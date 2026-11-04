@@ -24,14 +24,17 @@ const OPCODES = appConfig?.ble?.opcodes || {
   SET_FONT: 0x10,
   FORCE_REFRESH: 0x12,
   SET_SLEEP_TIMEOUT: 0x13,
-  TRIGGER_SLEEP: 0x14,
   SET_NAV_HINTS: 0x15,
   SET_ROTATION: 0x16,
-  SET_BUTTON_INVERT: 0x17
+  SET_BUTTON_INVERT: 0x17,
+  SET_STATUS_LED: 0x18,
+  GET_CONFIG: 0x19
 };
 OPCODES.SET_NAV_HINTS = OPCODES.SET_NAV_HINTS || 0x15;
 OPCODES.SET_ROTATION = OPCODES.SET_ROTATION || 0x16;
 OPCODES.SET_BUTTON_INVERT = OPCODES.SET_BUTTON_INVERT || 0x17;
+OPCODES.SET_STATUS_LED = OPCODES.SET_STATUS_LED || 0x18;
+OPCODES.GET_CONFIG = OPCODES.GET_CONFIG || 0x19;
 
 const CHUNK_SIZE = appConfig?.ble?.chunkSize || 506;
 const CHUNK_DELAY_MS = appConfig?.ble?.chunkDelayMs || 6;
@@ -156,8 +159,7 @@ const el = {
   font16Btn: document.getElementById('font16Btn'),
   font12Btn: document.getElementById('font12Btn'),
   forceRefreshBtn: document.getElementById('forceRefreshBtn'),
-  sleepTimeoutSelect: document.getElementById('sleepTimeoutSelect'),
-  triggerSleepBtn: document.getElementById('triggerSleepBtn')
+  sleepTimeoutSelect: document.getElementById('sleepTimeoutSelect')
 };
 
 function refreshDomElements() {
@@ -362,8 +364,8 @@ async function connectDevice() {
     showToast(`Connected to ${bleDevice.name || 'BacaIn'}`, 'success');
     log('Connection established successfully.', 'success');
 
-    // Sync saved orientation and button inversion to device
-    await syncSavedSettings();
+    // Synchronize actual menu configuration from device (OpCode 0x19 GET_CONFIG)
+    await requestDeviceConfig();
 
     // Read initial status
     await readDeviceStatus();
@@ -704,6 +706,12 @@ function onControlNotification(event) {
   // Opcode 0x01: LIST_BOOKS stream handler
   if (opcode === OPCODES.LIST_BOOKS) {
     handleListBooksPacket(val);
+    return;
+  }
+
+  // Opcode 0x19: GET_CONFIG stream/notification handler
+  if (opcode === OPCODES.GET_CONFIG) {
+    applyDeviceConfigPayload(val);
   }
 }
 
@@ -900,22 +908,24 @@ function renderBooksList() {
     const size = document.createElement('span');
     size.className = 'book-size';
     size.textContent = formatBytes(book.size);
-
-    const separator = document.createElement('span');
-    separator.style.color = 'var(--text-muted)';
-    separator.style.fontSize = '0.75rem';
-    separator.textContent = '•';
-
-    const progressEl = document.createElement('span');
-    progressEl.className = 'book-progress';
-    progressEl.style.fontSize = '0.78rem';
-    progressEl.style.color = progress > 0 ? 'var(--accent-color)' : 'var(--text-muted)';
-    progressEl.style.fontFamily = 'var(--font-mono)';
-    progressEl.textContent = `${progress}% read`;
-
     details.appendChild(size);
-    details.appendChild(separator);
-    details.appendChild(progressEl);
+
+    if (progress > 0) {
+      const separator = document.createElement('span');
+      separator.style.color = 'var(--text-muted)';
+      separator.style.fontSize = '0.75rem';
+      separator.textContent = '•';
+
+      const progressEl = document.createElement('span');
+      progressEl.className = 'book-progress';
+      progressEl.style.fontSize = '0.78rem';
+      progressEl.style.color = 'var(--accent-color)';
+      progressEl.style.fontFamily = 'var(--font-mono)';
+      progressEl.textContent = `${progress}% read`;
+
+      details.appendChild(separator);
+      details.appendChild(progressEl);
+    }
 
     meta.appendChild(name);
     meta.appendChild(details);
@@ -1267,7 +1277,7 @@ function registerServiceWorker() {
 // Live Hardware Controls Logic (Storage, Typography, Refresh, Power)
 // ============================================================================
 let currentStorageTarget = 1; // 1: Internal Flash (/spiflash) default, 0: MicroSD (/sdcard)
-let currentFontSize = 0; // 0: Font16, 1: Font12
+let currentFontSize = 1; // 0: Font16, 1: Font12
 
 function updateStorageTargetUI(target) {
   currentStorageTarget = target;
@@ -1361,6 +1371,10 @@ function updateFontUI(fontId) {
     el.font16Btn.classList.toggle('active', fontId === 0);
     el.font12Btn.classList.toggle('active', fontId === 1);
   }
+  const modal = document.getElementById('settingsModal') || document.getElementById('deviceSettingsModal');
+  if (modal && typeof modal.setFont === 'function') {
+    modal.setFont(fontId);
+  }
 }
 
 async function setFont(fontId) {
@@ -1406,7 +1420,14 @@ async function setSleepTimeout(seconds) {
   try {
     log(`Setting inactivity sleep timeout to ${seconds}s (OpCode 0x13)...`, 'info');
     const packet = new Uint8Array([OPCODES.SET_SLEEP_TIMEOUT, seconds & 0xff, (seconds >> 8) & 0xff]);
-    await controlChar.writeValueWithResponse(packet);
+    if (controlChar.writeValueWithResponse) {
+      await controlChar.writeValueWithResponse(packet);
+    } else {
+      await controlChar.writeValue(packet);
+    }
+    try {
+      localStorage.setItem('bacain_sleep_timeout', String(seconds));
+    } catch (_) {}
     showToast(`Inactivity timeout: ${seconds === 0 ? 'Disabled' : seconds + 's'}`, 'success');
   } catch (err) {
     log(`Failed to set sleep timeout: ${err.message}`, 'error');
@@ -1414,24 +1435,6 @@ async function setSleepTimeout(seconds) {
   }
 }
 const sendSetSleepTimeout = setSleepTimeout;
-
-async function triggerSleep() {
-  if (!isConnected || !controlChar) {
-    showToast('Connect device first', 'warning');
-    return;
-  }
-  try {
-    log('Triggering instant deep sleep on device (OpCode 0x14)...', 'warning');
-    const packet = new Uint8Array([OPCODES.TRIGGER_SLEEP]);
-    await controlChar.writeValueWithResponse(packet);
-    showToast('Device entering deep sleep. Disconnecting...', 'info');
-    disconnectDevice();
-  } catch (err) {
-    log(`Failed to trigger sleep: ${err.message}`, 'error');
-    showToast('Failed to enter sleep', 'error');
-  }
-}
-const sendTriggerSleep = triggerSleep;
 
 async function setNavHints(show) {
   if (!isConnected || !controlChar) {
@@ -1512,6 +1515,152 @@ async function sendSetButtonInvert(inverted) {
 }
 const setButtonInvert = sendSetButtonInvert;
 
+async function sendSetStatusLed(value) {
+  const enabled = Boolean(value);
+
+  if (!isConnected || !controlChar) {
+    showToast('Connect device first', 'warning');
+    const modal = document.getElementById('settingsModal') || document.getElementById('deviceSettingsModal');
+    if (modal && typeof modal.setStatusLed === 'function') {
+      try {
+        const saved = localStorage.getItem('bacain_status_led');
+        modal.setStatusLed(saved !== null ? (saved === '1' || saved === 'true') : true);
+      } catch (_) {}
+    }
+    return;
+  }
+
+  try {
+    log(`Setting status LED to ${enabled ? 1 : 0} (OpCode 0x18)...`, 'info');
+    const respPromise = waitForControlResponse(OPCODES.SET_STATUS_LED, 5000);
+    const packet = new Uint8Array([OPCODES.SET_STATUS_LED, enabled ? 1 : 0]);
+    if (controlChar.writeValueWithResponse) {
+      await controlChar.writeValueWithResponse(packet);
+    } else {
+      await controlChar.writeValue(packet);
+    }
+    const { status } = await respPromise;
+
+    if (status === 0x00) {
+      try {
+        localStorage.setItem('bacain_status_led', enabled ? '1' : '0');
+      } catch (_) {}
+      const modal = document.getElementById('settingsModal') || document.getElementById('deviceSettingsModal');
+      if (modal && typeof modal.setStatusLed === 'function') {
+        modal.setStatusLed(enabled);
+      }
+      showToast('Status LED updated', 'success');
+      log(`Status LED set to ${enabled ? 1 : 0} successfully.`, 'success');
+    } else if (status === 0x08) {
+      alert('Status LED is not supported on this device.');
+      const modal = document.getElementById('settingsModal') || document.getElementById('deviceSettingsModal');
+      if (modal && typeof modal.setStatusLed === 'function') {
+        modal.setStatusLed(false);
+      }
+      try {
+        localStorage.setItem('bacain_status_led', '0');
+      } catch (_) {}
+      log('Status LED is not supported on this device.', 'warning');
+    } else {
+      log(`Device returned error status ${status} for status LED`, 'error');
+      showToast('Failed to update status LED', 'error');
+    }
+  } catch (err) {
+    log(`Failed to set status LED: ${err.message}`, 'error');
+    showToast('Failed to update status LED', 'error');
+  }
+}
+const setStatusLed = sendSetStatusLed;
+
+function applyDeviceConfigPayload(val) {
+  if (!val || val.byteLength < 2) return false;
+  const status = val.getUint8(1);
+  if (status !== 0x00) {
+    log(`Device configuration request returned status: 0x${status.toString(16)}`, 'warning');
+    return false;
+  }
+
+  const dataView = val;
+  const pwa_font_id = val.byteLength > 2 ? val.getUint8(2) : currentFontSize;
+  const nav_hints = val.byteLength > 3 ? val.getUint8(3) : 1;
+  const rotation = val.byteLength > 4 ? val.getUint8(4) : 0;
+  const btn_invert = val.byteLength > 5 ? val.getUint8(5) : 0;
+  const status_led = val.byteLength > 6 ? val.getUint8(6) : 1;
+
+  currentFontSize = pwa_font_id;
+  updateFontUI(pwa_font_id);
+
+  let storage_target;
+  if (val.byteLength > 7) {
+    storage_target = val.getUint8(7);
+    updateStorageTargetUI(storage_target);
+  }
+
+  let sleepTimeout;
+  if (dataView.byteLength >= 10) {
+    sleepTimeout = dataView.getUint16(8, true);
+  }
+
+  const modal = document.getElementById('settingsModal') || document.getElementById('deviceSettingsModal');
+  if (modal && typeof modal.updateConfig === 'function') {
+    const configObj = {
+      font: pwa_font_id,
+      navHints: nav_hints != 0,
+      orientation: rotation,
+      buttonInvert: btn_invert != 0,
+      statusLed: status_led != 0
+    };
+    if (storage_target !== undefined) {
+      configObj.storageTarget = storage_target;
+    }
+    if (sleepTimeout !== undefined) {
+      configObj.sleepTimeout = sleepTimeout;
+    }
+    modal.updateConfig(configObj);
+  }
+
+  try {
+    localStorage.setItem('bacain_font', String(pwa_font_id));
+    localStorage.setItem('bacain_orientation', String(rotation));
+    localStorage.setItem('bacain_btn_invert', String(btn_invert));
+    localStorage.setItem('bacain_status_led', String(status_led));
+    if (sleepTimeout !== undefined) {
+      localStorage.setItem('bacain_sleep_timeout', String(sleepTimeout));
+    }
+  } catch (err) {
+    log(`Failed to cache synchronized configuration: ${err.message}`, 'warning');
+  }
+
+  log('Device config synchronized on connection.', 'success');
+  return true;
+}
+
+async function requestDeviceConfig() {
+  if (!isConnected || !controlChar) return;
+
+  try {
+    log('Requesting device configuration (OpCode 0x19)...', 'info');
+    const respPromise = waitForControlResponse(OPCODES.GET_CONFIG, 5000);
+    const packet = new Uint8Array([OPCODES.GET_CONFIG]);
+    if (controlChar.writeValueWithResponse) {
+      await controlChar.writeValueWithResponse(packet);
+    } else {
+      await controlChar.writeValue(packet);
+    }
+
+    const { status, dataView: val } = await respPromise;
+    if (status === 0x00 && val) {
+      applyDeviceConfigPayload(val);
+    } else {
+      log(`Device configuration request returned status: 0x${status.toString(16)}`, 'warning');
+      await syncSavedSettings();
+    }
+  } catch (err) {
+    log(`Failed to synchronize device configuration: ${err.message}`, 'warning');
+    await syncSavedSettings();
+  }
+}
+
 async function syncSavedSettings() {
   if (!isConnected || !controlChar) return;
 
@@ -1547,6 +1696,24 @@ async function syncSavedSettings() {
     }
   } catch (err) {
     log(`Failed to sync button inversion: ${err.message}`, 'warning');
+  }
+
+  try {
+    const savedSleep = localStorage.getItem('bacain_sleep_timeout');
+    if (savedSleep !== null) {
+      const timeout = parseInt(savedSleep, 10);
+      if (!isNaN(timeout) && timeout >= 0) {
+        log(`Syncing saved sleep timeout (${timeout}s) to device (OpCode 0x13)...`, 'info');
+        const packet = new Uint8Array([OPCODES.SET_SLEEP_TIMEOUT, timeout & 0xff, (timeout >> 8) & 0xff]);
+        if (controlChar.writeValueWithResponse) {
+          await controlChar.writeValueWithResponse(packet);
+        } else {
+          await controlChar.writeValue(packet);
+        }
+      }
+    }
+  } catch (err) {
+    log(`Failed to sync sleep timeout: ${err.message}`, 'warning');
   }
 }
 
@@ -1635,6 +1802,12 @@ function initEventListeners() {
   if (el.controlsBtn) {
     el.controlsBtn.addEventListener('click', openControlsModal);
   }
+  document.addEventListener('click', (e) => {
+    if (e.target.closest('#controlsBtn')) {
+      e.preventDefault();
+      openControlsModal();
+    }
+  });
   if (el.closeControlsBtn) {
     el.closeControlsBtn.addEventListener('click', closeControlsModal);
   }
@@ -1708,9 +1881,6 @@ function initEventListeners() {
   if (el.sleepTimeoutSelect) {
     el.sleepTimeoutSelect.addEventListener('change', (e) => setSleepTimeout(parseInt(e.target.value, 10)));
   }
-  if (el.triggerSleepBtn) {
-    el.triggerSleepBtn.addEventListener('click', () => triggerSleep());
-  }
 
   // Web Components Event Listeners
   document.addEventListener('storage-target-change', (e) => {
@@ -1772,14 +1942,16 @@ function initEventListeners() {
     }
   });
 
+  document.addEventListener('setting-changed', (e) => {
+    if (e.detail && e.detail.key === 'status_led') {
+      sendSetStatusLed(e.detail.value);
+    }
+  });
+
   document.addEventListener('sleep-timeout-change', (e) => {
     if (e.detail && e.detail.timeout !== undefined) {
       setSleepTimeout(e.detail.timeout);
     }
-  });
-
-  document.addEventListener('trigger-sleep', () => {
-    triggerSleep();
   });
 }
 
@@ -1800,7 +1972,7 @@ function init() {
   initEventListeners();
   updateStorageTargetUI(1);
 
-  // Initialize orientation and button invert from localStorage on modal
+  // Initialize orientation, button invert, and font from localStorage on modal
   const modal = document.getElementById('settingsModal') || document.getElementById('deviceSettingsModal');
   if (modal) {
     try {
@@ -1812,7 +1984,32 @@ function init() {
       if (savedBtnInv !== null && typeof modal.setButtonInvert === 'function') {
         modal.setButtonInvert(savedBtnInv === '1' || savedBtnInv === 'true');
       }
-    } catch (_) {}
+      const savedStatusLed = localStorage.getItem('bacain_status_led');
+      if (savedStatusLed !== null && typeof modal.setStatusLed === 'function') {
+        modal.setStatusLed(savedStatusLed === '1' || savedStatusLed === 'true');
+      }
+      const savedSleep = localStorage.getItem('bacain_sleep_timeout');
+      if (savedSleep !== null && typeof modal.setSleepTimeout === 'function') {
+        const timeout = parseInt(savedSleep, 10);
+        if (!isNaN(timeout)) {
+          modal.setSleepTimeout(timeout);
+        }
+      }
+      const savedFont = localStorage.getItem('bacain_font');
+      if (savedFont !== null) {
+        const fontId = parseInt(savedFont, 10);
+        if (!isNaN(fontId)) {
+          currentFontSize = fontId;
+          updateFontUI(fontId);
+        }
+      } else {
+        updateFontUI(currentFontSize);
+      }
+    } catch (err) {
+      log(`Failed to restore settings from localStorage: ${err.message}`, 'warning');
+    }
+  } else {
+    updateFontUI(currentFontSize);
   }
 
   registerServiceWorker();
@@ -1822,6 +2019,9 @@ function init() {
 if (typeof window !== 'undefined') {
   window.sendSetOrientation = sendSetOrientation;
   window.sendSetButtonInvert = sendSetButtonInvert;
+  window.sendSetStatusLed = sendSetStatusLed;
+  window.requestDeviceConfig = requestDeviceConfig;
+  window.sendSetSleepTimeout = sendSetSleepTimeout;
 }
 
 document.addEventListener('DOMContentLoaded', init);

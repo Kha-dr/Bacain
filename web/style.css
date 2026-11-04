@@ -557,6 +557,37 @@ body {
   border: 1px solid rgba(16, 185, 129, 0.25);
 }
 
+/* Device Status Bar Controls Button */
+.btn-device-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  height: 24px;
+  padding: 0 0.55rem;
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.btn-device-controls:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border-color: var(--border-hover);
+}
+
+.btn-device-controls svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
 .stat-value {
   font-size: 1.45rem;
   font-weight: 600;
@@ -1114,6 +1145,73 @@ body {
 
 .btn-danger:hover {
   background: var(--danger-hover);
+}
+
+/* Controls Guide Modal List */
+.controls-subtitle {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin-top: 0.25rem;
+  margin-bottom: 0;
+  line-height: 1.35;
+}
+
+.controls-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.controls-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 0.75rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  font-size: 0.82rem;
+}
+
+.controls-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.5rem;
+  min-width: 84px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.controls-sym {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.1rem;
+  font-size: 0.92rem;
+  line-height: 1;
+  color: var(--accent-color);
+  font-weight: 700;
+}
+
+.controls-desc {
+  color: var(--text-secondary);
+  line-height: 1.35;
+}
+
+@media (max-width: 420px) {
+  .controls-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.35rem;
+  }
 }
 
 /* Settings Modal Body & Controls */

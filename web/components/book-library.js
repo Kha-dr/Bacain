@@ -226,9 +226,9 @@ class BookLibrary extends HTMLElement {
           <div class="book-meta">
             <div class="book-name book-title" title="${escapeHtml(book.name)}">${escapeHtml(book.name)}</div>
             <div class="book-details" style="display:flex;align-items:center;gap:0.75rem;margin-top:0.2rem;">
-              <span class="book-size">${formatBytes(book.size)}</span>
+              <span class="book-size">${formatBytes(book.size)}</span>${progress > 0 ? `
               <span style="color:var(--text-muted);font-size:0.75rem;">•</span>
-              <span class="book-progress" style="font-size:0.78rem;color:${progress > 0 ? 'var(--accent-color)' : 'var(--text-muted)'};font-family:var(--font-mono);">${progress}% read</span>
+              <span class="book-progress" style="font-size:0.78rem;color:var(--accent-color);font-family:var(--font-mono);">${progress}% read</span>` : ''}
             </div>
           </div>
         </div>

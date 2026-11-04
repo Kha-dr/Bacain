@@ -6,57 +6,89 @@ These rules are mandatory for all agents and subagents operating in this reposit
 
 1. **Zero Mock / Zero Fake Data**:
    - Never implement mocks, dummy returns, simulated progress, or fake metrics (`Math.random()`, fake timers).
-   - If a feature or driver is not implemented, set `this.available = false` and throw `new Error('... not implemented')`.
+   - If a feature or driver is not implemented, set `this.available = false` and throw `new Error('<feature> not implemented')`.
 2. **Zero Silent Fallback**:
    - Never catch errors silently or fall back without logging and throwing. Empty `catch {}` blocks are forbidden.
 3. **Ponytail (Minimal Complete Change)**:
    - Make the smallest complete change that solves the issue. Avoid speculative abstractions, unused code, and unnecessary layers.
+   - Complexity is technical debt: the deleted line is the safest line.
 4. **KISS (Keep It Stupid Simple)**:
    - Prefer the simplest workable solution in code, architecture, and documentation.
+   - Resist speculative generalization: do not add unused CLI flags, speculative options, extra abstraction layers, or configuration toggles that have only one valid production state. Hardcode constants until multiple distinct consumers exist.
    - Avoid verbose explanations, unnecessary wrapper layers, and convoluted logic when a straightforward solution exists.
+5. **User Ownership of Version Control & Atomic Commits**:
+   - Never commit to git autonomously without explicit user instruction. Version control history belongs entirely to the human engineer.
+   - Stage and commit changes atomically by concern (for example, separate commits for font pruning, power tuning, UI layouts, or protocol changes). Never combine distinct concerns into a single dirty working tree commit.
 
-## 2. Multi-Subagent Protocol
+## 2. Companion Client Architecture & Protocols
 
-To prevent context exhaustion and hallucination:
+For hardware design, electrical constraints, and embedded firmware rules, refer to [firmware/RULES.md](./firmware/RULES.md).
 
-1. **Scoped Granularity**:
+1. **Asymmetric Complexity Partitioning**:
+   - Heavy computation belongs on the companion client: container extraction, schema validation, document parsing, string transformations, text layout wrapping, and rich filtering execute on the client where CPU, RAM, and display framerates are abundant.
+   - The embedded device receives normalized payloads: only pre-processed raw planar streams, plain text, or fixed-width chunks go to the device. The device never parses complex archives or executes heavy regular expressions.
+   - Offload complex configuration and file management from constrained device screens to the companion client.
+2. **Transport Protocol Compactness**:
+   - Strict binary framing: avoid text-based serialization (JSON, XML) over constrained wireless or serial links.
+   - Use compact binary structs with explicit little-endian byte orders and single-byte command opcodes.
+3. **Device NVS Ground Truth & Immediate Persistence**:
+   - Hardware NVS is authoritative ground truth: on link establishment, query active hardware configuration (`GET_CONFIG` opcode 0x19) before rendering controls or applying local caches.
+   - Immediate non-volatile persistence: every configuration mutation pushed by the client must commit immediately to device non-volatile storage, ensuring standalone continuity across resets and sleep cycles.
+4. **High Signal-to-Noise UI Hygiene**:
+   - Eliminate zero-metric clutter: suppress uninformative indicators for unstarted items (hide '0% read' on untouched items). Display metadata only until measurable progress occurs.
+   - Delete dead and destructive actions: remove controls that sever active transport links abruptly without a managed lifecycle (for example, delete remote 'Sleep Now' triggers that sever transports). Expose policy controls (such as auto-sleep timeouts) rather than remote execution triggers.
+   - Enforce hardware interlocks: dynamically disable controls when the corresponding hardware peripheral is missing (for example, grey out MicroSD selection when no card is inserted).
+
+## 3. Technical Documentation Standards
+
+1. **Single Source of Truth (DRY Documentation)**:
+   - Reference over duplication: link across documents rather than duplicating pinout tables, feature listings, register maps, or font tables. Maintain one canonical source file and cross-reference it via relative markdown links.
+2. **Single Consolidated Deliverable**:
+   - Document unified production deliverables: document unified factory binaries (offset 0x0) rather than fragmented multi-offset partition flashes (`0x1000`, `0x8000`, `0x10000`).
+3. **Radical Parsimony & Calm Technical Copy**:
+   - Zero marketing fluff: forbid promotional adjectives ('revolutionary', 'blazing fast', 'seamless', 'ultimate'). Present only verifiable facts, pin numbers, byte offsets, timing delays, and microamp currents.
+   - Eliminate AI narrative commentary: remove decorative headers, introductory pleasantries, and inflated labels (such as 'Pro Tips' or 'Advanced:').
+   - Calm punctuation: ban repeated exclamation marks (`!!`), ellipses (`...`), and em dashes (`—`). Use colons, commas, and parentheses for structural separation.
+
+## 4. Multi-Subagent & AI Reasoning Protocol
+
+To prevent context exhaustion, cognitive degradation, and hallucination:
+
+1. **Context Protection (Orchestrator Boundary)**:
+   - The primary orchestrator is strictly a dispatcher, architectural auditor, and user communicator. It must never manually traverse directories or inspect code files to understand a subsystem.
+   - Proactive delegation is mandatory: delegate any task that can be handled by a subagent, including exploratory codebase searches and reading file subsets. Formulate the scope and objective, then delegate exploration directly.
+2. **Scoped Granularity**:
    - Delegate tasks to subagents scoped to 1 to 4 files only.
    - Keep file scopes between parallel subagents strictly non-overlapping.
    - Explicitly list target files (`FILE SCOPE`) and forbid edits outside that list.
-2. **Contract Specifications**:
+3. **Contract Specifications**:
    - Provide exact target functions, line references, and contracts.
    - Use `Model: 'flash'` for concrete implementation and verification tasks.
-3. **Proactive Delegation (No Manual File Traversal)**:
-   - Delegate any task that can be handled by a subagent, including exploratory codebase searches and reading file subsets to understand subsystems.
-   - Do not iterate through files manually in the main context before delegating. Formulate the scope and objective, then delegate exploration directly.
-4. **Independent Verification**:
-   - Implementors must not verify their own changes.
-   - Every change must be verified by an independent verifier subagent or automated test script without mocks.
+4. **Independent Verification (Separation of Concerns)**:
+   - Implementors must never verify their own changes: an agent that writes code possesses the same cognitive blind spots that generated the bugs. A task is not complete when the implementor claims it works.
+   - Verification requires runtime execution without mocks: static syntax checks (`node -c`, lint passes) are insufficient. Verification requires actual runtime execution (headless browser DOM execution, clean container compilation, physical assertion passes).
+   - Dedicated verifiers: every non-trivial change must be verified by an independent verifier subagent or automated test script operating without mocks.
 5. **Main Agent Final Audit**:
    - The main agent conducts the final audit directly by inspecting files, reviewing `git diff`, and running test scripts before completing the task.
 
-## 3. Communication & Style
+## 5. Communication, Style & Anti-Slop Standards
 
-1. **Direct Technical Language**:
-   - Use concise technical terms. Avoid marketing buzzwords and filler phrases.
+All agents and subagents must enforce antislop skills (`antislop`, `antislop-code`, `antislop-ui`, `antislop-copywriting`):
+
+1. **Direct Technical Language & Dense Status Updates**:
+   - Use concise technical terms: avoid marketing buzzwords, conversational filler, and self-evident status narratives.
    - Reference exact filenames, line numbers, function names, and measured numbers.
 2. **Clean Identifiers & Copy**:
    - Use functional variable and constant names (`config`, `state`, `options`).
    - Write factual comments and documentation without promotional adjectives.
 3. **Calm Punctuation**:
    - Avoid ellipses (`...`), repeated exclamation points (`!!`), and em dashes (`—`). Use commas, colons, or parentheses.
-
-## 4. Antislop Design & Hygiene Standards
-
-All agents and subagents must enforce antislop skills (`antislop`, `antislop-code`, `antislop-ui`, `antislop-copywriting`):
-
-1. **Code & Comment Hygiene (`antislop-code`)**:
-   - Forbid generic AI commentary (e.g. `// Function to do X`, `// Helper function`, `// Set variable`).
+4. **Code & Comment Hygiene (`antislop-code`)**:
+   - Forbid generic AI commentary (such as `// Function to do X`, `// Helper function`, `// Set variable`).
    - Retain only comments detailing hardware timings, register specifications, FreeRTOS synchronization semantics, and memory boundary constraints.
-2. **UI & Layout (`antislop-ui` / `antislop-human`)**:
+5. **UI & Layout (`antislop-ui` / `antislop-human`)**:
    - Avoid artificial generic templates, arbitrary padding, and unbalanced typography.
    - Design with deliberate hierarchy, intentional negative space, clear visual alignment, and tactile feedback.
-3. **Copy & Text (`antislop-copywriting`)**:
+6. **Copy & Text (`antislop-copywriting`)**:
    - Never use promotional adjectives, vague filler, or hyperbolic descriptions.
    - Keep UI labels, headers, and documentation direct, purposeful, and human-crafted.
-

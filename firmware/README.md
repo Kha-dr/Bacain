@@ -32,7 +32,7 @@ Navigate to **Board & Hardware Configuration**:
 
 - **Hardware Board Profile (`choice BOARD_PROFILE`)**: Select a target board profile or choose `Custom / Manual Configuration` to set GPIO allocations and display parameters manually.
 - **Display Dimensions & Orientation**: Set dimensions (`BOARD_DISPLAY_WIDTH`, `BOARD_DISPLAY_HEIGHT`) and orientation (`BOARD_DISPLAY_ROTATION`).
-- **Peripherals & Pins**: Configure E-Paper SPI pins, MicroSD SDMMC pins, navigation buttons (`BOARD_BTN_UP_PIN`, `BOARD_BTN_DOWN_PIN`), power latch, status LED, or audio pins.
+- **Peripherals & Pins**: Configure E-Paper SPI pins, MicroSD SDMMC pins, navigation buttons (`BOARD_BTN_UP_PIN`, `BOARD_BTN_DOWN_PIN`), power latch, status LED (`BOARD_HAS_STATUS_LED`, `BOARD_LED_ACTIVE_LEVEL`, `BOARD_LED_RED_PIN`, `BOARD_LED_GREEN_PIN`, `BOARD_LED_BLUE_PIN`), or audio pins.
 - Save changes to `sdkconfig`.
 
 ### B. Dynamic CI Multi-Board Matrix
@@ -62,12 +62,20 @@ cd firmware
 docker compose run --rm firmware
 ```
 
-Docker Compose executes the following steps:
+The `firmware` service in `compose.yml` automatically executes incremental compilation and packaging without manual command overrides:
 
 1. Runs the `espressif/idf:v5.3.1` container.
-2. Compiles the project for `esp32s3` into `/project/build`.
-3. Runs `python3 package_firmware.py /project/build -o bacain_<board_id>_factory.bin --board "Waveshare ESP32-S3-ePaper-1.54"`.
-4. Outputs the factory binary at `build/bacain_<board_id>_factory.bin` and manifest at `build/manifest.json`.
+2. Compiles the project incrementally: `idf.py -B /project/build build ${EXTRA_IDF_ARGS}`.
+3. Packages the release binaries: `python3 package_firmware.py /project/build -o "${FACTORY_BIN}" --board "${BOARD_NAME}"`.
+4. Outputs the factory binary at `build/bacain_factory.bin` (or custom name configured via `FACTORY_BIN`) and manifest at `build/manifest.json`.
+
+For a clean rebuild from scratch, run the `clean-build` service:
+
+```bash
+docker compose run --rm clean-build
+```
+
+The `clean-build` service deletes `/project/build`, reinitializes the target chip (`idf.py -B /project/build set-target esp32s3`), compiles the project, and packages the factory binary.
 
 ### Option B: Native ESP-IDF
 
@@ -117,19 +125,18 @@ Build custom hardware profiles from the GitHub web interface without a local too
 
 #### Example Compiler Flags for `Extra IDF Build Args`:
 
-| Custom Requirement                               | Compiler Macro Value                                                                                                               |
-| :----------------------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------- |
-| **Change Screen Resolution** (e.g. 250 x 122)    | `-DCONFIG_BOARD_DISPLAY_WIDTH=250 -DCONFIG_BOARD_DISPLAY_HEIGHT=122`                                                               |
-| **Change Screen Orientation** (90 deg landscape) | `-DCONFIG_BOARD_DISPLAY_ROTATION=1`                                                                                                |
-| **Change Button Pins** (UP/BOOT=4, DOWN/PWR=5)   | `-DCONFIG_BOARD_BTN_UP_PIN=4 -DCONFIG_BOARD_BTN_DOWN_PIN=5`                                                                        |
-| **Change E-Paper SPI Pins**                      | `-DCONFIG_BOARD_EPD_DC_PIN=14 -DCONFIG_BOARD_EPD_CS_PIN=15`                                                                        |
-| **Combine Multiple Settings**                    | `-DCONFIG_BOARD_DISPLAY_WIDTH=296 -DCONFIG_BOARD_DISPLAY_HEIGHT=128 -DCONFIG_BOARD_DISPLAY_ROTATION=1 -DCONFIG_BOARD_BTN_UP_PIN=4` |
+| Custom Requirement                                    | Compiler Macro Value                                                                                                               |
+| :---------------------------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------- |
+| **Change Screen Resolution** (e.g. 250 x 122)         | `-DCONFIG_BOARD_DISPLAY_WIDTH=250 -DCONFIG_BOARD_DISPLAY_HEIGHT=122`                                                               |
+| **Change Screen Orientation** (90 deg landscape)      | `-DCONFIG_BOARD_DISPLAY_ROTATION=1`                                                                                                |
+| **Change Button Pins** (UP/BOOT=4, DOWN/PWR=5)        | `-DCONFIG_BOARD_BTN_UP_PIN=4 -DCONFIG_BOARD_BTN_DOWN_PIN=5`                                                                        |
+| **Change E-Paper SPI Pins**                           | `-DCONFIG_BOARD_EPD_DC_PIN=14 -DCONFIG_BOARD_EPD_CS_PIN=15`                                                                        |
+| **Configure Status LED** (Red=1, Green=2, Active-Low) | `-DCONFIG_BOARD_LED_RED_PIN=1 -DCONFIG_BOARD_LED_GREEN_PIN=2 -DCONFIG_BOARD_LED_ACTIVE_LEVEL=0`                                    |
+| **Combine Multiple Settings**                         | `-DCONFIG_BOARD_DISPLAY_WIDTH=296 -DCONFIG_BOARD_DISPLAY_HEIGHT=128 -DCONFIG_BOARD_DISPLAY_ROTATION=1 -DCONFIG_BOARD_BTN_UP_PIN=4` |
 
 ---
 
 ## 5. Flashing the Device
-
-Flashing requires writing only the single factory binary (`bacain_<board_id>_factory.bin`) at offset `0x0`. Partition fragments do not need to be flashed separately.
 
 ### A. Web Serial Flasher (Browser)
 
@@ -137,12 +144,10 @@ Open the web flasher in a Chromium browser (Chrome or Edge):
 
 1. Connect the ESP32-S3 board via USB-C.
 2. Open `web/flasher.html` (or the **Firmware Flasher** tab in the web interface).
-3. Select your board to download the latest release binary, or load a local `bacain_<board_id>_factory.bin` file (flashed at offset `0x0`).
+3. Select your board to download the latest release binary, or load a local `bacain_<board_id>_factory.bin`.
 4. Click **Connect Serial Port**, select the ESP32-S3 port, and click **Flash Firmware**.
 
 ### B. Command Line via `esptool`
-
-Flash the single factory binary directly to offset `0x0`:
 
 ```bash
 # Windows (replace COM3 with your port)
@@ -174,49 +179,79 @@ Windows note: Docker Desktop runs inside a WSL2 virtual machine that does not fo
 
 ---
 
-## 6. Power Management
+## 6. Navigation & Menu Subsystem
 
-- **Auto-Sleep**: Enters deep sleep after 20 seconds of inactivity (`APP_INACTIVITY_SLEEP_SEC 20`).
-- **Sync Protection**: Inactivity sleep is inhibited on the Sync screen during active transfers.
-- **Static Screen Retention**: Screen content persists statically at 0.0 uA in deep sleep with instant wake (no clear flash).
-- **Power Off**: Selecting Power Off from the menu renders the logo before entering deep sleep.
-- **Ghosting Flush**: Automatic full refresh runs every 10 pages (`APP_FULL_REFRESH_INTERVAL 10`) to clear ghosting. Set to 0 to disable.
-- **Manual Refresh**: Trigger an immediate full refresh via the Refresh Screen menu item.
+Navigation uses two physical buttons: UP (`BOARD_BTN_UP_PIN`, default GPIO 0 / BOOT) and DOWN (`BOARD_BTN_DOWN_PIN`, default GPIO 18 / PWR).
 
----
+### Button Architecture
 
-## 7. Navigation & Button Controls
+The `button` component samples GPIO levels with hardware debouncing and dispatches events via FreeRTOS queue to `main.c`:
 
-Navigation uses two physical buttons: UP (GPIO 0) and DOWN (GPIO 18).
+- **Cold Boot Dismissal**: Pressing UP or DOWN dismisses the sleep screen.
+- **Short Click** (`BTN_CLICK`):
+  - Reading: Previous page (UP) / Next page (DOWN).
+  - Menu & Library: Move cursor up (UP) / Move cursor down (DOWN).
+- **Double Click** (`BTN_DOUBLE_CLICK`):
+  - Reading: Toggle bookmark (UP) / Open bookmarks list (DOWN).
+  - Menu & Library: Select or activate item.
+- **Long Press (>1.2s)** (`BTN_HOLD`):
+  - Reading: Open Reader Menu.
+  - Menu, Library & Sync: Back / Exit.
+- **Simultaneous Hold (2.0s)**: Detected when UP + DOWN are held together for 2.0s, triggering an immediate hardware reboot with status LED strobe.
 
-### Button Controls
-
-| Context | Action | Button | Function |
-| :--- | :--- | :--- | :--- |
-| **Reading** | Click | UP / DOWN | Previous / Next page |
-| | Double Click | UP | Toggle bookmark |
-| | Double Click | DOWN | Bookmarks list |
-| | Hold (>1.2s) | UP or DOWN | Open menu |
-| **Menu / Library / Bookmarks** | Click | UP / DOWN | Navigate |
-| | Double Click | UP or DOWN | Select / Open |
-| | Hold (>1.2s) | UP or DOWN | Back |
-| **Hardware Force Reboot** | Hold (2.0s) | UP + DOWN | Reboot device |
-| **Deep Sleep** | Click | UP or DOWN | Wake device |
+For the end-user contextual button action table, see [Controls in README.md](../README.md#controls).
 
 ### On-Device Menu
 
-1. **Continue Reading**: Return to current book.
-2. **Book Library**: Browse and open books.
-3. **Font Size: [16px / 12px]**: Toggle reading font size.
-4. **Sync Books**: Web Bluetooth file transfer screen.
-5. **Nav Hints**: Toggle on-screen button hints.
-6. **Refresh Screen**: Full display refresh to clear ghosting.
-7. **Power Off**: Show sleep logo and enter deep sleep.
+The Reader Menu (`reader_ui_render_menu`) provides strictly 7 items managed in `main.c` (Status LED is configured via the companion PWA and removed from the on-device menu):
+
+1. **Continue Reading**: Resume reading active book at saved byte offset.
+2. **Book Library**: Browse and open books from internal FATFS or MicroSD storage.
+3. **Font Size: [12px/16px]**: Toggle text pager font between Font12 (12px, 6x12, default) and Font16 (16px, 8x16). Persisted in NVS (`font_size`) and RTC memory (`s_rtc_font_size`). Default font is 12px (Font12 / `TEXT_PAGER_FONT_12`). Note: Font20 and Font24 were deleted from the firmware build to conserve flash and memory footprints (Font8 is internal to epaper).
+4. **Sync Books**: Initialize BLE GATT server for companion PWA transfer and display pairing QR code.
+5. **Nav Hints**: Toggle on-screen button navigation hints in reading view.
+6. **Refresh Screen**: Trigger manual full display refresh (`epaper_refresh_full`) to clear ghosting.
+7. **Power Off**: Display power-off screen and enter deep sleep (`enter_deep_sleep_with_state`).
 
 ---
 
-## 8. References & Links
+## 8. BLE GATT Protocol
+
+BacaIn provides a custom BLE GATT service (`0000fe60-0000-1000-8000-00805f9b34fb`) for wireless book transfers, status telemetry, and bidirectional configuration synchronization with the companion PWA.
+
+### Characteristics
+
+| Characteristic | UUID                                   | Properties             | Purpose                                                               |
+| :------------- | :------------------------------------- | :--------------------- | :-------------------------------------------------------------------- |
+| **Control**    | `0000fe61-0000-1000-8000-00805f9b34fb` | Write, Notify          | Command dispatch and synchronous operation responses                  |
+| **Data**       | `0000fe62-0000-1000-8000-00805f9b34fb` | Write Without Response | Binary chunk stream for book transfers (506B payload + 2B seq)        |
+| **Status**     | `0000fe63-0000-1000-8000-00805f9b34fb` | Read, Notify           | Packed 12-byte binary telemetry (battery %, voltage, storage metrics) |
+
+### Control Characteristic OpCodes
+
+Commands are written to the Control Characteristic. Responses and operation statuses are returned via GATT notifications on the same characteristic.
+
+| OpCode | Name                             | Direction        | Request Payload                        | Response Payload                                                                         | Purpose                                                                       |
+| :----- | :------------------------------- | :--------------- | :------------------------------------- | :--------------------------------------------------------------------------------------- | :---------------------------------------------------------------------------- |
+| `0x01` | `BLE_SYNC_OP_LIST_BOOKS`         | Client -> Server | `[0x01]`                               | `[0x01, target, size(4B LE), name...]` / EOF `[0x01, 0xFF]`                              | List all files in storage                                                     |
+| `0x02` | `BLE_SYNC_OP_START_UPLOAD`       | Client -> Server | `[0x02, target, size(4B LE), name...]` | `[0x02, status]`                                                                         | Prepare file reception                                                        |
+| `0x03` | `BLE_SYNC_OP_FINISH_UPLOAD`      | Client -> Server | `[0x03]`                               | `[0x03, status]`                                                                         | Finalize file upload and close file                                           |
+| `0x04` | `BLE_SYNC_OP_DELETE_BOOK`        | Client -> Server | `[0x04, target, name...]`              | `[0x04, status]`                                                                         | Delete book from target storage                                               |
+| `0x05` | `BLE_SYNC_OP_ABORT_UPLOAD`       | Client -> Server | `[0x05]`                               | `[0x05, status]`                                                                         | Abort active upload and cleanup temp file                                     |
+| `0x06` | `BLE_SYNC_OP_SET_STORAGE_TARGET` | Client -> Server | `[0x06, target]`                       | `[0x06, status]`                                                                         | Switch active storage (`0`: MicroSD, `1`: Flash)                              |
+| `0x10` | `BLE_SYNC_OP_SET_FONT`           | Client -> Server | `[0x10, font_id]`                      | `[0x10, status]`                                                                         | Set font size (`0`: 16px, `1`: 12px)                                          |
+| `0x12` | `BLE_SYNC_OP_FORCE_REFRESH`      | Client -> Server | `[0x12]`                               | `[0x12, status]`                                                                         | Trigger manual full screen refresh                                            |
+| `0x13` | `BLE_SYNC_OP_SET_SLEEP_TIMEOUT`  | Client -> Server | `[0x13, timeout(2B LE)]`               | `[0x13, status]`                                                                         | Configure sleep inactivity timeout in seconds                                 |
+| `0x14` | `BLE_SYNC_OP_TRIGGER_SLEEP`      | Client -> Server | `[0x14]`                               | `[0x14, status]`                                                                         | Immediately enter deep sleep                                                  |
+| `0x15` | `BLE_SYNC_OP_SET_NAV_HINTS`      | Client -> Server | `[0x15, enabled]`                      | `[0x15, status]`                                                                         | Toggle reading footer navigation hints (`0`: off, `1`: on)                    |
+| `0x16` | `BLE_SYNC_OP_SET_ROTATION`       | Client -> Server | `[0x16, rotation]`                     | `[0x16, status]`                                                                         | Set display orientation (`0`: 0°, `1`: 90°, `2`: 180°, `3`: 270°)             |
+| `0x17` | `BLE_SYNC_OP_SET_BUTTON_INVERT`  | Client -> Server | `[0x17, invert]`                       | `[0x17, status]`                                                                         | Invert UP/DOWN button assignments (`0`: normal, `1`: inverted)                |
+| `0x18` | `BLE_SYNC_OP_SET_STATUS_LED`     | Client -> Server | `[0x18, enabled]`                      | `[0x18, status]`                                                                         | Enable or disable status LED indications (`0`: off, `1`: on)                  |
+| `0x19` | `BLE_SYNC_OP_GET_CONFIG`         | Client -> Server | `[0x19]`                               | `[0x19, status, font_size, nav_hints, rotation, btn_invert, status_led, storage_target]` | Query active on-device and NVS configuration to synchronize PWA UI on connect |
+
+---
+
+## 9. References & Links
 
 - **Hardware Reference Repository & Schematics**: [Waveshare ESP32-S3-ePaper-1.54](https://github.com/waveshareteam/ESP32-S3-ePaper-1.54)
-- **Windows USB Passthrough for WSL2**: [usbipd-win](https://github.com/dorssel/usbipd-win)
 - **Official ESP-IDF v5.3 Programming Guide**: [Espressif Documentation](https://docs.espressif.com/projects/esp-idf/en/v5.3.1/esp32s3/)

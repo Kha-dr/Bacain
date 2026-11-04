@@ -27,6 +27,7 @@ class DeviceSettingsModal extends HTMLElement {
     this._logCount = 0;
     this._orientation = 0;
     this._buttonInvert = false;
+    this._statusLed = true;
     this._handleKeyDown = this._handleKeyDown.bind(this);
   }
 
@@ -50,7 +51,23 @@ class DeviceSettingsModal extends HTMLElement {
       } else {
         this.setButtonInvert(this._buttonInvert);
       }
-    } catch (_) {}
+      const savedStatusLed = localStorage.getItem('bacain_status_led');
+      if (savedStatusLed !== null) {
+        this.setStatusLed(savedStatusLed === '1' || savedStatusLed === 'true');
+      } else {
+        this.setStatusLed(this._statusLed);
+      }
+      const savedFont = localStorage.getItem('bacain_font');
+      if (savedFont !== null) {
+        this.setFont(parseInt(savedFont, 10));
+      }
+      const savedSleep = localStorage.getItem('bacain_sleep_timeout');
+      if (savedSleep !== null) {
+        this.setSleepTimeout(parseInt(savedSleep, 10));
+      }
+    } catch (err) {
+      console.warn('Failed to restore settings from localStorage:', err);
+    }
 
     this.bindEvents();
     document.addEventListener('keydown', this._handleKeyDown);
@@ -159,10 +176,10 @@ class DeviceSettingsModal extends HTMLElement {
                 Typography
               </div>
               <div class="control-btn-group">
-                <button id="font16Btn" class="btn-control active" data-font="0" type="button">
+                <button id="font16Btn" class="btn-control" data-font="0" type="button">
                   <span>Font 16 (8 lines)</span>
                 </button>
-                <button id="font12Btn" class="btn-control" data-font="1" type="button">
+                <button id="font12Btn" class="btn-control active" data-font="1" type="button">
                   <span>Font 12 (11 lines)</span>
                 </button>
               </div>
@@ -227,20 +244,44 @@ class DeviceSettingsModal extends HTMLElement {
               </div>
             </div>
 
+            <!-- Status LED -->
+            <div class="control-card">
+              <div class="control-card-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;">
+                  <circle cx="12" cy="12" r="6"></circle>
+                  <line x1="12" y1="2" x2="12" y2="4"></line>
+                  <line x1="12" y1="20" x2="12" y2="22"></line>
+                  <line x1="4.93" y1="4.93" x2="6.34" y2="6.34"></line>
+                  <line x1="17.66" y1="17.66" x2="19.07" y2="19.07"></line>
+                  <line x1="2" y1="12" x2="4" y2="12"></line>
+                  <line x1="20" y1="12" x2="22" y2="12"></line>
+                  <line x1="4.93" y1="19.07" x2="6.34" y2="17.66"></line>
+                  <line x1="17.66" y1="6.34" x2="19.07" y2="4.93"></line>
+                </svg>
+                Status LED
+              </div>
+              <div class="control-inline-row">
+                <label class="checkbox-label" for="settingStatusLed">
+                  <input type="checkbox" id="settingStatusLed" checked>
+                  <span>Enable status LED</span>
+                </label>
+              </div>
+            </div>
+
             <!-- Power Management -->
             <div class="control-card">
               <div class="control-inline-row" style="justify-content: space-between;">
                 <div style="display: flex; align-items: center; gap: 0.5rem;">
                   <label for="sleepTimeoutSelect" class="control-label">Auto-Sleep:</label>
                   <select id="sleepTimeoutSelect" class="control-select">
+                    <option value="20" selected>20s (Default)</option>
                     <option value="30">30s</option>
-                    <option value="60" selected>60s</option>
+                    <option value="60">60s</option>
                     <option value="120">2m</option>
                     <option value="300">5m</option>
-                    <option value="0">Off</option>
+                    <option value="0">Never (Off)</option>
                   </select>
                 </div>
-                <button id="triggerSleepBtn" class="btn-danger-outline" type="button">Sleep Now</button>
               </div>
             </div>
 
@@ -461,22 +502,25 @@ class DeviceSettingsModal extends HTMLElement {
       });
     }
 
-    // Power Management
-    const sleepTimeoutSelect = this.querySelector('#sleepTimeoutSelect');
-    if (sleepTimeoutSelect) {
-      sleepTimeoutSelect.addEventListener('change', () => {
-        this.dispatchEvent(new CustomEvent('sleep-timeout-change', {
-          detail: { timeout: Number(sleepTimeoutSelect.value) },
+    // Status LED
+    const settingStatusLed = this.querySelector('#settingStatusLed');
+    if (settingStatusLed) {
+      settingStatusLed.addEventListener('change', () => {
+        this._statusLed = settingStatusLed.checked;
+        this.dispatchEvent(new CustomEvent('setting-changed', {
+          detail: { key: 'status_led', value: settingStatusLed.checked },
           bubbles: true,
           composed: true
         }));
       });
     }
 
-    const triggerSleepBtn = this.querySelector('#triggerSleepBtn');
-    if (triggerSleepBtn) {
-      triggerSleepBtn.addEventListener('click', () => {
-        this.dispatchEvent(new CustomEvent('trigger-sleep', {
+    // Power Management
+    const sleepTimeoutSelect = this.querySelector('#sleepTimeoutSelect');
+    if (sleepTimeoutSelect) {
+      sleepTimeoutSelect.addEventListener('change', () => {
+        this.dispatchEvent(new CustomEvent('sleep-timeout-change', {
+          detail: { timeout: Number(sleepTimeoutSelect.value) },
           bubbles: true,
           composed: true
         }));
@@ -634,16 +678,38 @@ class DeviceSettingsModal extends HTMLElement {
   }
 
   /**
+   * Set Typography Font
+   * @param {number} fontId (0 = Font 16, 1 = Font 12)
+   */
+  setFont(fontId) {
+    const id = typeof fontId === 'string' ? parseInt(fontId, 10) : fontId;
+    const font12Btn = this.querySelector('#font12Btn');
+    const font16Btn = this.querySelector('#font16Btn');
+
+    if (id === 1) {
+      if (font12Btn) font12Btn.classList.add('active');
+      if (font16Btn) font16Btn.classList.remove('active');
+    } else if (id === 0) {
+      if (font16Btn) font16Btn.classList.add('active');
+      if (font12Btn) font12Btn.classList.remove('active');
+    }
+  }
+
+  /**
    * Set Navigation Hints display state
    * @param {boolean} show
    */
   setNavHints(show) {
-    const isShow = Boolean(show);
     const showBtn = this.querySelector('#navHintsShowBtn');
     const hideBtn = this.querySelector('#navHintsHideBtn');
 
-    if (showBtn) showBtn.classList.toggle('active', isShow);
-    if (hideBtn) hideBtn.classList.toggle('active', !isShow);
+    if (show === true) {
+      if (showBtn) showBtn.classList.add('active');
+      if (hideBtn) hideBtn.classList.remove('active');
+    } else if (show === false) {
+      if (showBtn) showBtn.classList.remove('active');
+      if (hideBtn) hideBtn.classList.add('active');
+    }
   }
 
   /**
@@ -709,6 +775,111 @@ class DeviceSettingsModal extends HTMLElement {
 
   set buttonInvert(val) {
     this.setButtonInvert(val);
+  }
+
+  /**
+   * Set Status LED toggle state
+   * @param {boolean} enabled
+   */
+  setStatusLed(enabled) {
+    this._statusLed = Boolean(enabled);
+    const checkbox = this.querySelector('#settingStatusLed');
+    if (checkbox) {
+      checkbox.checked = this._statusLed;
+    }
+  }
+
+  /**
+   * Get Status LED toggle state
+   * @returns {boolean}
+   */
+  getStatusLed() {
+    const checkbox = this.querySelector('#settingStatusLed');
+    if (checkbox) {
+      return checkbox.checked;
+    }
+    return this._statusLed;
+  }
+
+  get statusLed() {
+    return this.getStatusLed();
+  }
+
+  set statusLed(val) {
+    this.setStatusLed(val);
+  }
+
+  /**
+   * Set Auto-Sleep Timeout
+   * @param {number|string} seconds
+   */
+  setSleepTimeout(seconds) {
+    const select = this.querySelector('#sleepTimeoutSelect');
+    if (select) {
+      select.value = String(seconds);
+    }
+  }
+
+  /**
+   * Get Auto-Sleep Timeout
+   * @returns {number}
+   */
+  getSleepTimeout() {
+    const select = this.querySelector('#sleepTimeoutSelect');
+    if (select) {
+      return parseInt(select.value, 10);
+    }
+    return 20;
+  }
+
+  get sleepTimeout() {
+    return this.getSleepTimeout();
+  }
+
+  set sleepTimeout(val) {
+    this.setSleepTimeout(val);
+  }
+
+  /**
+   * Update modal settings from external config
+   * @param {Object} config
+   */
+  updateConfig(config) {
+    if (!config || typeof config !== 'object') return;
+
+    const fontVal = config.font !== undefined ? config.font : config.fontSize;
+    if (fontVal !== undefined) {
+      this.setFont(typeof fontVal === 'string' ? parseInt(fontVal, 10) : fontVal);
+    }
+
+    const navHintsVal = config.nav_hints !== undefined ? config.nav_hints : config.navHints;
+    if (navHintsVal !== undefined) {
+      this.setNavHints(typeof navHintsVal === 'boolean' ? navHintsVal : navHintsVal !== 0);
+    }
+
+    const storageVal = config.storage_target !== undefined ? config.storage_target : config.storageTarget;
+    if (storageVal !== undefined) {
+      this.setStorageTarget(storageVal);
+    }
+
+    if (config.orientation !== undefined) {
+      this.setOrientation(config.orientation);
+    }
+
+    const buttonInvertVal = config.button_invert !== undefined ? config.button_invert : config.buttonInvert;
+    if (buttonInvertVal !== undefined) {
+      this.setButtonInvert(buttonInvertVal);
+    }
+
+    const statusLedVal = config.status_led !== undefined ? config.status_led : config.statusLed;
+    if (statusLedVal !== undefined) {
+      this.setStatusLed(statusLedVal);
+    }
+
+    const sleepTimeoutVal = config.sleep_timeout !== undefined ? config.sleep_timeout : config.sleepTimeout;
+    if (sleepTimeoutVal !== undefined) {
+      this.setSleepTimeout(sleepTimeoutVal);
+    }
   }
 
   /**

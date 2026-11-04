@@ -16,74 +16,6 @@
   <link rel="manifest" href="manifest.json">
   <link rel="stylesheet" href="style.css">
 
-  <style>
-    #controlsBtn {
-      width: auto;
-      padding: 0 0.65rem;
-      gap: 0.4rem;
-      font-size: 0.82rem;
-      font-weight: 500;
-    }
-    @media (max-width: 520px) {
-      #controlsBtn .controls-btn-text {
-        display: none;
-      }
-      #controlsBtn {
-        width: 38px;
-        padding: 0;
-      }
-    }
-    .controls-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 0.82rem;
-      line-height: 1.45;
-    }
-    .controls-table th {
-      padding: 0.55rem 0.65rem;
-      font-weight: 600;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      font-size: 0.72rem;
-      letter-spacing: 0.04em;
-      border-bottom: 1px solid var(--border-color);
-      background: var(--bg-secondary);
-      position: sticky;
-      top: 0;
-      z-index: 1;
-      text-align: left;
-    }
-    .controls-table td {
-      padding: 0.55rem 0.65rem;
-      border-bottom: 1px solid var(--border-subtle);
-      color: var(--text-secondary);
-      vertical-align: middle;
-    }
-    .controls-table tr:hover td {
-      background: var(--bg-card-hover);
-      color: var(--text-primary);
-    }
-    .controls-context {
-      font-weight: 600;
-      color: var(--text-primary);
-      white-space: nowrap;
-      vertical-align: top;
-      background: var(--bg-secondary);
-    }
-    .kbd-btn {
-      font-family: var(--font-mono);
-      font-size: 0.72rem;
-      font-weight: 600;
-      padding: 0.15rem 0.4rem;
-      background: var(--bg-tertiary);
-      border: 1px solid var(--border-color);
-      border-radius: var(--radius-sm);
-      color: var(--text-primary);
-      white-space: nowrap;
-      display: inline-block;
-    }
-  </style>
-
   <!-- Central Configuration -->
   <script src="config.js" defer></script>
 
@@ -123,17 +55,6 @@
             stroke-linejoin="round" style="width:16px;height:16px;">
             <path d="M6.5 6.5l11 11L12 23V1l5.5 5.5-11 11"></path>
           </svg>
-        </button>
-
-        <!-- Controls Guide Trigger Button -->
-        <button id="controlsBtn" class="btn-icon" aria-label="Controls Guide" title="Hardware Controls Guide">
-          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-            stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="10"></circle>
-            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
-            <line x1="12" y1="17" x2="12.01" y2="17"></line>
-          </svg>
-          <span class="controls-btn-text">Controls</span>
         </button>
 
         <!-- Settings Modal Trigger Button -->
@@ -244,16 +165,21 @@
 
   <!-- Controls Guide Modal -->
   <div id="controlsModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="controlsModalTitle" aria-hidden="true">
-    <div class="modal-card" style="max-width: 720px; max-height: 88vh; display: flex; flex-direction: column; padding: 1.25rem;">
-      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid var(--border-color);">
-        <h3 id="controlsModalTitle" class="modal-title" style="margin-bottom: 0; display: flex; align-items: center; gap: 0.5rem;">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 20px; height: 20px; color: var(--accent-color);">
-            <circle cx="12" cy="12" r="10"></circle>
-            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
-            <line x1="12" y1="17" x2="12.01" y2="17"></line>
-          </svg>
-          Controls Guide
-        </h3>
+    <div class="modal-card" style="max-width: 480px; padding: 1.25rem;">
+      <div style="display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid var(--border-color); gap: 0.75rem;">
+        <div>
+          <h3 id="controlsModalTitle" class="modal-title" style="margin-bottom: 0.25rem; display: flex; align-items: center; gap: 0.5rem;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 20px; height: 20px; color: var(--accent-color);">
+              <line x1="6" y1="12" x2="10" y2="12"></line>
+              <line x1="8" y1="10" x2="8" y2="14"></line>
+              <line x1="15" y1="13" x2="15.01" y2="13"></line>
+              <line x1="18" y1="11" x2="18.01" y2="11"></line>
+              <rect x="2" y="6" width="20" height="12" rx="2"></rect>
+            </svg>
+            Device Controls
+          </h3>
+          <p class="controls-subtitle">Two-button navigation: UP (BOOT) and DOWN (PWR)</p>
+        </div>
         <button id="closeControlsBtn" class="btn-icon" aria-label="Close Controls Guide" title="Close Controls Guide">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -262,116 +188,39 @@
         </button>
       </div>
 
-      <div class="modal-settings-body" style="overflow-y: auto; overflow-x: auto; padding-right: 4px;">
-        <table class="controls-table">
-          <thead>
-            <tr>
-              <th>Screen / Context</th>
-              <th>Action</th>
-              <th>Button</th>
-              <th>Function</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td class="controls-context">Sleep</td>
-              <td>Click</td>
-              <td><kbd class="kbd-btn">UP</kbd> or <kbd class="kbd-btn">DOWN</kbd></td>
-              <td>Wake device from deep sleep (instant page turn)</td>
-            </tr>
-            <tr style="border-top: 1px solid var(--border-color);">
-              <td class="controls-context" rowspan="5">Reading</td>
-              <td>Click</td>
-              <td><kbd class="kbd-btn">UP</kbd></td>
-              <td>Prev page</td>
-            </tr>
-            <tr>
-              <td>Click</td>
-              <td><kbd class="kbd-btn">DOWN</kbd></td>
-              <td>Next page</td>
-            </tr>
-            <tr>
-              <td>Double-click</td>
-              <td><kbd class="kbd-btn">UP</kbd></td>
-              <td>Toggle bookmark</td>
-            </tr>
-            <tr>
-              <td>Double-click</td>
-              <td><kbd class="kbd-btn">DOWN</kbd></td>
-              <td>Open bookmarks</td>
-            </tr>
-            <tr>
-              <td>Long press (&gt;1.2s)</td>
-              <td><kbd class="kbd-btn">UP</kbd> / <kbd class="kbd-btn">DOWN</kbd></td>
-              <td>Reader menu</td>
-            </tr>
-            <tr style="border-top: 1px solid var(--border-color);">
-              <td class="controls-context" rowspan="2">Menu</td>
-              <td>Click</td>
-              <td><kbd class="kbd-btn">UP</kbd> / <kbd class="kbd-btn">DOWN</kbd></td>
-              <td>Navigate items</td>
-            </tr>
-            <tr>
-              <td>Double-click</td>
-              <td><kbd class="kbd-btn">UP</kbd> / <kbd class="kbd-btn">DOWN</kbd></td>
-              <td>Select item</td>
-            </tr>
-            <tr style="border-top: 1px solid var(--border-color);">
-              <td class="controls-context" rowspan="3">Book Library</td>
-              <td>Click</td>
-              <td><kbd class="kbd-btn">UP</kbd> / <kbd class="kbd-btn">DOWN</kbd></td>
-              <td>Previous/Next item</td>
-            </tr>
-            <tr>
-              <td>Double-click</td>
-              <td><kbd class="kbd-btn">UP</kbd> / <kbd class="kbd-btn">DOWN</kbd></td>
-              <td>Open book/folder</td>
-            </tr>
-            <tr>
-              <td>Long press (&gt;1.2s)</td>
-              <td><kbd class="kbd-btn">UP</kbd> / <kbd class="kbd-btn">DOWN</kbd></td>
-              <td>Return to menu</td>
-            </tr>
-            <tr style="border-top: 1px solid var(--border-color);">
-              <td class="controls-context" rowspan="3">Bookmarks</td>
-              <td>Click</td>
-              <td><kbd class="kbd-btn">UP</kbd> / <kbd class="kbd-btn">DOWN</kbd></td>
-              <td>Previous/Next bookmark</td>
-            </tr>
-            <tr>
-              <td>Double-click</td>
-              <td><kbd class="kbd-btn">UP</kbd> / <kbd class="kbd-btn">DOWN</kbd></td>
-              <td>Jump to bookmark</td>
-            </tr>
-            <tr>
-              <td>Long press (&gt;1.2s)</td>
-              <td><kbd class="kbd-btn">UP</kbd> / <kbd class="kbd-btn">DOWN</kbd></td>
-              <td>Return to reading</td>
-            </tr>
-            <tr style="border-top: 1px solid var(--border-color);">
-              <td class="controls-context">Sync Books</td>
-              <td>Long press (&gt;1.2s)</td>
-              <td><kbd class="kbd-btn">UP</kbd> / <kbd class="kbd-btn">DOWN</kbd></td>
-              <td>Exit sync and return to menu</td>
-            </tr>
-            <tr style="border-top: 1px solid var(--border-color);">
-              <td class="controls-context">Force Reboot</td>
-              <td>Hold together (2.0s)</td>
-              <td><kbd class="kbd-btn">UP</kbd> + <kbd class="kbd-btn">DOWN</kbd></td>
-              <td>Instant reboot</td>
-            </tr>
-            <tr style="border-top: 1px solid var(--border-color);">
-              <td class="controls-context">Inactivity Sleep</td>
-              <td>Inactivity (20s)</td>
-              <td><span style="font-family: var(--font-mono); font-size: 0.76rem; color: var(--text-muted);">Auto</span></td>
-              <td>Auto sleep after 20s of inactivity (e-paper holds text statically at 0.0µA)</td>
-            </tr>
-          </tbody>
-        </table>
+      <div class="controls-list">
+        <div class="controls-item">
+          <div class="controls-badge"><span class="controls-sym">▲</span> Click</div>
+          <div class="controls-desc">Short click <strong>BOOT / UP</strong>: Previous page (Reading) / Move cursor up (Menu &amp; Library)</div>
+        </div>
+        <div class="controls-item">
+          <div class="controls-badge"><span class="controls-sym">▼</span> Click</div>
+          <div class="controls-desc">Short click <strong>PWR / DOWN</strong>: Next page (Reading) / Move cursor down (Menu &amp; Library)</div>
+        </div>
+        <div class="controls-item">
+          <div class="controls-badge"><span class="controls-sym">2x</span> ▲</div>
+          <div class="controls-desc">Double click <strong>BOOT / UP</strong>: Toggle bookmark (Reading) / Select item (Menu &amp; Library)</div>
+        </div>
+        <div class="controls-item">
+          <div class="controls-badge"><span class="controls-sym">2x</span> ▼</div>
+          <div class="controls-desc">Double click <strong>PWR / DOWN</strong>: Open bookmarks (Reading) / Select item (Menu &amp; Library)</div>
+        </div>
+        <div class="controls-item">
+          <div class="controls-badge"><span class="controls-sym">⏵</span> Hold</div>
+          <div class="controls-desc">Long press (&gt;1.2s) <strong>UP or DOWN</strong>: Open reader menu (Reading) / Back or exit (Menu, Library &amp; Sync)</div>
+        </div>
+        <div class="controls-item">
+          <div class="controls-badge"><span class="controls-sym">▲▼</span> Both</div>
+          <div class="controls-desc">Hold together (2.0s) <strong>UP + DOWN</strong>: Force reboot device</div>
+        </div>
+        <div class="controls-item">
+          <div class="controls-badge"><span class="controls-sym">⏻</span> Wake</div>
+          <div class="controls-desc">Short click <strong>UP or DOWN</strong>: Wake device from deep sleep or start on boot</div>
+        </div>
       </div>
 
-      <div class="modal-actions" style="margin-top: 1rem; padding-top: 0.75rem; border-top: 1px solid var(--border-color);">
-        <button id="dismissControlsBtn" class="btn-secondary">Close</button>
+      <div class="modal-actions" style="margin-top: 1.25rem; padding-top: 0.75rem; border-top: 1px solid var(--border-color);">
+        <button id="dismissControlsBtn" class="btn-secondary" style="width: 100%;">Close</button>
       </div>
     </div>
   </div>
