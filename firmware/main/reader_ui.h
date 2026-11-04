@@ -46,7 +46,9 @@ void      reader_ui_render_reading_force_full(void);
 void      reader_ui_render_menu(int selected_index);
 void      reader_ui_render_menu_full(int selected_index);
 void      reader_ui_render_book_list(int selected_index);
+void      reader_ui_render_book_list_full(int selected_index);
 void      reader_ui_render_bookmarks(int selected_index);
+void      reader_ui_render_bookmarks_full(int selected_index);
 void      reader_ui_render_nav_hints(void);
 void      reader_ui_render_ble_sync(bool is_connected, uint32_t bytes_received);
 /**

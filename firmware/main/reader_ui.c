@@ -5,6 +5,7 @@
 #include "freertos/task.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
+#include "esp_attr.h"
 #include "epaper_port.h"
 #include "GUI_Paint.h"
 #include "fonts.h"
@@ -21,6 +22,9 @@ static reading_state_t s_cached_reading_state;
 static size_t s_book_list_start_idx = 0;
 static bool s_show_nav_hints = true;
 static uint8_t s_rotation = BOARD_DISPLAY_ROTATION;
+static RTC_DATA_ATTR uint8_t s_rtc_canvas[DISPLAY_BUFFER_SIZE];
+static RTC_DATA_ATTR bool s_rtc_canvas_valid = false;
+static bool s_is_wake_frame = false;
 
 void reader_ui_set_rotation(uint8_t rotation) {
     s_rotation = rotation % 4;
@@ -145,6 +149,7 @@ static void draw_centered_string(int y, const char *str, sFONT *font) {
 }
 
 esp_err_t reader_ui_init(bool is_cold_boot) {
+    s_is_wake_frame = !is_cold_boot;
     if (!s_canvas) {
         s_canvas = (uint8_t *)heap_caps_malloc(DISPLAY_BUFFER_SIZE, MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
         if (!s_canvas) {
@@ -181,6 +186,23 @@ esp_err_t reader_ui_init(bool is_cold_boot) {
     return ESP_OK;
 }
 
+static void reader_ui_flush_canvas(bool full_refresh) {
+    if (!s_canvas) return;
+
+    if (full_refresh) {
+        epaper_port_display_full(s_canvas);
+        s_is_wake_frame = false;
+    } else if (s_is_wake_frame && s_rtc_canvas_valid) {
+        epaper_port_display_part_diff(s_rtc_canvas, s_canvas);
+        s_is_wake_frame = false;
+    } else {
+        epaper_port_display_part(s_canvas);
+    }
+
+    memcpy(s_rtc_canvas, s_canvas, DISPLAY_BUFFER_SIZE);
+    s_rtc_canvas_valid = true;
+}
+
 static void render_reading_internal(bool full_refresh) {
     if (!s_canvas) return;
 
@@ -194,11 +216,7 @@ static void render_reading_internal(bool full_refresh) {
     snprintf(bat_str, sizeof(bat_str), "%u%%", power_mgr_get_battery_percentage());
     Paint_DrawString_EN(165, 2, bat_str, &Font12, BLACK, WHITE);
 
-    if (full_refresh) {
-        epaper_port_display_full(s_canvas);
-    } else {
-        epaper_port_display_part(s_canvas);
-    }
+    reader_ui_flush_canvas(full_refresh);
 }
 
 void reader_ui_render_reading(void) {
@@ -337,7 +355,7 @@ static void get_book_display_name(size_t index, char *buf, size_t buf_size) {
         return;
     }
     if (book->type == LIBRARY_ENTRY_UP) {
-        snprintf(buf, buf_size, "[.. Kembali]");
+        snprintf(buf, buf_size, "[.. Back]");
     } else if (book->type == LIBRARY_ENTRY_DIR) {
         snprintf(buf, buf_size, "[D] %s", book->filename);
     } else {
@@ -428,11 +446,7 @@ static void render_menu_internal(int selected_index, bool full_refresh) {
         draw_centered_string(UI_FOOTER_Y + 1, "▲/▼ Move | 2x▲/▼ Select", &Font12);
     }
 
-    if (full_refresh) {
-        epaper_port_display_full(s_canvas);
-    } else {
-        epaper_port_display_part(s_canvas);
-    }
+    reader_ui_flush_canvas(full_refresh);
 }
 
 void reader_ui_render_menu(int selected_index) {
@@ -478,10 +492,10 @@ void reader_ui_render_nav_hints(void) {
     Paint_DrawLine(0, UI_FOOTER_Y - 2, DISPLAY_WIDTH - 1, UI_FOOTER_Y - 2, BLACK, DOT_PIXEL_1X1, LINE_STYLE_SOLID);
     draw_centered_string(UI_FOOTER_Y + 1, "2x▲/▼ Toggle | Hold ▲/▼ Back", &Font12);
 
-    epaper_port_display_part(s_canvas);
+    reader_ui_flush_canvas(false);
 }
 
-void reader_ui_render_book_list(int selected_index) {
+static void render_book_list_internal(int selected_index, bool full_refresh) {
     if (!s_canvas) return;
 
     epaper_power_on();
@@ -556,10 +570,18 @@ void reader_ui_render_book_list(int selected_index) {
         draw_centered_string(UI_FOOTER_Y + 1, "2x▲/▼ Open | Hold ▲/▼ Back", &Font12);
     }
 
-    epaper_port_display_part(s_canvas);
+    reader_ui_flush_canvas(full_refresh);
 }
 
-void reader_ui_render_bookmarks(int selected_index) {
+void reader_ui_render_book_list(int selected_index) {
+    render_book_list_internal(selected_index, false);
+}
+
+void reader_ui_render_book_list_full(int selected_index) {
+    render_book_list_internal(selected_index, true);
+}
+
+static void render_bookmarks_internal(int selected_index, bool full_refresh) {
     if (!s_canvas) return;
 
     epaper_power_on();
@@ -617,13 +639,21 @@ void reader_ui_render_bookmarks(int selected_index) {
         }
     }
 
-        // Footer
+    // Footer
     if (s_show_nav_hints) {
         Paint_DrawLine(0, UI_FOOTER_Y - 2, DISPLAY_WIDTH - 1, UI_FOOTER_Y - 2, BLACK, DOT_PIXEL_1X1, LINE_STYLE_SOLID);
         draw_centered_string(UI_FOOTER_Y + 1, "2x▲/▼ Jump | Hold ▲/▼ Back", &Font12);
     }
 
-    epaper_port_display_part(s_canvas);
+    reader_ui_flush_canvas(full_refresh);
+}
+
+void reader_ui_render_bookmarks(int selected_index) {
+    render_bookmarks_internal(selected_index, false);
+}
+
+void reader_ui_render_bookmarks_full(int selected_index) {
+    render_bookmarks_internal(selected_index, true);
 }
 
 static void draw_bacain_icon(int center_x, int top_y) {
@@ -658,7 +688,7 @@ void reader_ui_render_ble_sync(bool is_connected, uint32_t bytes_received) {
     // Render 25x25 QR code centered with 4x scaling (25 * 4 = 100x100 pixels)
     int scale = 4;
     int qx = (BOARD_DISPLAY_WIDTH - (SYNC_QRCODE_SIZE * scale)) / 2;
-    int qy = 24;
+    int qy = (BOARD_DISPLAY_HEIGHT - (SYNC_QRCODE_SIZE * scale)) / 2;
     // Draw white quiet zone backing
     Paint_DrawRectangle(qx - 4, qy - 4, qx + (SYNC_QRCODE_SIZE * scale) + 3, qy + (SYNC_QRCODE_SIZE * scale) + 3, WHITE, DOT_PIXEL_1X1, DRAW_FILL_FULL);
     for (int y = 0; y < SYNC_QRCODE_SIZE; y++) {
@@ -673,22 +703,20 @@ void reader_ui_render_ble_sync(bool is_connected, uint32_t bytes_received) {
         }
     }
 
-    // Centered URL below QR code
-    draw_centered_string(128, "bacain.khadr.dev", &Font12);
-
-    // Connection status below URL
-    draw_centered_string(144, is_connected ? "Status: CONNECTED" : "Waiting to connect...", &Font12);
+    // Connection status below QR code
     if (is_connected) {
         char rx_buf[32];
         snprintf(rx_buf, sizeof(rx_buf), "Rx: %u bytes", (unsigned int)bytes_received);
-        draw_centered_string(160, rx_buf, &Font12);
+        draw_centered_string(162, rx_buf, &Font12);
+    } else {
+        draw_centered_string(162, "Waiting to connect...", &Font12);
     }
 
     // Footer
     Paint_DrawLine(0, UI_FOOTER_Y - 2, DISPLAY_WIDTH - 1, UI_FOOTER_Y - 2, BLACK, DOT_PIXEL_1X1, LINE_STYLE_SOLID);
     draw_ui_string(12, UI_FOOTER_Y + 1, "Hold ▲/▼ Exit", &Font12, BLACK, WHITE);
 
-    epaper_port_display_part(s_canvas);
+    reader_ui_flush_canvas(false);
 }
 
 void reader_ui_render_splash(const char *title, const char *subtitle) {
@@ -712,11 +740,12 @@ void reader_ui_render_splash(const char *title, const char *subtitle) {
     Paint_DrawLine(65, 112, 135, 112, BLACK, DOT_PIXEL_1X1, LINE_STYLE_SOLID);
 
     // Subtitle (Font12)
-    if (subtitle && subtitle[0] != '\0') {
-        draw_centered_string(126, subtitle, &Font12);
-    }
+    const char *sub = (subtitle && subtitle[0] != '\0') ? subtitle : "Press ▲/▼";
+    draw_centered_string(126, sub, &Font12);
 
     epaper_port_display_full(s_canvas);
+    memcpy(s_rtc_canvas, s_canvas, DISPLAY_BUFFER_SIZE);
+    s_rtc_canvas_valid = true;
 }
 
 void reader_ui_render_sleeping(void) {
@@ -736,17 +765,19 @@ void reader_ui_render_sleeping(void) {
     // Title (Font16)
     draw_centered_string(80, "BacaIn", &Font16);
 
-    // Sleeping status (Font12)
-    draw_centered_string(104, "SLEEPING...", &Font12);
+    // // Sleeping status (Font12)
+    // draw_centered_string(104, "SLEEPING...", &Font12);
 
     // Divider line
     Paint_DrawLine(50, 126, 150, 126, BLACK, DOT_PIXEL_1X1, LINE_STYLE_SOLID);
 
     // Wake instruction guide (Font12)
-    const char *wake_str = "Press ▲ to Wake";
+    const char *wake_str = "Press ▲/▼";
     int wake_x = (DISPLAY_WIDTH - get_ui_string_width(wake_str, &Font12)) / 2;
     if (wake_x < 4) wake_x = 4;
     draw_ui_string((UWORD)wake_x, 146, wake_str, &Font12, BLACK, WHITE);
 
     epaper_port_display_full(s_canvas);
+    memcpy(s_rtc_canvas, s_canvas, DISPLAY_BUFFER_SIZE);
+    s_rtc_canvas_valid = true;
 }
