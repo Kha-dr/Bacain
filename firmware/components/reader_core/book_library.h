@@ -170,7 +170,7 @@ esp_err_t book_library_get_current_state(reading_state_t *state);
 /**
  * @brief Set current active book path and update total bytes.
  * @param book_path Full path to active book.
- * @param reset_offset If true, reset byte_offset to 0; if false, retain offset if same book.
+ * @param reset_offset If true, reset byte_offset to 0; if false, retain saved offset.
  * @return ESP_OK on success, or an error code.
  */
 esp_err_t book_library_set_active_book(const char *book_path, bool reset_offset);
@@ -202,6 +202,31 @@ esp_err_t book_library_remove_bookmark(size_t offset);
  * @return true if bookmarked, false otherwise.
  */
 bool book_library_is_bookmarked(size_t offset);
+
+/**
+ * @brief Query per-book reading offset, total bytes, and bookmarks (active or inactive book).
+ */
+esp_err_t book_library_get_book_state(const char *filename, size_t *out_offset, size_t *out_total_bytes, size_t *out_bookmarks, size_t *out_bm_count);
+
+/**
+ * @brief Add a bookmark to a specific book by filename or path.
+ */
+esp_err_t book_library_add_book_bookmark(const char *filename, size_t offset);
+
+/**
+ * @brief Remove a bookmark from a specific book by filename or path.
+ */
+esp_err_t book_library_remove_book_bookmark(const char *filename, size_t offset);
+
+/**
+ * @brief Set reading offset for a specific book by filename or path.
+ */
+esp_err_t book_library_set_book_offset(const char *filename, size_t offset);
+
+/**
+ * @brief Delete sidecar reading state & bookmarks for a deleted book.
+ */
+esp_err_t book_library_delete_book_state(const char *filename);
 
 #ifdef __cplusplus
 }

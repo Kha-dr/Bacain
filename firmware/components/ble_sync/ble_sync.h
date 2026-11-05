@@ -37,6 +37,14 @@ typedef enum {
 #define BLE_SYNC_OP_DELETE_BOOK          0x04
 #define BLE_SYNC_OP_ABORT_UPLOAD         0x05
 #define BLE_SYNC_OP_SET_STORAGE_TARGET   0x06
+#define BLE_SYNC_OP_GET_BOOKMARKS        0x07
+#define BLE_SYNC_OP_DELETE_BOOKMARK      0x08
+#define BLE_SYNC_OP_ADD_BOOKMARK         0x09
+#define BLE_SYNC_OP_SET_BOOK_OFFSET      0x0A
+#define BLE_CTRL_OP_GET_BOOKMARKS        0x07
+#define BLE_CTRL_OP_DELETE_BOOKMARK      0x08
+#define BLE_CTRL_OP_ADD_BOOKMARK         0x09
+#define BLE_CTRL_OP_SET_BOOK_OFFSET      0x0A
 #define BLE_SYNC_OP_SET_FONT             0x10
 #define BLE_SYNC_OP_FORCE_REFRESH        0x12
 #define BLE_SYNC_OP_SET_SLEEP_TIMEOUT    0x13

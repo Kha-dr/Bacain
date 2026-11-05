@@ -197,8 +197,10 @@ reader_view_t view_library_handle_event(button_event_t evt) {
                     s_rtc_book_index = 0;
                     view_library_render(false);
                 } else if (book->type == LIBRARY_ENTRY_FILE) {
-                    if (text_pager_open_book(book->path, 0) == ESP_OK) {
-                        book_library_set_active_book(book->path, true);
+                    book_library_set_active_book(book->path, false);
+                    const reading_state_t *st = book_library_get_state();
+                    size_t resume_offset = st ? st->byte_offset : 0;
+                    if (text_pager_open_book(book->path, resume_offset) == ESP_OK) {
                         view_reading_render(false);
                         return VIEW_READING;
                     }

@@ -43,6 +43,7 @@
 
 #include "power_mgr.h"
 #include "sdcard.h"
+#include "book_library.h"
 #include "text_pager.h"
 #if __has_include("reader_ui.h")
 #include "reader_ui.h"
@@ -314,6 +315,34 @@ static esp_err_t ble_sync_notify(uint16_t val_handle, const void *data, uint16_t
     return ESP_OK;
 }
 
+static void sanitize_rel_path(const char *in, char *out, size_t max_len)
+{
+    if (!in || !out || max_len == 0) return;
+
+    while (*in == '/' || *in == '\\' || *in == '.') {
+        in++;
+    }
+
+    size_t i = 0;
+    bool seen_slash = false;
+    while (*in && i < max_len - 1) {
+        char c = *in++;
+        if (c == '\\') c = '/';
+        if (c == '/') {
+            if (seen_slash || i == 0 || *in == '.' || *in == '/' || *in == '\0') {
+                c = '_';
+            } else {
+                seen_slash = true;
+            }
+        } else if (c == ':' || c == '*' || c == '?' ||
+                   c == '"' || c == '<' || c == '>' || c == '|' || (unsigned char)c < 32) {
+            c = '_';
+        }
+        out[i++] = c;
+    }
+    out[i] = '\0';
+}
+
 static void send_list_book_entry(const char *name, uint32_t size, uint8_t is_last)
 {
     uint8_t resp[256];
@@ -326,13 +355,32 @@ static void send_list_book_entry(const char *name, uint32_t size, uint8_t is_las
     resp[6] = (uint8_t)((size >> 24) & 0xFF);
 
     size_t name_len = strlen(name);
-    if (name_len > sizeof(resp) - 8) {
-        name_len = sizeof(resp) - 8;
+    if (name_len > sizeof(resp) - 14) {
+        name_len = sizeof(resp) - 14;
     }
     memcpy(&resp[7], name, name_len);
     resp[7 + name_len] = '\0';
 
-    ble_sync_notify(s_control_val_handle, resp, (uint16_t)(7 + name_len + 1));
+    size_t total_len = 7 + name_len + 1;
+    if (name_len > 0 && name[name_len - 1] != '/') {
+        size_t book_offset = 0;
+        size_t total_bytes = 0;
+        size_t bm_count = 0;
+        if (book_library_get_book_state(name, &book_offset, &total_bytes, NULL, &bm_count) != ESP_OK) {
+            book_offset = 0;
+            bm_count = 0;
+        }
+        uint32_t le_offset = (uint32_t)book_offset;
+        size_t meta_pos = 7 + name_len + 1;
+        resp[meta_pos + 0] = (uint8_t)(le_offset & 0xFF);
+        resp[meta_pos + 1] = (uint8_t)((le_offset >> 8) & 0xFF);
+        resp[meta_pos + 2] = (uint8_t)((le_offset >> 16) & 0xFF);
+        resp[meta_pos + 3] = (uint8_t)((le_offset >> 24) & 0xFF);
+        resp[meta_pos + 4] = (uint8_t)(bm_count > 0xFF ? 0xFF : bm_count);
+        total_len += 5;
+    }
+
+    ble_sync_notify(s_control_val_handle, resp, (uint16_t)total_len);
     vTaskDelay(pdMS_TO_TICKS(15));
 }
 
@@ -547,6 +595,7 @@ static void handle_cmd_delete_book(const ble_sync_cmd_msg_t *cmd)
 
     if (rc == 0) {
         ESP_LOGI(TAG, "Deleted file: %s", fpath);
+        book_library_delete_book_state(safe_name);
     } else {
         ESP_LOGW(TAG, "Failed to delete file: %s", fpath);
     }
@@ -939,6 +988,105 @@ static int ble_sync_control_access_cb(uint16_t conn_handle, uint16_t attr_handle
         cmd.storage_target = buf[1];
         xQueueSend(s_cmd_queue, &cmd, pdMS_TO_TICKS(50));
         break;
+
+    case BLE_CTRL_OP_GET_BOOKMARKS: {
+        if (copied < 2) {
+            uint8_t err_resp[11] = { BLE_CTRL_OP_GET_BOOKMARKS, BLE_SYNC_STATUS_ERROR };
+            ble_sync_notify(s_control_val_handle, err_resp, sizeof(err_resp));
+            break;
+        }
+        char rel_path[128] = {0};
+        sanitize_rel_path((const char *)&buf[1], rel_path, sizeof(rel_path));
+        size_t byte_offset = 0;
+        size_t total_bytes = 0;
+        size_t bookmarks[BOOK_MAX_BOOKMARKS] = {0};
+        size_t bm_count = 0;
+        esp_err_t err = book_library_get_book_state(rel_path, &byte_offset, &total_bytes, bookmarks, &bm_count);
+        if (bm_count > BOOK_MAX_BOOKMARKS) {
+            bm_count = BOOK_MAX_BOOKMARKS;
+        }
+        uint8_t resp[11 + BOOK_MAX_BOOKMARKS * 4];
+        memset(resp, 0, sizeof(resp));
+        resp[0] = BLE_CTRL_OP_GET_BOOKMARKS;
+        resp[1] = (err == ESP_OK) ? BLE_SYNC_STATUS_OK : BLE_SYNC_STATUS_ERROR;
+        uint32_t off_u32 = (uint32_t)byte_offset;
+        uint32_t tot_u32 = (uint32_t)total_bytes;
+        resp[2] = (uint8_t)(off_u32 & 0xFF);
+        resp[3] = (uint8_t)((off_u32 >> 8) & 0xFF);
+        resp[4] = (uint8_t)((off_u32 >> 16) & 0xFF);
+        resp[5] = (uint8_t)((off_u32 >> 24) & 0xFF);
+        resp[6] = (uint8_t)(tot_u32 & 0xFF);
+        resp[7] = (uint8_t)((tot_u32 >> 8) & 0xFF);
+        resp[8] = (uint8_t)((tot_u32 >> 16) & 0xFF);
+        resp[9] = (uint8_t)((tot_u32 >> 24) & 0xFF);
+        resp[10] = (uint8_t)bm_count;
+        for (size_t i = 0; i < bm_count; i++) {
+            uint32_t bm = (uint32_t)bookmarks[i];
+            resp[11 + i * 4 + 0] = (uint8_t)(bm & 0xFF);
+            resp[11 + i * 4 + 1] = (uint8_t)((bm >> 8) & 0xFF);
+            resp[11 + i * 4 + 2] = (uint8_t)((bm >> 16) & 0xFF);
+            resp[11 + i * 4 + 3] = (uint8_t)((bm >> 24) & 0xFF);
+        }
+        ble_sync_notify(s_control_val_handle, resp, (uint16_t)(11 + bm_count * 4));
+        break;
+    }
+
+    case BLE_CTRL_OP_DELETE_BOOKMARK: {
+        if (copied <= 5) {
+            uint8_t resp[2] = { BLE_CTRL_OP_DELETE_BOOKMARK, BLE_SYNC_STATUS_ERROR };
+            ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
+            break;
+        }
+        uint32_t target_offset = (uint32_t)buf[1] |
+                                 ((uint32_t)buf[2] << 8) |
+                                 ((uint32_t)buf[3] << 16) |
+                                 ((uint32_t)buf[4] << 24);
+        char rel_path[128] = {0};
+        sanitize_rel_path((const char *)&buf[5], rel_path, sizeof(rel_path));
+        esp_err_t err = book_library_remove_book_bookmark(rel_path, (size_t)target_offset);
+        uint8_t resp[2] = { BLE_CTRL_OP_DELETE_BOOKMARK, (err == ESP_OK) ? BLE_SYNC_STATUS_OK : BLE_SYNC_STATUS_ERROR };
+        ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
+        break;
+    }
+
+    case BLE_CTRL_OP_ADD_BOOKMARK: {
+        if (copied <= 5) {
+            uint8_t resp[2] = { BLE_CTRL_OP_ADD_BOOKMARK, BLE_SYNC_STATUS_ERROR };
+            ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
+            break;
+        }
+        uint32_t target_offset = (uint32_t)buf[1] |
+                                 ((uint32_t)buf[2] << 8) |
+                                 ((uint32_t)buf[3] << 16) |
+                                 ((uint32_t)buf[4] << 24);
+        char rel_path[128] = {0};
+        sanitize_rel_path((const char *)&buf[5], rel_path, sizeof(rel_path));
+        esp_err_t err = book_library_add_book_bookmark(rel_path, (size_t)target_offset);
+        uint8_t resp[2] = { BLE_CTRL_OP_ADD_BOOKMARK, (err == ESP_OK) ? BLE_SYNC_STATUS_OK : BLE_SYNC_STATUS_ERROR };
+        ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
+        break;
+    }
+
+    case BLE_CTRL_OP_SET_BOOK_OFFSET: {
+        if (copied <= 5) {
+            uint8_t resp[2] = { BLE_CTRL_OP_SET_BOOK_OFFSET, BLE_SYNC_STATUS_ERROR };
+            ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
+            break;
+        }
+        uint32_t target_offset = (uint32_t)buf[1] |
+                                 ((uint32_t)buf[2] << 8) |
+                                 ((uint32_t)buf[3] << 16) |
+                                 ((uint32_t)buf[4] << 24);
+        char rel_path[128] = {0};
+        sanitize_rel_path((const char *)&buf[5], rel_path, sizeof(rel_path));
+        esp_err_t err = book_library_set_book_offset(rel_path, (size_t)target_offset);
+        if (err == ESP_OK && s_event_cb) {
+            s_event_cb(BLE_SYNC_EVT_REQUEST_REFRESH, NULL, s_event_cb_arg);
+        }
+        uint8_t resp[2] = { BLE_CTRL_OP_SET_BOOK_OFFSET, (err == ESP_OK) ? BLE_SYNC_STATUS_OK : BLE_SYNC_STATUS_ERROR };
+        ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
+        break;
+    }
 
     case BLE_SYNC_OP_SET_FONT:
         if (copied < 2) {

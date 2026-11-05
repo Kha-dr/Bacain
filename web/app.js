@@ -21,6 +21,8 @@ const OPCODES = appConfig?.ble?.opcodes || {
   SET_STORAGE_TARGET: 0x06,
   GET_BOOKMARKS: 0x07,
   DELETE_BOOKMARK: 0x08,
+  ADD_BOOKMARK: 0x09,
+  SET_BOOK_OFFSET: 0x0A,
   SET_FONT: 0x10,
   FORCE_REFRESH: 0x12,
   SET_SLEEP_TIMEOUT: 0x13,
@@ -30,6 +32,10 @@ const OPCODES = appConfig?.ble?.opcodes || {
   SET_STATUS_LED: 0x18,
   GET_CONFIG: 0x19
 };
+OPCODES.GET_BOOKMARKS = OPCODES.GET_BOOKMARKS || 0x07;
+OPCODES.DELETE_BOOKMARK = OPCODES.DELETE_BOOKMARK || 0x08;
+OPCODES.ADD_BOOKMARK = OPCODES.ADD_BOOKMARK || 0x09;
+OPCODES.SET_BOOK_OFFSET = OPCODES.SET_BOOK_OFFSET || 0x0A;
 OPCODES.SET_NAV_HINTS = OPCODES.SET_NAV_HINTS || 0x15;
 OPCODES.SET_ROTATION = OPCODES.SET_ROTATION || 0x16;
 OPCODES.SET_BUTTON_INVERT = OPCODES.SET_BUTTON_INVERT || 0x17;
@@ -67,6 +73,7 @@ const controlCallbacks = new Map();
 
 // Pending Delete Book
 let bookPendingDelete = null;
+let activeBookmarksBook = null;
 
 // ============================================================================
 // DOM Elements
@@ -142,6 +149,17 @@ const el = {
   deleteModalText: document.getElementById('deleteModalText'),
   cancelDeleteBtn: document.getElementById('cancelDeleteBtn'),
   confirmDeleteBtn: document.getElementById('confirmDeleteBtn'),
+
+  bookmarksModal: document.getElementById('bookmarksModal'),
+  bookmarksModalBookName: document.getElementById('bookmarksModalBookName'),
+  bookmarksCurrentPosText: document.getElementById('bookmarksCurrentPosText'),
+  closeBookmarksModalBtn: document.getElementById('closeBookmarksModalBtn'),
+  dismissBookmarksModalBtn: document.getElementById('dismissBookmarksModalBtn'),
+  bookmarkCurrentPosBtn: document.getElementById('bookmarkCurrentPosBtn'),
+  bookmarkPositionPctInput: document.getElementById('bookmarkPositionPctInput'),
+  jumpToPositionBtn: document.getElementById('jumpToPositionBtn'),
+  addBookmarkAtPctBtn: document.getElementById('addBookmarkAtPctBtn'),
+  bookmarksList: document.getElementById('bookmarksList'),
 
   // Log
   logHeader: document.getElementById('logHeader'),
@@ -792,8 +810,30 @@ function handleListBooksPacket(val) {
     }
   }
 
+  const nullIdx = 7 + nameBytes.length;
+  let byteOffset = 0;
+  let bookmarkCount = 0;
+  if (val.byteLength >= nullIdx + 6) {
+    byteOffset = val.getUint32(nullIdx + 1, true);
+    bookmarkCount = val.getUint8(nullIdx + 5);
+  }
+  const progress = fileSize > 0 ? Math.min(100, Math.floor((byteOffset * 100) / fileSize)) : 0;
+
   if (status === 0 && filename.length > 0) {
-    pendingBookList.push({ name: filename, size: fileSize });
+    if (byteOffset > 0) {
+      setBookReadingProgress(filename, progress);
+    } else {
+      try {
+        localStorage.removeItem(`bacain_progress_${filename}`);
+      } catch (_) {}
+    }
+    pendingBookList.push({
+      name: filename,
+      size: fileSize,
+      byteOffset,
+      bookmarkCount,
+      progress
+    });
   }
 
   if (isLast === 1) {
@@ -812,7 +852,12 @@ function finalizeBookList() {
   renderBooksList();
 }
 
-function getBookReadingProgress(filename) {
+function getBookReadingProgress(filename, bookObj) {
+  if (bookObj && typeof bookObj.byteOffset === 'number') {
+    if (bookObj.byteOffset === 0) return 0;
+    const total = Number(bookObj.size) || 0;
+    return total > 0 ? Math.min(100, Math.floor((bookObj.byteOffset * 100) / total)) : 0;
+  }
   try {
     const saved = localStorage.getItem(`bacain_progress_${filename}`);
     if (saved !== null) {
@@ -838,7 +883,7 @@ function renderBooksList() {
     bookLibrary.setDeviceConnected(isConnected);
     const booksWithProgress = remoteBooks.map(b => ({
       ...b,
-      progress: b.progress !== undefined ? b.progress : getBookReadingProgress(b.name)
+      progress: b.progress !== undefined ? b.progress : getBookReadingProgress(b.name, b)
     }));
     bookLibrary.renderBooks(booksWithProgress, currentStorageTarget === 0 ? '/sdcard/books/' : '/spiflash/books/');
   }
@@ -874,7 +919,10 @@ function renderBooksList() {
   }
 
   filtered.forEach(book => {
-    const progress = book.progress !== undefined ? book.progress : getBookReadingProgress(book.name);
+    const progress = book.progress !== undefined ? book.progress : getBookReadingProgress(book.name, book);
+    const byteOffset = Number(book.byteOffset) || 0;
+    const bookmarkCount = Number(book.bookmarkCount) || 0;
+    const hasStarted = progress > 0 || byteOffset > 0;
 
     const item = document.createElement('div');
     item.className = 'book-item';
@@ -904,13 +952,14 @@ function renderBooksList() {
     details.style.alignItems = 'center';
     details.style.gap = '0.75rem';
     details.style.marginTop = '0.2rem';
+    details.style.flexWrap = 'wrap';
 
     const size = document.createElement('span');
     size.className = 'book-size';
     size.textContent = formatBytes(book.size);
     details.appendChild(size);
 
-    if (progress > 0) {
+    if (hasStarted) {
       const separator = document.createElement('span');
       separator.style.color = 'var(--text-muted)';
       separator.style.fontSize = '0.75rem';
@@ -921,16 +970,55 @@ function renderBooksList() {
       progressEl.style.fontSize = '0.78rem';
       progressEl.style.color = 'var(--accent-color)';
       progressEl.style.fontFamily = 'var(--font-mono)';
-      progressEl.textContent = `${progress}% read`;
+      progressEl.textContent = progress > 0 ? `${progress}% read` : '< 1% read';
 
       details.appendChild(separator);
       details.appendChild(progressEl);
+    }
+
+    if (bookmarkCount > 0) {
+      const bmSep = document.createElement('span');
+      bmSep.style.color = 'var(--text-muted)';
+      bmSep.style.fontSize = '0.75rem';
+      bmSep.textContent = '•';
+
+      const bmEl = document.createElement('span');
+      bmEl.className = 'book-bookmarks-count';
+      bmEl.style.fontSize = '0.78rem';
+      bmEl.style.color = 'var(--text-secondary)';
+      bmEl.style.fontFamily = 'var(--font-mono)';
+      bmEl.textContent = `${bookmarkCount} ${bookmarkCount === 1 ? 'bookmark' : 'bookmarks'}`;
+
+      details.appendChild(bmSep);
+      details.appendChild(bmEl);
     }
 
     meta.appendChild(name);
     meta.appendChild(details);
     info.appendChild(icon);
     info.appendChild(meta);
+
+    const actions = document.createElement('div');
+    actions.className = 'book-actions';
+    actions.style.display = 'flex';
+    actions.style.alignItems = 'center';
+    actions.style.gap = '0.35rem';
+    actions.style.flexShrink = '0';
+
+    const bookmarksBtn = document.createElement('button');
+    bookmarksBtn.className = 'btn-bookmarks-book btn-icon';
+    bookmarksBtn.style.width = '32px';
+    bookmarksBtn.style.height = '32px';
+    bookmarksBtn.title = `Bookmarks & Position for ${book.name}`;
+    bookmarksBtn.setAttribute('aria-label', `Bookmarks & Position for ${book.name}`);
+    bookmarksBtn.innerHTML = `
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;">
+        <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+      </svg>`;
+    bookmarksBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openBookmarksModal(book.name, book.size);
+    });
 
     const deleteBtn = document.createElement('button');
     deleteBtn.className = 'btn-delete-book';
@@ -949,8 +1037,10 @@ function renderBooksList() {
       openDeleteModal(book);
     });
 
+    actions.appendChild(bookmarksBtn);
+    actions.appendChild(deleteBtn);
     item.appendChild(info);
-    item.appendChild(deleteBtn);
+    item.appendChild(actions);
     el.booksList.appendChild(item);
   });
 }
@@ -1051,6 +1141,249 @@ async function confirmDeleteBook() {
   } catch (err) {
     log(`Delete failed: ${err.message}`, 'error');
     showToast(`Delete failed: ${err.message}`, 'error');
+  }
+}
+
+// ============================================================================
+// Bookmarks & Per-Book Reading Position Management (OpCodes 0x07 - 0x0A)
+// ============================================================================
+async function queryBookBookmarks(filename) {
+  if (!controlChar) {
+    throw new Error('Not connected to BacaIn');
+  }
+
+  const enc = new TextEncoder();
+  const nameBytes = enc.encode(filename);
+  const packet = new Uint8Array(1 + nameBytes.length + 1);
+  packet[0] = OPCODES.GET_BOOKMARKS;
+  packet.set(nameBytes, 1);
+  packet[1 + nameBytes.length] = 0;
+
+  const respPromise = waitForControlResponse(OPCODES.GET_BOOKMARKS, 4000);
+  await controlChar.writeValueWithResponse(packet);
+  const { status, dataView: val } = await respPromise;
+
+  if (status !== 0 || !val || val.byteLength < 11) {
+    throw new Error(`Device failed to return bookmarks for "${filename}" (status ${status})`);
+  }
+
+  const byteOffset = val.getUint32(2, true);
+  const totalBytes = val.getUint32(6, true);
+  const bookmarkCount = val.getUint8(10);
+  const bookmarks = [];
+
+  for (let i = 0; i < bookmarkCount && (11 + (i + 1) * 4) <= val.byteLength; i++) {
+    bookmarks.push(val.getUint32(11 + i * 4, true));
+  }
+
+  return { status, byteOffset, totalBytes, bookmarkCount, bookmarks };
+}
+
+function buildOffsetAndFilenamePacket(opcode, byteOffset, filename) {
+  const enc = new TextEncoder();
+  const nameBytes = enc.encode(filename);
+  const packet = new Uint8Array(1 + 4 + nameBytes.length + 1);
+  const view = new DataView(packet.buffer);
+  view.setUint8(0, opcode);
+  view.setUint32(1, Math.max(0, Math.floor(Number(byteOffset) || 0)), true);
+  packet.set(nameBytes, 5);
+  packet[5 + nameBytes.length] = 0;
+  return packet;
+}
+
+async function addBookBookmark(filename, byteOffset) {
+  if (!controlChar) {
+    throw new Error('Not connected to BacaIn');
+  }
+  const packet = buildOffsetAndFilenamePacket(OPCODES.ADD_BOOKMARK, byteOffset, filename);
+  const respPromise = waitForControlResponse(OPCODES.ADD_BOOKMARK, 4000);
+  await controlChar.writeValueWithResponse(packet);
+  const { status } = await respPromise;
+  if (status !== 0) {
+    throw new Error(`Failed to add bookmark (status ${status})`);
+  }
+  return status;
+}
+
+async function deleteBookBookmark(filename, byteOffset) {
+  if (!controlChar) {
+    throw new Error('Not connected to BacaIn');
+  }
+  const packet = buildOffsetAndFilenamePacket(OPCODES.DELETE_BOOKMARK, byteOffset, filename);
+  const respPromise = waitForControlResponse(OPCODES.DELETE_BOOKMARK, 4000);
+  await controlChar.writeValueWithResponse(packet);
+  const { status } = await respPromise;
+  if (status !== 0) {
+    throw new Error(`Failed to delete bookmark (status ${status})`);
+  }
+  return status;
+}
+
+async function setBookReadingOffset(filename, byteOffset) {
+  if (!controlChar) {
+    throw new Error('Not connected to BacaIn');
+  }
+  const packet = buildOffsetAndFilenamePacket(OPCODES.SET_BOOK_OFFSET, byteOffset, filename);
+  const respPromise = waitForControlResponse(OPCODES.SET_BOOK_OFFSET, 4000);
+  await controlChar.writeValueWithResponse(packet);
+  const { status } = await respPromise;
+  if (status !== 0) {
+    throw new Error(`Failed to set reading offset (status ${status})`);
+  }
+  return status;
+}
+
+function syncLocalBookMetadata(filename, byteOffset, totalBytes, bookmarkCount) {
+  const book = remoteBooks.find(b => b.name === filename);
+  const size = totalBytes || (book ? book.size : 0);
+  const progress = size > 0 ? Math.min(100, Math.floor((byteOffset * 100) / size)) : 0;
+  if (book) {
+    book.byteOffset = byteOffset;
+    book.bookmarkCount = bookmarkCount;
+    book.progress = progress;
+    if (totalBytes > 0) book.size = totalBytes;
+  }
+  if (byteOffset > 0) {
+    setBookReadingProgress(filename, progress);
+  } else {
+    try {
+      localStorage.removeItem(`bacain_progress_${filename}`);
+    } catch (_) {}
+  }
+  renderBooksList();
+}
+
+function renderBookmarksModalState(filename, state) {
+  const totalBytes = Number(state.totalBytes) || 0;
+  const byteOffset = Number(state.byteOffset) || 0;
+  const bookmarks = Array.isArray(state.bookmarks) ? state.bookmarks : [];
+  const pct = totalBytes > 0 ? Math.min(100, Math.floor((byteOffset * 100) / totalBytes)) : 0;
+
+  if (el.bookmarksModalBookName) {
+    el.bookmarksModalBookName.textContent = filename;
+  }
+  if (el.bookmarksCurrentPosText) {
+    if (byteOffset > 0) {
+      el.bookmarksCurrentPosText.textContent = `Position: ${pct}% (Byte ${byteOffset.toLocaleString()} / ${totalBytes.toLocaleString()})`;
+    } else {
+      el.bookmarksCurrentPosText.textContent = `Not started (0 / ${totalBytes.toLocaleString()} B)`;
+    }
+  }
+  if (el.bookmarkPositionPctInput) {
+    el.bookmarkPositionPctInput.value = String(pct);
+  }
+
+  if (!el.bookmarksList) return;
+  el.bookmarksList.innerHTML = '';
+
+  if (bookmarks.length === 0) {
+    el.bookmarksList.innerHTML = `<p style="font-size: 0.85rem; color: var(--text-muted); text-align: center; padding: 1rem 0;">No bookmarks saved for this book</p>`;
+    return;
+  }
+
+  bookmarks.forEach((bmOffset, idx) => {
+    const bmPct = totalBytes > 0 ? Math.min(100, Math.floor((bmOffset * 100) / totalBytes)) : 0;
+    const row = document.createElement('div');
+    row.className = 'controls-item';
+    row.style.display = 'flex';
+    row.style.alignItems = 'center';
+    row.style.justifyContent = 'space-between';
+    row.style.gap = '0.5rem';
+
+    const label = document.createElement('div');
+    label.style.fontFamily = 'var(--font-mono)';
+    label.style.fontSize = '0.82rem';
+    label.textContent = `#${idx + 1} • ${bmPct}% (${bmOffset.toLocaleString()} B)`;
+
+    const btnGroup = document.createElement('div');
+    btnGroup.style.display = 'flex';
+    btnGroup.style.alignItems = 'center';
+    btnGroup.style.gap = '0.35rem';
+
+    const jumpBtn = document.createElement('button');
+    jumpBtn.className = 'btn-secondary btn-jump-bookmark';
+    jumpBtn.style.fontSize = '0.76rem';
+    jumpBtn.style.padding = '0.28rem 0.55rem';
+    jumpBtn.textContent = 'Jump';
+    jumpBtn.addEventListener('click', async () => {
+      try {
+        await setBookReadingOffset(filename, bmOffset);
+        showToast(`Jumped "${filename}" to ${bmPct}%`, 'success');
+        await refreshActiveBookmarksModal();
+      } catch (err) {
+        log(`Failed to jump to bookmark: ${err.message}`, 'error');
+        showToast(`Jump failed: ${err.message}`, 'error');
+      }
+    });
+
+    const delBtn = document.createElement('button');
+    delBtn.className = 'btn-danger btn-delete-bookmark';
+    delBtn.style.fontSize = '0.76rem';
+    delBtn.style.padding = '0.28rem 0.55rem';
+    delBtn.textContent = 'Delete';
+    delBtn.addEventListener('click', async () => {
+      try {
+        await deleteBookBookmark(filename, bmOffset);
+        showToast(`Removed bookmark #${idx + 1}`, 'info');
+        await refreshActiveBookmarksModal();
+      } catch (err) {
+        log(`Failed to delete bookmark: ${err.message}`, 'error');
+        showToast(`Delete bookmark failed: ${err.message}`, 'error');
+      }
+    });
+
+    btnGroup.appendChild(jumpBtn);
+    btnGroup.appendChild(delBtn);
+    row.appendChild(label);
+    row.appendChild(btnGroup);
+    el.bookmarksList.appendChild(row);
+  });
+}
+
+async function refreshActiveBookmarksModal() {
+  if (!activeBookmarksBook) return;
+  const { name, size } = activeBookmarksBook;
+  const state = await queryBookBookmarks(name);
+  activeBookmarksBook.byteOffset = state.byteOffset;
+  activeBookmarksBook.size = state.totalBytes || size;
+  syncLocalBookMetadata(name, state.byteOffset, state.totalBytes || size, state.bookmarkCount);
+  renderBookmarksModalState(name, state);
+}
+
+async function openBookmarksModal(filename, fileSize = 0) {
+  if (!isConnected || !controlChar) {
+    showToast('Connect to BacaIn to manage bookmarks', 'warning');
+    return;
+  }
+
+  activeBookmarksBook = { name: filename, size: fileSize, byteOffset: 0 };
+  if (el.bookmarksModalBookName) {
+    el.bookmarksModalBookName.textContent = filename;
+  }
+  if (el.bookmarksCurrentPosText) {
+    el.bookmarksCurrentPosText.textContent = 'Loading device state...';
+  }
+  if (el.bookmarksList) {
+    el.bookmarksList.innerHTML = `<p style="font-size: 0.85rem; color: var(--text-muted); text-align: center; padding: 1rem 0;">Loading bookmarks...</p>`;
+  }
+  if (el.bookmarksModal) {
+    el.bookmarksModal.classList.add('active');
+    el.bookmarksModal.setAttribute('aria-hidden', 'false');
+  }
+
+  try {
+    await refreshActiveBookmarksModal();
+  } catch (err) {
+    log(`Error loading bookmarks for "${filename}": ${err.message}`, 'error');
+    showToast(`Failed to load bookmarks: ${err.message}`, 'error');
+  }
+}
+
+function closeBookmarksModal() {
+  activeBookmarksBook = null;
+  if (el.bookmarksModal) {
+    el.bookmarksModal.classList.remove('active');
+    el.bookmarksModal.setAttribute('aria-hidden', 'true');
   }
 }
 
@@ -1835,6 +2168,62 @@ function initEventListeners() {
     });
   }
 
+  // Bookmarks Modal
+  if (el.closeBookmarksModalBtn) {
+    el.closeBookmarksModalBtn.addEventListener('click', closeBookmarksModal);
+  }
+  if (el.dismissBookmarksModalBtn) {
+    el.dismissBookmarksModalBtn.addEventListener('click', closeBookmarksModal);
+  }
+  if (el.bookmarksModal) {
+    el.bookmarksModal.addEventListener('click', (e) => {
+      if (e.target === el.bookmarksModal) closeBookmarksModal();
+    });
+  }
+  if (el.bookmarkCurrentPosBtn) {
+    el.bookmarkCurrentPosBtn.addEventListener('click', async () => {
+      if (!activeBookmarksBook) return;
+      try {
+        await addBookBookmark(activeBookmarksBook.name, activeBookmarksBook.byteOffset || 0);
+        showToast('Bookmarked current reading position', 'success');
+        await refreshActiveBookmarksModal();
+      } catch (err) {
+        log(`Add bookmark failed: ${err.message}`, 'error');
+        showToast(`Add bookmark failed: ${err.message}`, 'error');
+      }
+    });
+  }
+  if (el.jumpToPositionBtn) {
+    el.jumpToPositionBtn.addEventListener('click', async () => {
+      if (!activeBookmarksBook) return;
+      const pct = Math.max(0, Math.min(100, Number(el.bookmarkPositionPctInput?.value) || 0));
+      const targetOffset = Math.floor(((activeBookmarksBook.size || 0) * pct) / 100);
+      try {
+        await setBookReadingOffset(activeBookmarksBook.name, targetOffset);
+        showToast(`Set reading position to ${pct}%`, 'success');
+        await refreshActiveBookmarksModal();
+      } catch (err) {
+        log(`Set reading position failed: ${err.message}`, 'error');
+        showToast(`Failed to set position: ${err.message}`, 'error');
+      }
+    });
+  }
+  if (el.addBookmarkAtPctBtn) {
+    el.addBookmarkAtPctBtn.addEventListener('click', async () => {
+      if (!activeBookmarksBook) return;
+      const pct = Math.max(0, Math.min(100, Number(el.bookmarkPositionPctInput?.value) || 0));
+      const targetOffset = Math.floor(((activeBookmarksBook.size || 0) * pct) / 100);
+      try {
+        await addBookBookmark(activeBookmarksBook.name, targetOffset);
+        showToast(`Added bookmark at ${pct}%`, 'success');
+        await refreshActiveBookmarksModal();
+      } catch (err) {
+        log(`Add bookmark failed: ${err.message}`, 'error');
+        showToast(`Add bookmark failed: ${err.message}`, 'error');
+      }
+    });
+  }
+
   // Keyboard shortcut (Escape to close modals)
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
@@ -1846,6 +2235,9 @@ function initEventListeners() {
       }
       if (el.controlsModal && el.controlsModal.classList.contains('active')) {
         closeControlsModal();
+      }
+      if (el.bookmarksModal && el.bookmarksModal.classList.contains('active')) {
+        closeBookmarksModal();
       }
     }
   });
@@ -1897,6 +2289,12 @@ function initEventListeners() {
   document.addEventListener('delete-book', (e) => {
     if (e.detail) {
       openDeleteModal(e.detail.book || { name: e.detail.name, size: e.detail.size, path: e.detail.path });
+    }
+  });
+
+  document.addEventListener('manage-bookmarks', (e) => {
+    if (e.detail && e.detail.name) {
+      openBookmarksModal(e.detail.name, e.detail.size || 0);
     }
   });
 
@@ -2022,6 +2420,12 @@ if (typeof window !== 'undefined') {
   window.sendSetStatusLed = sendSetStatusLed;
   window.requestDeviceConfig = requestDeviceConfig;
   window.sendSetSleepTimeout = sendSetSleepTimeout;
+  window.queryBookBookmarks = queryBookBookmarks;
+  window.addBookBookmark = addBookBookmark;
+  window.deleteBookBookmark = deleteBookBookmark;
+  window.setBookReadingOffset = setBookReadingOffset;
+  window.openBookmarksModal = openBookmarksModal;
+  window.closeBookmarksModal = closeBookmarksModal;
 }
 
 document.addEventListener('DOMContentLoaded', init);

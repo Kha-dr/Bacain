@@ -212,6 +212,10 @@ class BookLibrary extends HTMLElement {
 
     filtered.forEach(book => {
       const progress = Number(book.progress) || 0;
+      const byteOffset = Number(book.byteOffset) || 0;
+      const bookmarkCount = Number(book.bookmarkCount) || 0;
+      const hasStarted = progress > 0 || byteOffset > 0;
+      const progressLabel = progress > 0 ? `${progress}% read` : '< 1% read';
       const item = document.createElement('div');
       item.className = 'book-item';
 
@@ -225,22 +229,47 @@ class BookLibrary extends HTMLElement {
           </div>
           <div class="book-meta">
             <div class="book-name book-title" title="${escapeHtml(book.name)}">${escapeHtml(book.name)}</div>
-            <div class="book-details" style="display:flex;align-items:center;gap:0.75rem;margin-top:0.2rem;">
-              <span class="book-size">${formatBytes(book.size)}</span>${progress > 0 ? `
+            <div class="book-details" style="display:flex;align-items:center;gap:0.75rem;margin-top:0.2rem;flex-wrap:wrap;">
+              <span class="book-size">${formatBytes(book.size)}</span>${hasStarted ? `
               <span style="color:var(--text-muted);font-size:0.75rem;">•</span>
-              <span class="book-progress" style="font-size:0.78rem;color:var(--accent-color);font-family:var(--font-mono);">${progress}% read</span>` : ''}
+              <span class="book-progress" style="font-size:0.78rem;color:var(--accent-color);font-family:var(--font-mono);">${progressLabel}</span>` : ''}${bookmarkCount > 0 ? `
+              <span style="color:var(--text-muted);font-size:0.75rem;">•</span>
+              <span class="book-bookmarks-count" style="font-size:0.78rem;color:var(--text-secondary);font-family:var(--font-mono);">${bookmarkCount} ${bookmarkCount === 1 ? 'bookmark' : 'bookmarks'}</span>` : ''}
             </div>
           </div>
         </div>
-        <button class="btn-delete-book" title="Delete ${escapeHtml(book.name)}" aria-label="Delete ${escapeHtml(book.name)}" data-book-name="${escapeHtml(book.name)}">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="3 6 5 6 21 6"></polyline>
-            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-            <line x1="10" y1="11" x2="10" y2="17"></line>
-            <line x1="14" y1="11" x2="14" y2="17"></line>
-          </svg>
-        </button>
+        <div class="book-actions" style="display:flex;align-items:center;gap:0.35rem;flex-shrink:0;">
+          <button class="btn-bookmarks-book btn-icon" title="Bookmarks &amp; Position for ${escapeHtml(book.name)}" aria-label="Bookmarks &amp; Position for ${escapeHtml(book.name)}" data-book-name="${escapeHtml(book.name)}" style="width:32px;height:32px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;">
+              <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+            </svg>
+          </button>
+          <button class="btn-delete-book" title="Delete ${escapeHtml(book.name)}" aria-label="Delete ${escapeHtml(book.name)}" data-book-name="${escapeHtml(book.name)}">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="3 6 5 6 21 6"></polyline>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+              <line x1="10" y1="11" x2="10" y2="17"></line>
+              <line x1="14" y1="11" x2="14" y2="17"></line>
+            </svg>
+          </button>
+        </div>
       `;
+
+      const bookmarksBtn = item.querySelector('.btn-bookmarks-book');
+      if (bookmarksBtn) {
+        bookmarksBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.dispatchEvent(new CustomEvent('manage-bookmarks', {
+            detail: {
+              book,
+              name: book.name,
+              size: book.size
+            },
+            bubbles: true,
+            composed: true
+          }));
+        });
+      }
 
       const deleteBtn = item.querySelector('.btn-delete-book');
       if (deleteBtn) {
