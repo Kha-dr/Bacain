@@ -52,8 +52,11 @@ class EspWebFlasher extends HTMLElement {
     this.chipDesc = null;
     this.macAddress = null;
 
+    const cfg = (typeof window !== 'undefined' && (window.CONFIG || window.BACA_CONFIG)) || null;
+    const defaultRepoSlug = cfg?.repoSlug || (cfg?.repo ? cfg.repo.replace(/^https?:\/\/github\.com\//i, '').replace(/\/+$/, '') : 'khad1r/BacaIn');
+
     // Settings
-    this.selectedBaudrate = 460800; // Standard recommended baudrate for ESP32-S3
+    this.selectedBaudrate = cfg?.flasher?.baud || 460800;
     this.eraseBeforeFlash = false;
     this.autoScroll = true;
 
@@ -61,7 +64,7 @@ class EspWebFlasher extends HTMLElement {
     this.fileSlots = [
       {
         id: 'slot_factory',
-        offset: '0x0',
+        offset: cfg?.flasher?.offset || '0x0',
         fileData: null,
         fileName: null,
         fileSize: 0
@@ -69,7 +72,7 @@ class EspWebFlasher extends HTMLElement {
     ];
 
     // GitHub Release options
-    this.releaseRepo = 'khad1r/Mini-E-Reader';
+    this.releaseRepo = defaultRepoSlug;
     this.releaseTag = '';
     this.releasesList = [];
     this.selectedRelease = null;
@@ -660,24 +663,16 @@ class EspWebFlasher extends HTMLElement {
   // GitHub Release Firmware Operations
   // ==========================================================================
   async fetchReleasesList(repo = this.releaseRepo) {
-    const targetRepo = (repo && repo.trim()) || 'khad1r/Mini-E-Reader';
+    const cfg = (typeof window !== 'undefined' && (window.CONFIG || window.BACA_CONFIG)) || null;
+    const fallbackRepo = cfg?.repoSlug || (cfg?.repo ? cfg.repo.replace(/^https?:\/\/github\.com\//i, '').replace(/\/+$/, '') : 'khad1r/BacaIn');
+    const targetRepo = (repo && repo.trim()) || fallbackRepo;
     this.isFetchingReleasesList = true;
     this.updateUI();
 
     try {
       this.appendTerminal(`Fetching releases from github.com/${targetRepo}\n`, 'info');
 
-      let res = await fetch(`https://api.github.com/repos/${targetRepo}/releases?per_page=30`);
-
-      if (!res.ok && res.status === 404 && targetRepo === 'khad1r/Mini-E-Reader') {
-        const altRepo = 'khad1r/BacaIn';
-        this.appendTerminal(`Trying repository github.com/${altRepo}\n`, 'info');
-        const altRes = await fetch(`https://api.github.com/repos/${altRepo}/releases?per_page=30`);
-        if (altRes.ok) {
-          res = altRes;
-          this.releaseRepo = altRepo;
-        }
-      }
+      const res = await fetch(`https://api.github.com/repos/${targetRepo}/releases?per_page=30`);
 
       if (!res.ok) {
         if (res.status === 403) {
@@ -784,7 +779,9 @@ class EspWebFlasher extends HTMLElement {
   }
 
   async fetchLatestFirmwareFromRelease(repo = this.releaseRepo, tag = null) {
-    const targetRepo = (repo && repo.trim()) || 'khad1r/Mini-E-Reader';
+    const cfg = (typeof window !== 'undefined' && (window.CONFIG || window.BACA_CONFIG)) || null;
+    const fallbackRepo = cfg?.repoSlug || (cfg?.repo ? cfg.repo.replace(/^https?:\/\/github\.com\//i, '').replace(/\/+$/, '') : 'khad1r/BacaIn');
+    const targetRepo = (repo && repo.trim()) || fallbackRepo;
     const targetTag = (typeof tag === 'string' && tag.trim().length > 0) ? tag.trim() : null;
 
     this.isFetchingBinary = true;

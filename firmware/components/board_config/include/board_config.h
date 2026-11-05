@@ -13,7 +13,11 @@
 #include "esp_adc/adc_oneshot.h"
 #endif
 
-#if defined(CONFIG_BOARD_PROFILE_WAVESHARE_154) || !defined(CONFIG_BOARD_PROFILE_CUSTOM)
+// Map explicit compiler/CMake overrides (-DCONFIG_BOARD_*) before loading board_def.h
+// when CONFIG_BOARD_PROFILE_CUSTOM is active or when overridden via CLI
+#if defined(BOARD_DEF_HEADER)
+#include BOARD_DEF_HEADER
+#elif !defined(CONFIG_BOARD_PROFILE_CUSTOM)
 #if __has_include("../../boards/waveshare_154/board_def.h")
 #include "../../boards/waveshare_154/board_def.h"
 #elif __has_include("../../../boards/waveshare_154/board_def.h")

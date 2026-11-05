@@ -78,10 +78,16 @@
   </style>
   <script src="config.js" defer></script>
   <script>
-    const savedTheme = localStorage.getItem('ereader_pwa_theme');
+    const savedTheme = localStorage.getItem('bacain_theme') || localStorage.getItem('ereader_pwa_theme');
     if (savedTheme) {
       document.documentElement.setAttribute('data-theme', savedTheme);
     }
+    window.addEventListener('DOMContentLoaded', () => {
+      const githubBtn = document.getElementById('githubBtn');
+      if (githubBtn && window.CONFIG?.repo) {
+        githubBtn.href = window.CONFIG.repo;
+      }
+    });
   </script>
 </head>
 
