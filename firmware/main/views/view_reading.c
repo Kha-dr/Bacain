@@ -58,20 +58,17 @@ void view_reading_render_page_turn(void) {
 
 reader_view_t view_reading_on_wake(wakeup_reason_t wakeup, bool book_opened) {
     if (book_opened) {
-        if (wakeup == WAKEUP_REASON_BOOT_BUTTON) {
-            text_pager_prev_page();
-            book_library_update_offset(text_pager_get_current_offset());
-        } else if (wakeup == WAKEUP_REASON_PWR_BUTTON) {
-            text_pager_next_page();
-            book_library_update_offset(text_pager_get_current_offset());
-        }
         s_redraw_counter = 0;
-        view_reading_render(false);
+        if (wakeup != WAKEUP_REASON_BOOT_BUTTON && wakeup != WAKEUP_REASON_PWR_BUTTON) {
+            view_reading_render(false);
+        }
         return VIEW_READING;
     }
 
     view_menu_set_index(0);
-    view_menu_render(false);
+    if (wakeup != WAKEUP_REASON_BOOT_BUTTON && wakeup != WAKEUP_REASON_PWR_BUTTON) {
+        view_menu_render(false);
+    }
     return VIEW_MENU;
 }
 
@@ -90,6 +87,8 @@ reader_view_t view_reading_handle_event(button_event_t evt) {
             if (text_pager_prev_page() == ESP_OK) {
                 book_library_update_offset(text_pager_get_current_offset());
                 view_reading_render_page_turn();
+            } else {
+                view_reading_render(false);
             }
         } else if (evt.type == BTN_DOUBLE_CLICK) {
             size_t off = text_pager_get_current_offset();
@@ -105,6 +104,8 @@ reader_view_t view_reading_handle_event(button_event_t evt) {
             if (text_pager_next_page() == ESP_OK) {
                 book_library_update_offset(text_pager_get_current_offset());
                 view_reading_render_page_turn();
+            } else {
+                view_reading_render(false);
             }
         } else if (evt.type == BTN_DOUBLE_CLICK) {
             view_bookmarks_set_index(0);

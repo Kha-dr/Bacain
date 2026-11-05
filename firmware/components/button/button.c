@@ -15,12 +15,18 @@
 #define BUTTON_SAMPLE_INTERVAL_MS 10
 #define BUTTON_SAMPLE_INTERVAL_US (BUTTON_SAMPLE_INTERVAL_MS * 1000)
 #define CHORD_REBOOT_TICKS        (2000 / BUTTON_SAMPLE_INTERVAL_MS)
+#define WAKEUP_BOOT_CREDIT_MS     120
+#define WAKEUP_BOOT_CREDIT_TICKS  (WAKEUP_BOOT_CREDIT_MS / BUTTON_SAMPLE_INTERVAL_MS)
+#define WAKEUP_MBTN_CREDIT_TICKS  (WAKEUP_BOOT_CREDIT_MS / TICKS_INTERVAL)
 
 static Button s_btn_boot;
 static Button s_btn_pwr;
 static esp_timer_handle_t s_timer = NULL;
 static QueueHandle_t s_event_queue = NULL;
 static bool s_btn_inverted = false;
+static bool s_has_wake_seed = false;
+static btn_id_t s_wake_seed_btn = BTN_ID_BOOT;
+static uint16_t s_chord_ticks = 0;
 
 static uint8_t read_button_gpio(uint8_t button_id) {
     if (button_id == BTN_ID_UP || button_id == BTN_ID_BOOT) {
@@ -52,9 +58,66 @@ static void on_pwr_click(Button *b) { send_event(BTN_ID_PWR, BTN_CLICK); }
 static void on_pwr_double_click(Button *b) { send_event(BTN_ID_PWR, BTN_DOUBLE_CLICK); }
 static void on_pwr_long_press(Button *b) { send_event(BTN_ID_PWR, BTN_LONG_PRESS); }
 
-static void button_timer_cb(void *arg) {
-    static uint16_t s_chord_ticks = 0;
+static void apply_wake_seed(void) {
+    if (!s_has_wake_seed) return;
+    s_has_wake_seed = false;
 
+    Button *target_btn = (s_wake_seed_btn == BTN_ID_BOOT) ? &s_btn_boot : &s_btn_pwr;
+    int target_gpio = (s_wake_seed_btn == BTN_ID_BOOT) ? BOOT_BUTTON_GPIO : PWR_BUTTON_GPIO;
+    Button *other_btn = (s_wake_seed_btn == BTN_ID_BOOT) ? &s_btn_pwr : &s_btn_boot;
+    int other_gpio = (s_wake_seed_btn == BTN_ID_BOOT) ? PWR_BUTTON_GPIO : BOOT_BUTTON_GPIO;
+
+    int64_t boot_ms = esp_timer_get_time() / 1000;
+    if (boot_ms < WAKEUP_BOOT_CREDIT_MS) {
+        boot_ms = WAKEUP_BOOT_CREDIT_MS;
+    }
+    uint16_t elapsed_ticks = (uint16_t)(boot_ms / TICKS_INTERVAL);
+    if (elapsed_ticks >= LONG_TICKS) {
+        elapsed_ticks = LONG_TICKS - 1;
+    }
+
+    if (gpio_get_level(target_gpio) == 0) {
+        target_btn->button_level = 0;
+        target_btn->debounce_cnt = 0;
+        target_btn->ticks = elapsed_ticks;
+        target_btn->repeat = 1;
+        target_btn->event = (uint8_t)MBTN_PRESS_DOWN;
+        target_btn->state = BTN_STATE_PRESS;
+
+        if (gpio_get_level(other_gpio) == 0) {
+            other_btn->button_level = 0;
+            other_btn->debounce_cnt = 0;
+            other_btn->ticks = elapsed_ticks;
+            other_btn->repeat = 1;
+            other_btn->event = (uint8_t)MBTN_PRESS_DOWN;
+            other_btn->state = BTN_STATE_PRESS;
+            uint16_t chord_elapsed = (uint16_t)(boot_ms / BUTTON_SAMPLE_INTERVAL_MS);
+            if (chord_elapsed < WAKEUP_BOOT_CREDIT_TICKS) {
+                chord_elapsed = WAKEUP_BOOT_CREDIT_TICKS;
+            }
+            if (chord_elapsed < CHORD_REBOOT_TICKS) {
+                s_chord_ticks = chord_elapsed;
+            }
+        }
+    } else {
+        target_btn->button_level = 1;
+        target_btn->debounce_cnt = 0;
+        target_btn->ticks = 0;
+        target_btn->repeat = 1;
+        target_btn->event = (uint8_t)MBTN_PRESS_UP;
+        target_btn->state = BTN_STATE_RELEASE;
+    }
+}
+
+void button_seed_wakeup(btn_id_t wake_btn) {
+    s_has_wake_seed = true;
+    s_wake_seed_btn = wake_btn;
+    if (s_timer != NULL) {
+        apply_wake_seed();
+    }
+}
+
+static void button_timer_cb(void *arg) {
     if (gpio_get_level(BOOT_BUTTON_GPIO) == 0 && gpio_get_level(PWR_BUTTON_GPIO) == 0) {
         s_chord_ticks++;
         // Reset both button state machines so neither fires single clicks or long press
@@ -105,6 +168,9 @@ esp_err_t button_init(QueueHandle_t *out_queue) {
     button_attach(&s_btn_pwr, MBTN_DOUBLE_CLICK, on_pwr_double_click);
     button_attach(&s_btn_pwr, MBTN_LONG_PRESS_START, on_pwr_long_press);
     button_start(&s_btn_pwr);
+
+    s_chord_ticks = 0;
+    apply_wake_seed();
 
     esp_timer_create_args_t timer_args = {
         .callback = button_timer_cb,

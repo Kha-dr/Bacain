@@ -156,15 +156,12 @@ reader_view_t view_library_on_wake(wakeup_reason_t wakeup) {
         if (s_rtc_book_index < 0 || s_rtc_book_index >= count) {
             s_rtc_book_index = 0;
         }
-        if (wakeup == WAKEUP_REASON_BOOT_BUTTON) {
-            s_rtc_book_index = (s_rtc_book_index - 1 + count) % count;
-        } else if (wakeup == WAKEUP_REASON_PWR_BUTTON) {
-            s_rtc_book_index = (s_rtc_book_index + 1) % count;
-        }
     } else {
         s_rtc_book_index = 0;
     }
-    view_library_render(false);
+    if (wakeup != WAKEUP_REASON_BOOT_BUTTON && wakeup != WAKEUP_REASON_PWR_BUTTON) {
+        view_library_render(false);
+    }
     return VIEW_BOOK_LIST;
 }
 

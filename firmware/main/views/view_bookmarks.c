@@ -106,15 +106,12 @@ reader_view_t view_bookmarks_on_wake(wakeup_reason_t wakeup) {
         if (s_rtc_bookmark_index < 0 || s_rtc_bookmark_index >= count) {
             s_rtc_bookmark_index = 0;
         }
-        if (wakeup == WAKEUP_REASON_BOOT_BUTTON) {
-            s_rtc_bookmark_index = (s_rtc_bookmark_index - 1 + count) % count;
-        } else if (wakeup == WAKEUP_REASON_PWR_BUTTON) {
-            s_rtc_bookmark_index = (s_rtc_bookmark_index + 1) % count;
-        }
     } else {
         s_rtc_bookmark_index = 0;
     }
-    view_bookmarks_render(false);
+    if (wakeup != WAKEUP_REASON_BOOT_BUTTON && wakeup != WAKEUP_REASON_PWR_BUTTON) {
+        view_bookmarks_render(false);
+    }
     return VIEW_BOOKMARKS;
 }
 

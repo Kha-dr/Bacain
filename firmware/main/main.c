@@ -141,7 +141,8 @@ void app_main(void) {
 
     ESP_LOGI(TAG, "Starting BacaIn firmware...");
 
-    wakeup_reason_t wakeup = power_mgr_get_wakeup_cause();
+    wakeup_reason_t raw_wakeup = power_mgr_get_wakeup_cause();
+    wakeup_reason_t wakeup = raw_wakeup;
     bool is_cold_boot = (wakeup == WAKEUP_REASON_COLD_BOOT || esp_reset_reason() != ESP_RST_DEEPSLEEP);
     app_settings_load(is_cold_boot);
 
@@ -179,6 +180,13 @@ void app_main(void) {
     }
 
     ESP_ERROR_CHECK(reader_ui_init(is_cold_boot));
+    if (!is_cold_boot) {
+        if (raw_wakeup == WAKEUP_REASON_BOOT_BUTTON) {
+            button_seed_wakeup(BTN_ID_BOOT);
+        } else if (raw_wakeup == WAKEUP_REASON_PWR_BUTTON) {
+            button_seed_wakeup(BTN_ID_PWR);
+        }
+    }
     ESP_ERROR_CHECK(button_init(&s_btn_queue));
 
     // 4. Initialize Reader Core
@@ -236,16 +244,7 @@ void app_main(void) {
     } else {
         s_current_view = dispatch_wake_view(s_rtc_last_view, wakeup, opened);
         s_rtc_last_view = s_current_view;
-        ESP_LOGI(TAG, "Display render initiated successfully.");
-    }
-
-    if (wakeup == WAKEUP_REASON_BOOT_BUTTON || wakeup == WAKEUP_REASON_PWR_BUTTON) {
-        while (gpio_get_level((gpio_num_t)BOARD_BTN_UP_PIN) == 0 || gpio_get_level((gpio_num_t)BOARD_BTN_DOWN_PIN) == 0) {
-            vTaskDelay(pdMS_TO_TICKS(10));
-        }
-        if (s_btn_queue) {
-            xQueueReset(s_btn_queue);
-        }
+        ESP_LOGI(TAG, "Wake view %d restored.", s_current_view);
     }
 
     update_activity();
@@ -280,6 +279,7 @@ void app_main(void) {
             update_activity();
             ESP_LOGI(TAG, "Btn evt: button=%d, type=%d, view=%d", evt.button, evt.type, s_current_view);
             s_current_view = dispatch_view_event(s_current_view, evt);
+            s_rtc_last_view = s_current_view;
             if (evt.type == BTN_EVENT_CUSTOM_REFRESH) {
                 continue;
             }
@@ -287,6 +287,7 @@ void app_main(void) {
 
         if (s_current_view == VIEW_BLE_SYNC) {
             s_current_view = view_ble_sync_check_timeout(&s_last_activity_us);
+            s_rtc_last_view = s_current_view;
         } else {
             int64_t elapsed_sec = (esp_timer_get_time() - s_last_activity_us) / 1000000LL;
             uint16_t timeout_sec = ble_sync_get_sleep_timeout();

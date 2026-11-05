@@ -18,6 +18,8 @@ typedef enum {
     BTN_ID_PWR  = BTN_ID_DOWN,
 } btn_id_t;
 
+typedef btn_id_t button_id_t;
+
 typedef enum {
     BTN_CLICK = 0,
     BTN_DOUBLE_CLICK,
@@ -38,6 +40,7 @@ void button_deinit(void);
 
 void button_set_inverted(bool inverted);
 bool button_get_inverted(void);
+void button_seed_wakeup(btn_id_t wake_btn);
 
 #ifdef __cplusplus
 }

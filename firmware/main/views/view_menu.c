@@ -105,12 +105,9 @@ reader_view_t view_menu_on_wake(wakeup_reason_t wakeup) {
     if (s_rtc_menu_index < 0 || s_rtc_menu_index >= MENU_ITEM_COUNT) {
         s_rtc_menu_index = 0;
     }
-    if (wakeup == WAKEUP_REASON_BOOT_BUTTON) {
-        s_rtc_menu_index = (s_rtc_menu_index - 1 + MENU_ITEM_COUNT) % MENU_ITEM_COUNT;
-    } else if (wakeup == WAKEUP_REASON_PWR_BUTTON) {
-        s_rtc_menu_index = (s_rtc_menu_index + 1) % MENU_ITEM_COUNT;
+    if (wakeup != WAKEUP_REASON_BOOT_BUTTON && wakeup != WAKEUP_REASON_PWR_BUTTON) {
+        view_menu_render(false);
     }
-    view_menu_render(false);
     return VIEW_MENU;
 }
 
