@@ -17,7 +17,9 @@
 // when CONFIG_BOARD_PROFILE_CUSTOM is active or when overridden via CLI
 #if defined(BOARD_DEF_HEADER)
 #include BOARD_DEF_HEADER
-#elif !defined(CONFIG_BOARD_PROFILE_CUSTOM)
+#elif defined(BOARD_PROFILE_HAS_DEF_H)
+#include "board_def.h"
+#elif !defined(CONFIG_BOARD_PROFILE_CUSTOM) && !defined(BOARD_PROFILE_CUSTOM)
 #if __has_include("../../boards/waveshare_154/board_def.h")
 #include "../../boards/waveshare_154/board_def.h"
 #elif __has_include("../../../boards/waveshare_154/board_def.h")
