@@ -11,10 +11,10 @@
 
 #include "esp_log.h"
 #include "esp_err.h"
-#include "cJSON.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "sdcard.h"
+#include "text_pager.h"
 
 #ifndef S_ISDIR
 #define S_ISDIR(m) (((m) & S_IFMT) == S_IFDIR)
@@ -22,6 +22,21 @@
 #ifndef S_ISREG
 #define S_ISREG(m) (((m) & S_IFMT) == S_IFREG)
 #endif
+
+#define BOOK_STATE_MAGIC  0x424D4B31U
+#define ACTIVE_BOOK_MAGIC 0x41435431U
+
+typedef struct __attribute__((packed)) {
+    uint32_t magic;
+    uint32_t byte_offset;
+    uint32_t bookmark_count;
+    uint32_t bookmarks[BOOK_MAX_BOOKMARKS];
+} book_sidecar_t;
+
+typedef struct __attribute__((packed)) {
+    uint32_t magic;
+    char active_book_path[BOOK_PATH_MAX_LEN];
+} active_book_record_t;
 
 static const char *TAG = "book_library";
 
@@ -33,7 +48,7 @@ static bool              s_initialized = false;
 static storage_target_t  s_storage_target = STORAGE_TARGET_FLASH;
 static char              s_books_dir[64] = "/spiflash/books";
 static char              s_state_dir[64] = "/spiflash/.reader";
-static char              s_state_file[80] = "/spiflash/.reader/state.json";
+static char              s_active_file[80] = "/spiflash/.reader/active.bin";
 static char              s_current_dir[BOOK_PATH_MAX_LEN] = "/spiflash/books";
 static char              s_rel_path[BOOK_PATH_MAX_LEN] = "";
 static bool              s_state_dirty = false;
@@ -91,7 +106,7 @@ static void update_target_paths(storage_target_t target) {
     const char *mount_pt = (target == STORAGE_TARGET_FLASH) ? FLASH_MOUNT_POINT : SDCARD_MOUNT_POINT;
     snprintf(s_books_dir, sizeof(s_books_dir), "%.32s/books", mount_pt);
     snprintf(s_state_dir, sizeof(s_state_dir), "%.32s/.reader", mount_pt);
-    snprintf(s_state_file, sizeof(s_state_file), "%.32s/.reader/state.json", mount_pt);
+    snprintf(s_active_file, sizeof(s_active_file), "%.32s/.reader/active.bin", mount_pt);
     strncpy(s_current_dir, s_books_dir, sizeof(s_current_dir) - 1);
     s_current_dir[sizeof(s_current_dir) - 1] = '\0';
     update_current_rel_path();
@@ -114,6 +129,200 @@ static bool check_storage_mounted(storage_target_t target) {
         }
         return true;
     }
+}
+
+static void resolve_book_full_path(const char *path_or_filename, char *full_path, size_t full_size) {
+    if (!path_or_filename || !full_path || full_size == 0) {
+        if (full_path && full_size > 0) full_path[0] = '\0';
+        return;
+    }
+
+    if (strncmp(path_or_filename, "/spiflash/", 10) == 0 ||
+        strncmp(path_or_filename, "/sdcard/", 8) == 0) {
+        strncpy(full_path, path_or_filename, full_size - 1);
+        full_path[full_size - 1] = '\0';
+        return;
+    }
+
+    const char *rel = path_or_filename;
+    while (*rel == '/') {
+        rel++;
+    }
+    snprintf(full_path, full_size, "%s/%s", s_books_dir, rel);
+}
+
+static void get_book_sidecar_path(const char *full_book_path, char *out_sidecar_path, size_t out_size) {
+    if (!full_book_path || !out_sidecar_path || out_size == 0) {
+        if (out_sidecar_path && out_size > 0) out_sidecar_path[0] = '\0';
+        return;
+    }
+
+    const char *rel = full_book_path;
+    size_t base_len = strlen(s_books_dir);
+    if (strncmp(full_book_path, s_books_dir, base_len) == 0) {
+        rel = full_book_path + base_len;
+    } else if (strncmp(full_book_path, "/spiflash/books/", 16) == 0) {
+        rel = full_book_path + 16;
+    } else if (strncmp(full_book_path, "/sdcard/books/", 14) == 0) {
+        rel = full_book_path + 14;
+    } else if (strncmp(full_book_path, "/spiflash/", 10) == 0) {
+        rel = full_book_path + 10;
+    } else if (strncmp(full_book_path, "/sdcard/", 8) == 0) {
+        rel = full_book_path + 8;
+    }
+
+    while (*rel == '/') {
+        rel++;
+    }
+
+    char sanitized[112];
+    size_t len = strlen(rel);
+    if (len >= 4 && strcasecmp(rel + len - 4, ".txt") == 0) {
+        len -= 4;
+    }
+    if (len >= sizeof(sanitized)) {
+        len = sizeof(sanitized) - 1;
+    }
+
+    for (size_t i = 0; i < len; i++) {
+        char c = rel[i];
+        if (c == '/' || c == '\\' || c == ':') {
+            sanitized[i] = '_';
+        } else {
+            sanitized[i] = c;
+        }
+    }
+    sanitized[len] = '\0';
+
+    snprintf(out_sidecar_path, out_size, "%s/%s.bmk", s_state_dir, sanitized);
+}
+
+static esp_err_t write_atomic_file(const char *target_path, const void *data, size_t size) {
+    char tmp_path[BOOK_PATH_MAX_LEN + 16];
+    int ret = snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", target_path);
+    if (ret < 0 || ret >= (int)sizeof(tmp_path)) {
+        return ESP_FAIL;
+    }
+
+    FILE *fp = fopen(tmp_path, "wb");
+    if (!fp) {
+        ESP_LOGE(TAG, "Failed to open %s for writing: errno %d", tmp_path, errno);
+        return ESP_FAIL;
+    }
+
+    size_t written = fwrite(data, 1, size, fp);
+    fflush(fp);
+    fsync(fileno(fp));
+    fclose(fp);
+
+    if (written != size) {
+        ESP_LOGE(TAG, "Partial write to %s (%u / %u bytes)", tmp_path, (unsigned int)written, (unsigned int)size);
+        unlink(tmp_path);
+        return ESP_FAIL;
+    }
+
+    if (rename(tmp_path, target_path) != 0) {
+        unlink(target_path);
+        if (rename(tmp_path, target_path) != 0) {
+            ESP_LOGE(TAG, "Failed to rename %s to %s: errno %d", tmp_path, target_path, errno);
+            unlink(tmp_path);
+            return ESP_FAIL;
+        }
+    }
+
+    return ESP_OK;
+}
+
+static esp_err_t load_book_sidecar(const char *full_book_path, size_t *out_offset, size_t *out_bookmarks, size_t *out_bm_count) {
+    if (out_offset) *out_offset = 0;
+    if (out_bm_count) *out_bm_count = 0;
+
+    if (!full_book_path || full_book_path[0] == '\0') {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    char sidecar_path[BOOK_PATH_MAX_LEN];
+    get_book_sidecar_path(full_book_path, sidecar_path, sizeof(sidecar_path));
+
+    FILE *fp = fopen(sidecar_path, "rb");
+    if (!fp) {
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    book_sidecar_t sc = {0};
+    size_t r = fread(&sc, 1, sizeof(sc), fp);
+    fclose(fp);
+
+    if (r != sizeof(sc) || sc.magic != BOOK_STATE_MAGIC) {
+        return ESP_FAIL;
+    }
+
+    size_t max_bytes = SIZE_MAX;
+    struct stat st;
+    if (stat(full_book_path, &st) == 0) {
+        max_bytes = (size_t)st.st_size;
+    }
+
+    size_t offset = (size_t)sc.byte_offset;
+    if (offset > max_bytes) {
+        offset = max_bytes;
+    }
+    if (out_offset) {
+        *out_offset = offset;
+    }
+
+    size_t count = (sc.bookmark_count > BOOK_MAX_BOOKMARKS) ? BOOK_MAX_BOOKMARKS : (size_t)sc.bookmark_count;
+    size_t valid_count = 0;
+    for (size_t i = 0; i < count; i++) {
+        size_t bm = (size_t)sc.bookmarks[i];
+        if (bm <= max_bytes) {
+            if (out_bookmarks) {
+                out_bookmarks[valid_count] = bm;
+            }
+            valid_count++;
+        }
+    }
+    if (out_bm_count) {
+        *out_bm_count = valid_count;
+    }
+
+    return ESP_OK;
+}
+
+static esp_err_t save_book_sidecar(const char *full_book_path, size_t offset, const size_t *bookmarks, size_t bm_count) {
+    if (!full_book_path || full_book_path[0] == '\0') {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    ensure_dir_exists(s_state_dir);
+
+    char sidecar_path[BOOK_PATH_MAX_LEN];
+    get_book_sidecar_path(full_book_path, sidecar_path, sizeof(sidecar_path));
+
+    book_sidecar_t sc = {0};
+    sc.magic = BOOK_STATE_MAGIC;
+    sc.byte_offset = (uint32_t)offset;
+    if (bm_count > BOOK_MAX_BOOKMARKS) {
+        bm_count = BOOK_MAX_BOOKMARKS;
+    }
+    sc.bookmark_count = (uint32_t)bm_count;
+    for (size_t i = 0; i < bm_count && bookmarks != NULL; i++) {
+        sc.bookmarks[i] = (uint32_t)bookmarks[i];
+    }
+
+    return write_atomic_file(sidecar_path, &sc, sizeof(sc));
+}
+
+static esp_err_t save_active_book_record(const char *active_book_path) {
+    ensure_dir_exists(s_state_dir);
+
+    active_book_record_t rec = {0};
+    rec.magic = ACTIVE_BOOK_MAGIC;
+    if (active_book_path) {
+        strncpy(rec.active_book_path, active_book_path, sizeof(rec.active_book_path) - 1);
+    }
+
+    return write_atomic_file(s_active_file, &rec, sizeof(rec));
 }
 
 esp_err_t book_library_init(void) {
@@ -529,6 +738,83 @@ const book_info_t *book_library_find_book(const char *filename_or_path) {
     return found;
 }
 
+static void migrate_legacy_state_json(void) {
+    char legacy_path[96];
+    snprintf(legacy_path, sizeof(legacy_path), "%.63s/state.json", s_state_dir);
+    FILE *fp = fopen(legacy_path, "rb");
+    if (!fp) {
+        return;
+    }
+
+    char buf[768];
+    size_t n = fread(buf, 1, sizeof(buf) - 1, fp);
+    fclose(fp);
+    buf[n] = '\0';
+
+    char active_path[BOOK_PATH_MAX_LEN] = {0};
+    const char *p_key = strstr(buf, "\"active_book_path\"");
+    if (p_key) {
+        const char *colon = strchr(p_key + 18, ':');
+        if (colon) {
+            const char *q1 = strchr(colon + 1, '"');
+            if (q1) {
+                q1++;
+                const char *q2 = strchr(q1, '"');
+                if (q2 && (size_t)(q2 - q1) < sizeof(active_path)) {
+                    memcpy(active_path, q1, (size_t)(q2 - q1));
+                    active_path[q2 - q1] = '\0';
+                }
+            }
+        }
+    }
+
+    if (active_path[0] == '\0') {
+        unlink(legacy_path);
+        return;
+    }
+
+    size_t byte_offset = 0;
+    const char *o_key = strstr(buf, "\"byte_offset\"");
+    if (o_key) {
+        const char *colon = strchr(o_key + 13, ':');
+        if (colon) {
+            byte_offset = (size_t)strtoul(colon + 1, NULL, 10);
+        }
+    }
+
+    size_t bookmarks[BOOK_MAX_BOOKMARKS] = {0};
+    size_t bm_count = 0;
+    const char *b_key = strstr(buf, "\"bookmarks\"");
+    if (b_key) {
+        const char *br_open = strchr(b_key + 11, '[');
+        const char *br_close = br_open ? strchr(br_open + 1, ']') : NULL;
+        if (br_open && br_close) {
+            const char *cur = br_open + 1;
+            while (cur < br_close && bm_count < BOOK_MAX_BOOKMARKS) {
+                while (cur < br_close && (*cur == ' ' || *cur == ',' || *cur == '\n' || *cur == '\r' || *cur == '\t')) {
+                    cur++;
+                }
+                if (cur >= br_close || *cur < '0' || *cur > '9') {
+                    break;
+                }
+                char *endp = NULL;
+                unsigned long val = strtoul(cur, &endp, 10);
+                if (endp == cur) {
+                    break;
+                }
+                bookmarks[bm_count++] = (size_t)val;
+                cur = endp;
+            }
+        }
+    }
+
+    save_book_sidecar(active_path, byte_offset, bookmarks, bm_count);
+    save_active_book_record(active_path);
+    unlink(legacy_path);
+    ESP_LOGI(TAG, "Migrated legacy state.json for '%s' (offset=%u, bm=%u)",
+             active_path, (unsigned)byte_offset, (unsigned)bm_count);
+}
+
 esp_err_t book_library_load_state(reading_state_t *state) {
     if (s_mutex == NULL) {
         return ESP_ERR_INVALID_STATE;
@@ -551,104 +837,30 @@ esp_err_t book_library_load_state(reading_state_t *state) {
         return ESP_ERR_INVALID_STATE;
     }
 
-    FILE *fp = fopen(s_state_file, "r");
-    if (!fp) {
-        ESP_LOGI(TAG, "State file not found (%s), initializing defaults", s_state_file);
-        memset(&s_reading_state, 0, sizeof(s_reading_state));
-        for (size_t i = 0; i < s_book_count; i++) {
-            if (s_books[i].type == LIBRARY_ENTRY_FILE) {
-                strncpy(s_reading_state.active_book_path, s_books[i].path, sizeof(s_reading_state.active_book_path) - 1);
-                s_reading_state.total_bytes = s_books[i].size;
-                break;
-            }
-        }
-        if (state) {
-            *state = s_reading_state;
-        }
-        s_state_dirty = false;
-        s_state_loaded = true;
-        xSemaphoreGive(s_mutex);
-        return ESP_OK;
-    }
-
-    fseek(fp, 0, SEEK_END);
-    long fsize = ftell(fp);
-    fseek(fp, 0, SEEK_SET);
-
-    if (fsize <= 0 || fsize > 16384) {
-        fclose(fp);
-        ESP_LOGW(TAG, "State file empty or abnormally large (%ld bytes)", fsize);
-        if (state) {
-            *state = s_reading_state;
-        }
-        xSemaphoreGive(s_mutex);
-        return ESP_FAIL;
-    }
-
-    char *json_buf = (char *)malloc(fsize + 1);
-    if (!json_buf) {
-        fclose(fp);
-        xSemaphoreGive(s_mutex);
-        return ESP_ERR_NO_MEM;
-    }
-
-    size_t read_bytes = fread(json_buf, 1, fsize, fp);
-    fclose(fp);
-    json_buf[read_bytes] = '\0';
-
-    cJSON *root = cJSON_Parse(json_buf);
-    free(json_buf);
-
-    if (!root) {
-        ESP_LOGE(TAG, "Failed to parse state JSON");
-        if (state) {
-            *state = s_reading_state;
-        }
-        xSemaphoreGive(s_mutex);
-        return ESP_FAIL;
-    }
-
     memset(&s_reading_state, 0, sizeof(s_reading_state));
 
-    cJSON *item = cJSON_GetObjectItem(root, "active_book_path");
-    if (cJSON_IsString(item) && item->valuestring) {
-        strncpy(s_reading_state.active_book_path, item->valuestring, sizeof(s_reading_state.active_book_path) - 1);
+    FILE *fp = fopen(s_active_file, "rb");
+    if (!fp) {
+        migrate_legacy_state_json();
+        fp = fopen(s_active_file, "rb");
     }
-
-    item = cJSON_GetObjectItem(root, "byte_offset");
-    if (cJSON_IsNumber(item)) {
-        s_reading_state.byte_offset = (size_t)item->valuedouble;
-    }
-
-    item = cJSON_GetObjectItem(root, "total_bytes");
-    if (cJSON_IsNumber(item)) {
-        s_reading_state.total_bytes = (size_t)item->valuedouble;
-    }
-
-    cJSON *bms = cJSON_GetObjectItem(root, "bookmarks");
-    if (cJSON_IsArray(bms)) {
-        int bcount = cJSON_GetArraySize(bms);
-        for (int i = 0; i < bcount && i < BOOK_MAX_BOOKMARKS; i++) {
-            cJSON *b = cJSON_GetArrayItem(bms, i);
-            if (cJSON_IsNumber(b)) {
-                s_reading_state.bookmarks[s_reading_state.bookmark_count++] = (size_t)b->valuedouble;
+    if (fp) {
+        active_book_record_t rec = {0};
+        size_t r = fread(&rec, 1, sizeof(rec), fp);
+        fclose(fp);
+        if (r == sizeof(rec) && rec.magic == ACTIVE_BOOK_MAGIC && rec.active_book_path[0] != '\0') {
+            rec.active_book_path[sizeof(rec.active_book_path) - 1] = '\0';
+            struct stat st;
+            if (stat(rec.active_book_path, &st) == 0) {
+                strncpy(s_reading_state.active_book_path, rec.active_book_path, sizeof(s_reading_state.active_book_path) - 1);
+                s_reading_state.total_bytes = (size_t)st.st_size;
+                load_book_sidecar(s_reading_state.active_book_path,
+                                  &s_reading_state.byte_offset,
+                                  s_reading_state.bookmarks,
+                                  &s_reading_state.bookmark_count);
+            } else {
+                ESP_LOGW(TAG, "Saved active book '%s' not found on storage, resetting", rec.active_book_path);
             }
-        }
-    }
-
-    cJSON_Delete(root);
-
-    // Validate that active_book_path exists and refresh total_bytes
-    if (s_reading_state.active_book_path[0] != '\0') {
-        struct stat st;
-        if (stat(s_reading_state.active_book_path, &st) != 0) {
-            ESP_LOGW(TAG, "Saved active book '%s' not found on storage, resetting", s_reading_state.active_book_path);
-            s_reading_state.active_book_path[0] = '\0';
-            s_reading_state.byte_offset = 0;
-            s_reading_state.total_bytes = 0;
-            s_reading_state.bookmark_count = 0;
-        } else if (s_reading_state.total_bytes == 0) {
-            s_reading_state.total_bytes = (size_t)st.st_size;
         }
     }
 
@@ -656,13 +868,16 @@ esp_err_t book_library_load_state(reading_state_t *state) {
         for (size_t i = 0; i < s_book_count; i++) {
             if (s_books[i].type == LIBRARY_ENTRY_FILE) {
                 strncpy(s_reading_state.active_book_path, s_books[i].path, sizeof(s_reading_state.active_book_path) - 1);
-                s_reading_state.byte_offset = 0;
                 s_reading_state.total_bytes = s_books[i].size;
-                s_reading_state.bookmark_count = 0;
+                load_book_sidecar(s_reading_state.active_book_path,
+                                  &s_reading_state.byte_offset,
+                                  s_reading_state.bookmarks,
+                                  &s_reading_state.bookmark_count);
                 break;
             }
         }
     }
+
     if (state) {
         *state = s_reading_state;
     }
@@ -694,87 +909,19 @@ esp_err_t book_library_save_state(const reading_state_t *state) {
         return ESP_ERR_INVALID_STATE;
     }
 
-    ensure_dir_exists(s_state_dir);
-
-    cJSON *root = cJSON_CreateObject();
-    if (!root) {
-        xSemaphoreGive(s_mutex);
-        return ESP_ERR_NO_MEM;
+    esp_err_t ret = save_active_book_record(state->active_book_path);
+    if (ret == ESP_OK && state->active_book_path[0] != '\0') {
+        ret = save_book_sidecar(state->active_book_path, state->byte_offset, state->bookmarks, state->bookmark_count);
     }
 
-    cJSON_AddStringToObject(root, "active_book_path", state->active_book_path);
-    cJSON_AddNumberToObject(root, "byte_offset", (double)state->byte_offset);
-    cJSON_AddNumberToObject(root, "total_bytes", (double)state->total_bytes);
-
-    cJSON *bm_arr = cJSON_CreateArray();
-    if (bm_arr) {
-        for (size_t i = 0; i < state->bookmark_count; i++) {
-            cJSON_AddItemToArray(bm_arr, cJSON_CreateNumber((double)state->bookmarks[i]));
-        }
-        cJSON_AddItemToObject(root, "bookmarks", bm_arr);
+    if (ret == ESP_OK) {
+        s_reading_state = *state;
+        s_state_dirty = false;
+        s_state_loaded = true;
     }
-
-    char *json_str = cJSON_Print(root);
-    cJSON_Delete(root);
-
-    if (!json_str) {
-        xSemaphoreGive(s_mutex);
-        return ESP_ERR_NO_MEM;
-    }
-
-    char tmp_file[96];
-    int ret = snprintf(tmp_file, sizeof(tmp_file), "%.80s.tmp", s_state_file);
-    if (ret < 0 || ret >= (int)sizeof(tmp_file)) {
-        free(json_str);
-        xSemaphoreGive(s_mutex);
-        return ESP_FAIL;
-    }
-
-    FILE *fp = fopen(tmp_file, "w");
-    if (!fp) {
-        ESP_LOGE(TAG, "Failed to open %s for writing: errno %d", tmp_file, errno);
-        free(json_str);
-        xSemaphoreGive(s_mutex);
-        return ESP_FAIL;
-    }
-
-    size_t len = strlen(json_str);
-    size_t written = fwrite(json_str, 1, len, fp);
-    fflush(fp);
-    fsync(fileno(fp));
-    fclose(fp);
-    free(json_str);
-
-    if (written != len) {
-        ESP_LOGE(TAG, "Partial write to %s (%u / %u bytes)", tmp_file, (unsigned int)written, (unsigned int)len);
-        unlink(tmp_file);
-        xSemaphoreGive(s_mutex);
-        return ESP_FAIL;
-    }
-
-    if (rename(tmp_file, s_state_file) != 0) {
-        if (errno == EEXIST) {
-            unlink(s_state_file);
-            if (rename(tmp_file, s_state_file) != 0) {
-                ESP_LOGE(TAG, "Failed to rename %s to %s after unlink: errno %d", tmp_file, s_state_file, errno);
-                unlink(tmp_file);
-                xSemaphoreGive(s_mutex);
-                return ESP_FAIL;
-            }
-        } else {
-            ESP_LOGE(TAG, "Failed to rename %s to %s: errno %d", tmp_file, s_state_file, errno);
-            unlink(tmp_file);
-            xSemaphoreGive(s_mutex);
-            return ESP_FAIL;
-        }
-    }
-
-    s_reading_state = *state;
-    s_state_dirty = false;
-    s_state_loaded = true;
 
     xSemaphoreGive(s_mutex);
-    return ESP_OK;
+    return ret;
 }
 
 esp_err_t book_library_flush_state(void) {
@@ -787,15 +934,10 @@ esp_err_t book_library_flush_state(void) {
         xSemaphoreGive(s_mutex);
         return ESP_OK;
     }
+    reading_state_t copy = s_reading_state;
     xSemaphoreGive(s_mutex);
 
-    esp_err_t ret = book_library_save_state(&s_reading_state);
-    if (ret == ESP_OK) {
-        xSemaphoreTake(s_mutex, portMAX_DELAY);
-        s_state_dirty = false;
-        xSemaphoreGive(s_mutex);
-    }
-    return ret;
+    return book_library_save_state(&copy);
 }
 
 esp_err_t book_library_get_current_state(reading_state_t *state) {
@@ -814,26 +956,40 @@ esp_err_t book_library_set_active_book(const char *book_path, bool reset_offset)
         return ESP_ERR_INVALID_ARG;
     }
 
-    /* Pastikan state buku lama di-flush sebelum berganti ke buku baru */
     book_library_flush_state();
 
     xSemaphoreTake(s_mutex, portMAX_DELAY);
 
-    bool same_book = (strcmp(s_reading_state.active_book_path, book_path) == 0);
+    char resolved_path[BOOK_PATH_MAX_LEN];
+    resolve_book_full_path(book_path, resolved_path, sizeof(resolved_path));
 
-    strncpy(s_reading_state.active_book_path, book_path, sizeof(s_reading_state.active_book_path) - 1);
-    s_reading_state.active_book_path[sizeof(s_reading_state.active_book_path) - 1] = '\0';
-
-    if (reset_offset || !same_book) {
-        s_reading_state.byte_offset = 0;
-        s_reading_state.bookmark_count = 0;
+    if (s_reading_state.active_book_path[0] != '\0' &&
+        strcmp(s_reading_state.active_book_path, resolved_path) != 0) {
+        save_book_sidecar(s_reading_state.active_book_path,
+                          s_reading_state.byte_offset,
+                          s_reading_state.bookmarks,
+                          s_reading_state.bookmark_count);
     }
 
+    strncpy(s_reading_state.active_book_path, resolved_path, sizeof(s_reading_state.active_book_path) - 1);
+    s_reading_state.active_book_path[sizeof(s_reading_state.active_book_path) - 1] = '\0';
+
     struct stat st;
-    if (stat(book_path, &st) == 0) {
+    if (stat(resolved_path, &st) == 0) {
         s_reading_state.total_bytes = (size_t)st.st_size;
     } else {
         s_reading_state.total_bytes = 0;
+    }
+
+    load_book_sidecar(resolved_path,
+                      &s_reading_state.byte_offset,
+                      s_reading_state.bookmarks,
+                      &s_reading_state.bookmark_count);
+
+    if (reset_offset) {
+        s_reading_state.byte_offset = 0;
+    } else if (s_reading_state.byte_offset > s_reading_state.total_bytes) {
+        s_reading_state.byte_offset = s_reading_state.total_bytes;
     }
 
     reading_state_t copy = s_reading_state;
@@ -945,4 +1101,223 @@ bool book_library_is_bookmarked(size_t offset) {
 
     xSemaphoreGive(s_mutex);
     return found;
+}
+
+esp_err_t book_library_get_book_state(const char *filename, size_t *out_offset, size_t *out_total_bytes, size_t *out_bookmarks, size_t *out_bm_count) {
+    if (!filename || s_mutex == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    xSemaphoreTake(s_mutex, portMAX_DELAY);
+
+    char full_path[BOOK_PATH_MAX_LEN];
+    resolve_book_full_path(filename, full_path, sizeof(full_path));
+
+    struct stat st;
+    if (stat(full_path, &st) != 0) {
+        xSemaphoreGive(s_mutex);
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    if (out_total_bytes) {
+        *out_total_bytes = (size_t)st.st_size;
+    }
+
+    if (strcmp(s_reading_state.active_book_path, full_path) == 0) {
+        if (out_offset) {
+            *out_offset = s_reading_state.byte_offset;
+        }
+        if (out_bm_count) {
+            *out_bm_count = s_reading_state.bookmark_count;
+        }
+        if (out_bookmarks && s_reading_state.bookmark_count > 0) {
+            memcpy(out_bookmarks, s_reading_state.bookmarks, s_reading_state.bookmark_count * sizeof(size_t));
+        }
+    } else {
+        size_t off = 0;
+        size_t bms[BOOK_MAX_BOOKMARKS] = {0};
+        size_t bmc = 0;
+        load_book_sidecar(full_path, &off, bms, &bmc);
+        if (out_offset) {
+            *out_offset = off;
+        }
+        if (out_bm_count) {
+            *out_bm_count = bmc;
+        }
+        if (out_bookmarks && bmc > 0) {
+            memcpy(out_bookmarks, bms, bmc * sizeof(size_t));
+        }
+    }
+
+    xSemaphoreGive(s_mutex);
+    return ESP_OK;
+}
+
+esp_err_t book_library_add_book_bookmark(const char *filename, size_t offset) {
+    if (!filename || s_mutex == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    xSemaphoreTake(s_mutex, portMAX_DELAY);
+
+    char full_path[BOOK_PATH_MAX_LEN];
+    resolve_book_full_path(filename, full_path, sizeof(full_path));
+
+    struct stat st;
+    if (stat(full_path, &st) != 0) {
+        xSemaphoreGive(s_mutex);
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    if (offset > (size_t)st.st_size) {
+        offset = (size_t)st.st_size;
+    }
+
+    if (strcmp(s_reading_state.active_book_path, full_path) == 0) {
+        xSemaphoreGive(s_mutex);
+        return book_library_add_bookmark(offset);
+    }
+
+    size_t off = 0;
+    size_t bms[BOOK_MAX_BOOKMARKS] = {0};
+    size_t bmc = 0;
+    load_book_sidecar(full_path, &off, bms, &bmc);
+
+    for (size_t i = 0; i < bmc; i++) {
+        if (bms[i] == offset) {
+            xSemaphoreGive(s_mutex);
+            return ESP_OK;
+        }
+    }
+
+    if (bmc >= BOOK_MAX_BOOKMARKS) {
+        xSemaphoreGive(s_mutex);
+        return ESP_ERR_NO_MEM;
+    }
+
+    size_t insert_idx = bmc;
+    for (size_t i = 0; i < bmc; i++) {
+        if (offset < bms[i]) {
+            insert_idx = i;
+            break;
+        }
+    }
+    for (size_t i = bmc; i > insert_idx; i--) {
+        bms[i] = bms[i - 1];
+    }
+    bms[insert_idx] = offset;
+    bmc++;
+
+    esp_err_t ret = save_book_sidecar(full_path, off, bms, bmc);
+    xSemaphoreGive(s_mutex);
+    return ret;
+}
+
+esp_err_t book_library_remove_book_bookmark(const char *filename, size_t offset) {
+    if (!filename || s_mutex == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    xSemaphoreTake(s_mutex, portMAX_DELAY);
+
+    char full_path[BOOK_PATH_MAX_LEN];
+    resolve_book_full_path(filename, full_path, sizeof(full_path));
+
+    if (strcmp(s_reading_state.active_book_path, full_path) == 0) {
+        xSemaphoreGive(s_mutex);
+        return book_library_remove_bookmark(offset);
+    }
+
+    size_t off = 0;
+    size_t bms[BOOK_MAX_BOOKMARKS] = {0};
+    size_t bmc = 0;
+    load_book_sidecar(full_path, &off, bms, &bmc);
+
+    int found_idx = -1;
+    for (size_t i = 0; i < bmc; i++) {
+        if (bms[i] == offset) {
+            found_idx = (int)i;
+            break;
+        }
+    }
+
+    if (found_idx < 0) {
+        xSemaphoreGive(s_mutex);
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    for (size_t i = (size_t)found_idx; i + 1 < bmc; i++) {
+        bms[i] = bms[i + 1];
+    }
+    bmc--;
+
+    esp_err_t ret = save_book_sidecar(full_path, off, bms, bmc);
+    xSemaphoreGive(s_mutex);
+    return ret;
+}
+
+esp_err_t book_library_set_book_offset(const char *filename, size_t offset) {
+    if (!filename || s_mutex == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    xSemaphoreTake(s_mutex, portMAX_DELAY);
+
+    char full_path[BOOK_PATH_MAX_LEN];
+    resolve_book_full_path(filename, full_path, sizeof(full_path));
+
+    struct stat st;
+    if (stat(full_path, &st) != 0) {
+        xSemaphoreGive(s_mutex);
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    if (offset > (size_t)st.st_size) {
+        offset = (size_t)st.st_size;
+    }
+
+    if (strcmp(s_reading_state.active_book_path, full_path) == 0) {
+        s_reading_state.byte_offset = offset;
+        s_reading_state.total_bytes = (size_t)st.st_size;
+        reading_state_t copy = s_reading_state;
+        xSemaphoreGive(s_mutex);
+
+        text_pager_seek(offset);
+        return book_library_save_state(&copy);
+    }
+
+    size_t off = 0;
+    size_t bms[BOOK_MAX_BOOKMARKS] = {0};
+    size_t bmc = 0;
+    load_book_sidecar(full_path, &off, bms, &bmc);
+    esp_err_t ret = save_book_sidecar(full_path, offset, bms, bmc);
+    xSemaphoreGive(s_mutex);
+    return ret;
+}
+
+esp_err_t book_library_delete_book_state(const char *filename) {
+    if (!filename || s_mutex == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    xSemaphoreTake(s_mutex, portMAX_DELAY);
+
+    char full_path[BOOK_PATH_MAX_LEN];
+    resolve_book_full_path(filename, full_path, sizeof(full_path));
+
+    char sidecar_path[BOOK_PATH_MAX_LEN];
+    get_book_sidecar_path(full_path, sidecar_path, sizeof(sidecar_path));
+    unlink(sidecar_path);
+
+    if (strcmp(s_reading_state.active_book_path, full_path) == 0) {
+        s_reading_state.active_book_path[0] = '\0';
+        s_reading_state.byte_offset = 0;
+        s_reading_state.total_bytes = 0;
+        s_reading_state.bookmark_count = 0;
+        s_state_dirty = false;
+        save_active_book_record("");
+    }
+
+    xSemaphoreGive(s_mutex);
+    return ESP_OK;
 }

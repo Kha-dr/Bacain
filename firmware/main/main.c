@@ -4,7 +4,6 @@
 #include "freertos/task.h"
 #include "freertos/queue.h"
 #include "nvs_flash.h"
-#include "nvs.h"
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "esp_attr.h"
@@ -23,69 +22,28 @@
 #include "reader_ui.h"
 #include "status_led.h"
 
-extern void reader_ui_set_rotation(uint8_t rotation);
+#include "view_reading.h"
+#include "view_menu.h"
+#include "view_library.h"
+#include "view_ble_sync.h"
+#include "view_bookmarks.h"
+#include "view_nav_hints.h"
 
 #define TAG "MAIN"
 
 static QueueHandle_t s_btn_queue = NULL;
 static reader_view_t s_current_view = VIEW_MENU;
-static int s_menu_index = 0;
-static int s_book_index = 0;
-static int s_bookmark_index = 0;
 static int64_t s_last_activity_us = 0;
 
 RTC_DATA_ATTR static reader_view_t s_rtc_last_view = VIEW_MENU;
-RTC_DATA_ATTR static int s_rtc_menu_index = 0;
-RTC_DATA_ATTR static int s_rtc_book_index = 0;
-RTC_DATA_ATTR static int s_rtc_bookmark_index = 0;
-RTC_DATA_ATTR static uint32_t s_redraw_counter = 0;
 RTC_DATA_ATTR static bool s_rtc_has_sdcard = false;
-RTC_DATA_ATTR static bool s_rtc_settings_cached = false;
-RTC_DATA_ATTR static uint8_t s_rtc_rot = BOARD_DISPLAY_ROTATION;
-RTC_DATA_ATTR static uint8_t s_rtc_btn_invert = 0;
-RTC_DATA_ATTR static uint8_t s_rtc_font_size = 0;
-RTC_DATA_ATTR static uint8_t s_rtc_show_hints = 1;
-
-static void load_settings(bool force_nvs_reload) {
-    if (!s_rtc_settings_cached || force_nvs_reload) {
-        nvs_handle_t nvs_handle;
-        if (nvs_open("settings", NVS_READWRITE, &nvs_handle) == ESP_OK) {
-            if (nvs_get_u8(nvs_handle, "rotation", &s_rtc_rot) != ESP_OK) {
-                s_rtc_rot = BOARD_DISPLAY_ROTATION;
-            }
-            if (nvs_get_u8(nvs_handle, "btn_invert", &s_rtc_btn_invert) != ESP_OK) {
-                s_rtc_btn_invert = 0;
-            }
-            if (nvs_get_u8(nvs_handle, "font_size", &s_rtc_font_size) != ESP_OK) {
-                s_rtc_font_size = 0;
-            }
-            if (nvs_get_u8(nvs_handle, "nav_hints", &s_rtc_show_hints) != ESP_OK) {
-                s_rtc_show_hints = 1;
-            }
-            nvs_close(nvs_handle);
-        } else {
-            s_rtc_rot = BOARD_DISPLAY_ROTATION;
-            s_rtc_btn_invert = 0;
-            s_rtc_font_size = 0;
-            s_rtc_show_hints = 1;
-        }
-        s_rtc_settings_cached = true;
-    }
-    reader_ui_set_rotation(s_rtc_rot);
-    reader_ui_set_show_nav_hints(s_rtc_show_hints != 0);
-    button_set_inverted(s_rtc_btn_invert != 0);
-    text_pager_set_font_size(s_rtc_font_size == 0 ? TEXT_PAGER_FONT_12 : TEXT_PAGER_FONT_16);
-}
 
 static void update_activity(void) {
     s_last_activity_us = esp_timer_get_time();
 }
 
-static void enter_deep_sleep_with_state(void) {
+void app_enter_deep_sleep(void) {
     s_rtc_last_view = s_current_view;
-    s_rtc_menu_index = s_menu_index;
-    s_rtc_book_index = s_book_index;
-    s_rtc_bookmark_index = s_bookmark_index;
     book_library_update_offset(text_pager_get_current_offset());
     book_library_flush_state();
     status_led_trigger(STATUS_LED_EVT_SLEEP);
@@ -94,17 +52,10 @@ static void enter_deep_sleep_with_state(void) {
     power_mgr_enter_deep_sleep(0);
 }
 
-static void render_reading_page(void) {
-    s_redraw_counter++;
-    if (APP_FULL_REFRESH_INTERVAL > 0 && s_redraw_counter >= APP_FULL_REFRESH_INTERVAL) {
-        s_redraw_counter = 0;
-        reader_ui_render_reading_full();
-    } else {
-        reader_ui_render_reading();
-    }
-}
-
 static void on_ble_sync_event(ble_sync_event_t event, const void *param, void *user_data) {
+    (void)param;
+    (void)user_data;
+
     if (event == BLE_SYNC_EVT_REQUEST_REFRESH) {
         if (s_btn_queue) {
             button_event_t evt = { .button = BTN_ID_BOOT, .type = BTN_EVENT_CUSTOM_REFRESH };
@@ -114,7 +65,7 @@ static void on_ble_sync_event(ble_sync_event_t event, const void *param, void *u
     }
 
     if (event == BLE_SYNC_EVT_REQUEST_SLEEP) {
-        enter_deep_sleep_with_state();
+        app_enter_deep_sleep();
         return;
     }
 
@@ -124,6 +75,46 @@ static void on_ble_sync_event(ble_sync_event_t event, const void *param, void *u
             button_event_t evt = { .button = BTN_ID_BOOT, .type = BTN_EVENT_CUSTOM_REFRESH };
             xQueueSend(s_btn_queue, &evt, 0);
         }
+    }
+}
+
+static reader_view_t dispatch_wake_view(reader_view_t last_view, wakeup_reason_t wakeup, bool book_opened) {
+    switch (last_view) {
+        case VIEW_READING:
+            return view_reading_on_wake(wakeup, book_opened);
+        case VIEW_MENU:
+            return view_menu_on_wake(wakeup);
+        case VIEW_BOOK_LIST:
+            return view_library_on_wake(wakeup);
+        case VIEW_BOOKMARKS:
+            return view_bookmarks_on_wake(wakeup);
+        case VIEW_NAV_HINTS:
+            return view_nav_hints_on_wake(wakeup);
+        case VIEW_BLE_SYNC:
+            return view_ble_sync_on_wake(wakeup);
+        default:
+            view_menu_set_index(0);
+            view_menu_render(false);
+            return VIEW_MENU;
+    }
+}
+
+static reader_view_t dispatch_view_event(reader_view_t view, button_event_t evt) {
+    switch (view) {
+        case VIEW_READING:
+            return view_reading_handle_event(evt);
+        case VIEW_MENU:
+            return view_menu_handle_event(evt);
+        case VIEW_BOOK_LIST:
+            return view_library_handle_event(evt);
+        case VIEW_BLE_SYNC:
+            return view_ble_sync_handle_event(evt);
+        case VIEW_BOOKMARKS:
+            return view_bookmarks_handle_event(evt);
+        case VIEW_NAV_HINTS:
+            return view_nav_hints_handle_event(evt);
+        default:
+            return view;
     }
 }
 
@@ -150,9 +141,10 @@ void app_main(void) {
 
     ESP_LOGI(TAG, "Starting BacaIn firmware...");
 
-    wakeup_reason_t wakeup = power_mgr_get_wakeup_cause();
+    wakeup_reason_t raw_wakeup = power_mgr_get_wakeup_cause();
+    wakeup_reason_t wakeup = raw_wakeup;
     bool is_cold_boot = (wakeup == WAKEUP_REASON_COLD_BOOT || esp_reset_reason() != ESP_RST_DEEPSLEEP);
-    load_settings(is_cold_boot);
+    app_settings_load(is_cold_boot);
 
     // 3. Initialize Peripherals
     esp_err_t flash_ret = flash_storage_init();
@@ -188,6 +180,13 @@ void app_main(void) {
     }
 
     ESP_ERROR_CHECK(reader_ui_init(is_cold_boot));
+    if (!is_cold_boot) {
+        if (raw_wakeup == WAKEUP_REASON_BOOT_BUTTON) {
+            button_seed_wakeup(BTN_ID_BOOT);
+        } else if (raw_wakeup == WAKEUP_REASON_PWR_BUTTON) {
+            button_seed_wakeup(BTN_ID_PWR);
+        }
+    }
     ESP_ERROR_CHECK(button_init(&s_btn_queue));
 
     // 4. Initialize Reader Core
@@ -198,7 +197,7 @@ void app_main(void) {
         book_library_scan();
     }
     text_pager_init();
-    text_pager_set_font_size(s_rtc_font_size == 0 ? TEXT_PAGER_FONT_12 : TEXT_PAGER_FONT_16);
+    app_settings_load(false);
 
     // 5. Register BLE sync callback
     ble_sync_register_callback(on_ble_sync_event, NULL);
@@ -239,119 +238,13 @@ void app_main(void) {
         }
 
         s_current_view = VIEW_MENU;
-        s_menu_index = 0;
-        reader_ui_render_menu_full(s_menu_index);
+        view_menu_set_index(0);
+        view_menu_render(true);
         ESP_LOGI(TAG, "Cold boot started into view %d", s_current_view);
     } else {
-        switch (s_rtc_last_view) {
-            case VIEW_READING:
-                if (opened) {
-                    s_current_view = VIEW_READING;
-                    if (wakeup == WAKEUP_REASON_BOOT_BUTTON) {
-                        text_pager_prev_page();
-                        book_library_update_offset(text_pager_get_current_offset());
-                    } else if (wakeup == WAKEUP_REASON_PWR_BUTTON) {
-                        text_pager_next_page();
-                        book_library_update_offset(text_pager_get_current_offset());
-                    }
-                    s_redraw_counter = 0;
-                    reader_ui_render_reading();
-                } else {
-                    s_current_view = VIEW_MENU;
-                    s_menu_index = 0;
-                    reader_ui_render_menu(s_menu_index);
-                }
-                break;
-
-            case VIEW_MENU:
-                s_current_view = VIEW_MENU;
-                s_menu_index = s_rtc_menu_index;
-                if (s_menu_index < 0 || s_menu_index >= 7) {
-                    s_menu_index = 0;
-                }
-                if (wakeup == WAKEUP_REASON_BOOT_BUTTON) {
-                    s_menu_index = (s_menu_index - 1 + 7) % 7;
-                } else if (wakeup == WAKEUP_REASON_PWR_BUTTON) {
-                    s_menu_index = (s_menu_index + 1) % 7;
-                }
-                reader_ui_render_menu(s_menu_index);
-                break;
-
-            case VIEW_BOOK_LIST:
-                s_current_view = VIEW_BOOK_LIST;
-                s_book_index = s_rtc_book_index;
-                if (book_library_get_count() == 0) {
-                    book_library_scan();
-                }
-                {
-                    int count = (int)book_library_get_count();
-                    if (count > 0) {
-                        if (s_book_index < 0 || s_book_index >= count) {
-                            s_book_index = 0;
-                        }
-                        if (wakeup == WAKEUP_REASON_BOOT_BUTTON) {
-                            s_book_index = (s_book_index - 1 + count) % count;
-                        } else if (wakeup == WAKEUP_REASON_PWR_BUTTON) {
-                            s_book_index = (s_book_index + 1) % count;
-                        }
-                    } else {
-                        s_book_index = 0;
-                    }
-                }
-                reader_ui_render_book_list(s_book_index);
-                break;
-
-            case VIEW_BOOKMARKS:
-                s_current_view = VIEW_BOOKMARKS;
-                s_bookmark_index = s_rtc_bookmark_index;
-                {
-                    const reading_state_t *st = book_library_get_state();
-                    int count = (st != NULL) ? (int)st->bookmark_count : 0;
-                    if (count > 0) {
-                        if (s_bookmark_index < 0 || s_bookmark_index >= count) {
-                            s_bookmark_index = 0;
-                        }
-                        if (wakeup == WAKEUP_REASON_BOOT_BUTTON) {
-                            s_bookmark_index = (s_bookmark_index - 1 + count) % count;
-                        } else if (wakeup == WAKEUP_REASON_PWR_BUTTON) {
-                            s_bookmark_index = (s_bookmark_index + 1) % count;
-                        }
-                    } else {
-                        s_bookmark_index = 0;
-                    }
-                }
-                reader_ui_render_bookmarks(s_bookmark_index);
-                break;
-
-            case VIEW_NAV_HINTS:
-                s_current_view = VIEW_NAV_HINTS;
-                reader_ui_render_nav_hints();
-                break;
-
-            case VIEW_BLE_SYNC:
-                s_current_view = VIEW_BLE_SYNC;
-                ble_sync_start();
-                reader_ui_render_ble_sync(ble_sync_is_connected(), ble_sync_get_bytes_received());
-                break;
-
-            default:
-                s_rtc_last_view = VIEW_MENU;
-                s_rtc_menu_index = 0;
-                s_current_view = VIEW_MENU;
-                s_menu_index = 0;
-                reader_ui_render_menu(s_menu_index);
-                break;
-        }
-        ESP_LOGI(TAG, "Display render initiated successfully.");
-    }
-
-    if (wakeup == WAKEUP_REASON_BOOT_BUTTON || wakeup == WAKEUP_REASON_PWR_BUTTON) {
-        while (gpio_get_level((gpio_num_t)BOARD_BTN_UP_PIN) == 0 || gpio_get_level((gpio_num_t)BOARD_BTN_DOWN_PIN) == 0) {
-            vTaskDelay(pdMS_TO_TICKS(10));
-        }
-        if (s_btn_queue) {
-            xQueueReset(s_btn_queue);
-        }
+        s_current_view = dispatch_wake_view(s_rtc_last_view, wakeup, opened);
+        s_rtc_last_view = s_current_view;
+        ESP_LOGI(TAG, "Wake view %d restored.", s_current_view);
     }
 
     update_activity();
@@ -360,14 +253,16 @@ void app_main(void) {
     button_event_t evt;
     for (;;) {
         TickType_t wait_ticks = pdMS_TO_TICKS(5000);
-        if (s_current_view != VIEW_BLE_SYNC) {
+        if (s_current_view == VIEW_BLE_SYNC) {
+            wait_ticks = view_ble_sync_get_wait_ticks();
+        } else {
             uint16_t timeout_sec = ble_sync_get_sleep_timeout();
             if (timeout_sec > 0) {
                 int64_t elapsed_us = esp_timer_get_time() - s_last_activity_us;
                 int64_t total_us = (int64_t)timeout_sec * 1000000LL;
                 if (elapsed_us >= total_us) {
                     ESP_LOGI(TAG, "Inactivity timeout reached. Entering deep sleep...");
-                    enter_deep_sleep_with_state();
+                    app_enter_deep_sleep();
                 }
                 int64_t remaining_ms = (total_us - elapsed_us) / 1000LL;
                 if (remaining_ms <= 0) {
@@ -379,220 +274,26 @@ void app_main(void) {
                 }
             }
         }
+
         if (xQueueReceive(s_btn_queue, &evt, wait_ticks) == pdTRUE) {
             update_activity();
             ESP_LOGI(TAG, "Btn evt: button=%d, type=%d, view=%d", evt.button, evt.type, s_current_view);
+            s_current_view = dispatch_view_event(s_current_view, evt);
+            s_rtc_last_view = s_current_view;
             if (evt.type == BTN_EVENT_CUSTOM_REFRESH) {
-                if (s_current_view == VIEW_READING) {
-                    reader_ui_render_reading_force_full();
-                } else if (s_current_view == VIEW_BLE_SYNC) {
-                    reader_ui_render_ble_sync(ble_sync_is_connected(), ble_sync_get_bytes_received());
-                } else if (s_current_view == VIEW_BOOKMARKS) {
-                    reader_ui_render_bookmarks(s_bookmark_index);
-                } else if (s_current_view == VIEW_MENU) {
-                    reader_ui_render_menu(s_menu_index);
-                } else if (s_current_view == VIEW_BOOK_LIST) {
-                    reader_ui_render_book_list(s_book_index);
-                } else if (s_current_view == VIEW_NAV_HINTS) {
-                    reader_ui_render_nav_hints();
-                }
                 continue;
-            }
-
-            switch (s_current_view) {
-                case VIEW_READING:
-                    if (evt.type == BTN_LONG_PRESS) {
-                        s_current_view = VIEW_MENU;
-                        s_menu_index = 0;
-                        reader_ui_render_menu(s_menu_index);
-                    } else if (evt.button == BTN_ID_BOOT) {
-                        if (evt.type == BTN_CLICK) {
-                            if (text_pager_prev_page() == ESP_OK) {
-                                book_library_update_offset(text_pager_get_current_offset());
-                                render_reading_page();
-                            }
-                        } else if (evt.type == BTN_DOUBLE_CLICK) {
-                            size_t off = text_pager_get_current_offset();
-                            if (book_library_is_bookmarked(off)) {
-                                book_library_remove_bookmark(off);
-                            } else {
-                                book_library_add_bookmark(off);
-                            }
-                            reader_ui_render_reading();
-                        }
-                    } else if (evt.button == BTN_ID_PWR) {
-                        if (evt.type == BTN_CLICK) {
-                            if (text_pager_next_page() == ESP_OK) {
-                                book_library_update_offset(text_pager_get_current_offset());
-                                render_reading_page();
-                            }
-                        } else if (evt.type == BTN_DOUBLE_CLICK) {
-                            s_current_view = VIEW_BOOKMARKS;
-                            s_bookmark_index = 0;
-                            reader_ui_render_bookmarks(s_bookmark_index);
-                        }
-                    }
-                    break;
-
-                case VIEW_MENU:
-                    if (evt.type == BTN_CLICK) {
-                        if (evt.button == BTN_ID_BOOT) {
-                            s_menu_index = (s_menu_index - 1 + 7) % 7;
-                            reader_ui_render_menu(s_menu_index);
-                        } else if (evt.button == BTN_ID_PWR) {
-                            s_menu_index = (s_menu_index + 1) % 7;
-                            reader_ui_render_menu(s_menu_index);
-                        }
-                    } else if (evt.type == BTN_DOUBLE_CLICK) {
-                        if (s_menu_index == 0) { // Continue Reading
-                            s_current_view = VIEW_READING;
-                            reader_ui_render_reading();
-                        } else if (s_menu_index == 1) { // Book Library
-                            book_library_scan();
-                            s_current_view = VIEW_BOOK_LIST;
-                            s_book_index = 0;
-                            reader_ui_render_book_list(s_book_index);
-                        } else if (s_menu_index == 2) { // Font Size Toggle
-                            text_pager_font_size_t f = text_pager_get_font_size();
-                            text_pager_font_size_t new_font = (f == TEXT_PAGER_FONT_16 ? TEXT_PAGER_FONT_12 : TEXT_PAGER_FONT_16);
-                            text_pager_set_font_size(new_font);
-                            s_rtc_font_size = (new_font == TEXT_PAGER_FONT_12 ? 0 : 1);
-                            nvs_handle_t h;
-                            if (nvs_open("settings", NVS_READWRITE, &h) == ESP_OK) {
-                                nvs_set_u8(h, "font_size", s_rtc_font_size);
-                                nvs_commit(h);
-                                nvs_close(h);
-                            } else {
-                                ESP_LOGE(TAG, "Failed to open NVS settings to save font_size");
-                            }
-                            reader_ui_render_menu(s_menu_index);
-                        } else if (s_menu_index == 3) { // Sync BLE
-                            book_library_scan();
-                            s_current_view = VIEW_BLE_SYNC;
-                            ble_sync_start();
-                            reader_ui_render_ble_sync(ble_sync_is_connected(), ble_sync_get_bytes_received());
-                        } else if (s_menu_index == 4) { // Nav Hints Screen
-                            s_current_view = VIEW_NAV_HINTS;
-                            reader_ui_render_nav_hints();
-                        } else if (s_menu_index == 5) { // Refresh Screen
-                            s_redraw_counter = 0;
-                            reader_ui_render_menu_full(s_menu_index);
-                        } else if (s_menu_index == 6) { // Power Off
-                            reader_ui_render_sleeping();
-                            enter_deep_sleep_with_state();
-                        }
-                    }
-                    break;
-
-                case VIEW_BOOK_LIST:
-                    {
-                        size_t count = book_library_get_count();
-                        if (evt.type == BTN_CLICK) {
-                            if (count > 0) {
-                                if (evt.button == BTN_ID_BOOT) {
-                                    s_book_index = (s_book_index - 1 + count) % count;
-                                } else if (evt.button == BTN_ID_PWR) {
-                                    s_book_index = (s_book_index + 1) % count;
-                                }
-                                reader_ui_render_book_list(s_book_index);
-                            }
-                        } else if (evt.type == BTN_DOUBLE_CLICK) {
-                            if (count > 0) {
-                                const book_info_t *book = book_library_get_book(s_book_index);
-                                if (book) {
-                                    if (book->type == LIBRARY_ENTRY_UP) {
-                                        book_library_navigate_up();
-                                        s_book_index = 0;
-                                        reader_ui_render_book_list(s_book_index);
-                                    } else if (book->type == LIBRARY_ENTRY_DIR) {
-                                        book_library_enter_dir(book->filename);
-                                        s_book_index = 0;
-                                        reader_ui_render_book_list(s_book_index);
-                                    } else if (book->type == LIBRARY_ENTRY_FILE) {
-                                        if (text_pager_open_book(book->path, 0) == ESP_OK) {
-                                            book_library_set_active_book(book->path, true);
-                                            s_current_view = VIEW_READING;
-                                            reader_ui_render_reading();
-                                        }
-                                    }
-                                }
-                            }
-                        } else if (evt.type == BTN_LONG_PRESS) {
-                            s_current_view = VIEW_MENU;
-                            reader_ui_render_menu(s_menu_index);
-                        }
-                    }
-                    break;
-
-                case VIEW_BLE_SYNC:
-                    if (evt.type == BTN_LONG_PRESS) {
-                        ble_sync_stop();
-                        book_library_invalidate_cache();
-                        book_library_scan();
-                        load_settings(true);
-                        s_current_view = VIEW_MENU;
-                        reader_ui_render_menu(s_menu_index);
-                    }
-                    break;
-
-                case VIEW_BOOKMARKS:
-                    {
-                        const reading_state_t *st = book_library_get_state();
-                        size_t count = (st != NULL) ? st->bookmark_count : 0;
-                        if (evt.type == BTN_CLICK) {
-                            if (count > 0) {
-                                if (evt.button == BTN_ID_BOOT) {
-                                    s_bookmark_index = (s_bookmark_index - 1 + count) % count;
-                                } else if (evt.button == BTN_ID_PWR) {
-                                    s_bookmark_index = (s_bookmark_index + 1) % count;
-                                }
-                                reader_ui_render_bookmarks(s_bookmark_index);
-                            }
-                        } else if (evt.type == BTN_DOUBLE_CLICK) {
-                            if (count > 0 && s_bookmark_index >= 0 && s_bookmark_index < (int)count) {
-                                size_t target_offset = st->bookmarks[s_bookmark_index];
-                                text_pager_open_offset(target_offset);
-                                book_library_update_offset(target_offset);
-                            }
-                            s_current_view = VIEW_READING;
-                            reader_ui_render_reading();
-                        } else if (evt.type == BTN_LONG_PRESS) {
-                            s_current_view = VIEW_READING;
-                            reader_ui_render_reading();
-                        }
-                    }
-                    break;
-
-                case VIEW_NAV_HINTS:
-                    if (evt.type == BTN_DOUBLE_CLICK) {
-                        bool new_hints = !reader_ui_get_show_nav_hints();
-                        reader_ui_set_show_nav_hints(new_hints);
-                        s_rtc_show_hints = new_hints ? 1 : 0;
-                        nvs_handle_t h;
-                        if (nvs_open("settings", NVS_READWRITE, &h) == ESP_OK) {
-                            nvs_set_u8(h, "nav_hints", s_rtc_show_hints);
-                            nvs_commit(h);
-                            nvs_close(h);
-                        } else {
-                            ESP_LOGE(TAG, "Failed to open NVS settings to save nav_hints");
-                        }
-                        reader_ui_render_nav_hints();
-                    } else if (evt.type == BTN_LONG_PRESS) {
-                        s_current_view = VIEW_MENU;
-                        reader_ui_render_menu(s_menu_index);
-                    }
-                    break;
             }
         }
 
         if (s_current_view == VIEW_BLE_SYNC) {
-            s_last_activity_us = esp_timer_get_time();
+            s_current_view = view_ble_sync_check_timeout(&s_last_activity_us);
+            s_rtc_last_view = s_current_view;
         } else {
             int64_t elapsed_sec = (esp_timer_get_time() - s_last_activity_us) / 1000000LL;
             uint16_t timeout_sec = ble_sync_get_sleep_timeout();
             if (timeout_sec > 0 && elapsed_sec >= timeout_sec) {
                 ESP_LOGI(TAG, "Inactivity timeout (%llds >= %us). Entering deep sleep...", elapsed_sec, timeout_sec);
-                enter_deep_sleep_with_state();
+                app_enter_deep_sleep();
             }
         }
     }

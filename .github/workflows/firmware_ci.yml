@@ -1,30 +1,35 @@
-name: BacaIn Firmware CI/CD
+name: Firmware Builder
 
 on:
   push:
     branches:
       - main
     tags:
-      - 'v*'
+      - "v*"
   pull_request:
     branches:
       - main
   workflow_dispatch:
     inputs:
-      board_name:
-        description: 'Board Profile Name'
-        required: false
-        default: ''
+      board_id:
+        description: "Board ID for artifact naming"
+        required: true
+        default: "waveshare_154"
+        type: string
+      flash_size:
+        description: "Flash size (4MB, 8MB, 16MB, 32MB)"
+        required: true
+        default: "8MB"
         type: string
       extra_idf_args:
-        description: 'Extra IDF Build Args / Compiler Macros (e.g. -DCONFIG_BOARD_DISPLAY_WIDTH=250)'
-        required: false
-        default: ''
+        description: "Extra IDF Build Args / Compiler Macros"
+        required: true
+        default: "-DCONFIG_BOARD_PROFILE_WAVESHARE_154=y"
         type: string
       output_bin:
-        description: 'Output Factory Binary Name'
-        required: false
-        default: ''
+        description: "Output Factory Binary Name"
+        required: true
+        default: "bacain_waveshare_154_factory.bin"
         type: string
 
 permissions:
@@ -32,21 +37,32 @@ permissions:
 
 jobs:
   prepare-matrix:
-    name: Generate Board Build Matrix
+    name: Generate Board Target
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
+    env:
+      EVENT_NAME: ${{ github.event_name }}
+      INPUT_BOARD_ID: ${{ inputs.board_id }}
+      INPUT_FLASH_SIZE: ${{ inputs.flash_size }}
+      INPUT_EXTRA_ARGS: ${{ inputs.extra_idf_args }}
+      INPUT_OUTPUT_BIN: ${{ inputs.output_bin }}
     steps:
       - name: Checkout repository
+        if: github.event_name != 'workflow_dispatch'
         uses: actions/checkout@v4
       - name: Parse boards.json
         id: set-matrix
         run: |
-          MATRIX_JSON=$(jq -c '[.boards[] | {id: .id, name: .name, output_bin: .output_bin, extra_args: ("-DCONFIG_BOARD_PROFILE_" + (.id | ascii_upcase) + "=y")}]' firmware/boards/boards.json)
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            MATRIX_JSON=$(jq -nc --arg id "$INPUT_BOARD_ID" --arg fsize "$INPUT_FLASH_SIZE" --arg args "$INPUT_EXTRA_ARGS" --arg bin "$INPUT_OUTPUT_BIN" '[{id: $id, chip: "esp32s3", flash_size: $fsize, output_bin: $bin, extra_args: $args}]')
+          else
+            MATRIX_JSON=$(jq -c '[.boards[] | {id: .id, name: .name, chip: .chip, flash_size: .flash_size, output_bin: .output_bin, extra_args: ("-DCONFIG_BOARD_PROFILE_" + (.id | ascii_upcase) + "=y")}]' firmware/boards/boards.json)
+          fi
           echo "matrix={\"board\":$MATRIX_JSON}" >> "$GITHUB_OUTPUT"
 
   build:
-    name: Build & Package BacaIn ESP32-S3 Firmware (${{ matrix.board.id }})
+    name: Build & Package Firmware (${{ matrix.board.id }})
     needs: prepare-matrix
     runs-on: ubuntu-latest
     container:
@@ -58,7 +74,9 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJson(needs.prepare-matrix.outputs.matrix) }}
     env:
-      BOARD_NAME: ${{ inputs.board_name || matrix.board.name }}
+      BOARD_ID: ${{ matrix.board.id }}
+      CHIP_TARGET: ${{ matrix.board.chip || 'esp32s3' }}
+      FLASH_SIZE: ${{ inputs.flash_size || matrix.board.flash_size || '8MB' }}
       EXTRA_IDF_ARGS: ${{ inputs.extra_idf_args || matrix.board.extra_args }}
       FACTORY_BIN: ${{ inputs.output_bin || matrix.board.output_bin }}
     steps:
@@ -75,43 +93,26 @@ jobs:
           if [ -f "$IDF_PATH/export.sh" ]; then
             . "$IDF_PATH/export.sh"
           fi
-          idf.py set-target esp32s3
+          idf.py set-target "${CHIP_TARGET}"
           idf.py build ${EXTRA_IDF_ARGS}
 
-      - name: Merge Factory Binary & Generate Manifest
+      - name: Merge Factory Binary
+        if: github.event_name != 'pull_request'
         working-directory: firmware
         run: |
           if [ -f "$IDF_PATH/export.sh" ]; then
             . "$IDF_PATH/export.sh"
           fi
 
-          # Standardize binary paths from ESP-IDF build output
-          if [ -f build/bacain.bin ] && [ ! -f build/reader_firmware.bin ]; then
-            cp build/bacain.bin build/reader_firmware.bin
-          elif [ -f build/mini_e_reader.bin ] && [ ! -f build/reader_firmware.bin ]; then
-            cp build/mini_e_reader.bin build/reader_firmware.bin
-          fi
-
-          if [ -f build/bootloader/bootloader.bin ] && [ ! -f build/bootloader.bin ]; then
-            cp build/bootloader/bootloader.bin build/bootloader.bin
-          fi
-
-          if [ -f build/partition_table/partition-table.bin ] && [ ! -f build/partition-table.bin ]; then
-            cp build/partition_table/partition-table.bin build/partition-table.bin
-          fi
-
-          python3 package_firmware.py -o "${FACTORY_BIN}" --board "${BOARD_NAME}"
+          python3 package_firmware.py -o "${FACTORY_BIN}" --chip "${CHIP_TARGET}" --board "${BOARD_ID}" --flash-size "${FLASH_SIZE}"
 
       - name: Upload Build Artifacts
+        if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@v4
         with:
           name: bacain-firmware-${{ matrix.board.id }}
           path: |
             firmware/build/${{ env.FACTORY_BIN }}
-            firmware/build/reader_firmware.bin
-            firmware/build/bootloader.bin
-            firmware/build/partition-table.bin
-            firmware/build/manifest.json
           if-no-files-found: error
 
       - name: Publish GitHub Release
@@ -120,8 +121,4 @@ jobs:
         with:
           files: |
             firmware/build/${{ env.FACTORY_BIN }}
-            firmware/build/reader_firmware.bin
-            firmware/build/bootloader.bin
-            firmware/build/partition-table.bin
-            firmware/build/manifest.json
           generate_release_notes: true

@@ -2,8 +2,15 @@ idf_component_register(
     SRCS
         "main.c"
         "reader_ui.c"
+        "views/view_reading.c"
+        "views/view_menu.c"
+        "views/view_library.c"
+        "views/view_ble_sync.c"
+        "views/view_bookmarks.c"
+        "views/view_nav_hints.c"
     INCLUDE_DIRS
         "."
+        "views"
     REQUIRES
         nvs_flash
         freertos
@@ -38,4 +45,3 @@ add_custom_command(
 
 add_custom_target(generate_sync_qrcode DEPENDS "${QRCODE_HEADER}")
 add_dependencies(${COMPONENT_LIB} generate_sync_qrcode)
-

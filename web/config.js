@@ -2,6 +2,7 @@
   const cfg = {
     name: 'BacaIn',
     repo: 'https://github.com/khad1r/BacaIn',
+    repoSlug: 'khad1r/BacaIn',
     appUrl: 'https://bacain.khadr.dev',
     ble: {
       service: '0000fe60-0000-1000-8000-00805f9b34fb',
@@ -19,13 +20,17 @@
         SET_STORAGE_TARGET: 0x06,
         GET_BOOKMARKS: 0x07,
         DELETE_BOOKMARK: 0x08,
+        ADD_BOOKMARK: 0x09,
+        SET_BOOK_OFFSET: 0x0A,
         SET_FONT: 0x10,
         FORCE_REFRESH: 0x12,
         SET_SLEEP_TIMEOUT: 0x13,
         TRIGGER_SLEEP: 0x14,
         SET_NAV_HINTS: 0x15,
         SET_ROTATION: 0x16,
-        SET_BUTTON_INVERT: 0x17
+        SET_BUTTON_INVERT: 0x17,
+        SET_STATUS_LED: 0x18,
+        GET_CONFIG: 0x19
       }
     },
     storage: {

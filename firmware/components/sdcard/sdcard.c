@@ -4,6 +4,7 @@
 #include <sys/unistd.h>
 #include <sys/stat.h>
 #include "esp_vfs_fat.h"
+#include "esp_partition.h"
 #include "wear_levelling.h"
 #include "sdmmc_cmd.h"
 #include "driver/sdmmc_host.h"
@@ -97,6 +98,94 @@ uint64_t sdcard_get_free_bytes(void) {
 /* SPI Flash FAT Storage Implementation                                      */
 /* ========================================================================= */
 
+#define BMIG_MAGIC        0x47494D42U /* "BMIG" */
+#define BMIG_PART_OFFSET  0x20000U    /* 128 KB into storage partition */
+
+static void unpack_flasher_migration_bundle(void) {
+    const esp_partition_t *part = esp_partition_find_first(
+        ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_FAT, "storage");
+    if (!part || part->size <= BMIG_PART_OFFSET + 8) {
+        return;
+    }
+
+    uint32_t header[2] = {0, 0};
+    if (esp_partition_read(part, BMIG_PART_OFFSET, header, sizeof(header)) != ESP_OK) {
+        return;
+    }
+    if (header[0] != BMIG_MAGIC || header[1] == 0 || header[1] > 256) {
+        return;
+    }
+
+    uint32_t file_count = header[1];
+    ESP_LOGI(TAG, "Found flasher content migration bundle (%u files) at +0x%x",
+             (unsigned)file_count, (unsigned)BMIG_PART_OFFSET);
+
+    size_t cursor = BMIG_PART_OFFSET + sizeof(header);
+    uint8_t chunk[512];
+
+    for (uint32_t i = 0; i < file_count; i++) {
+        uint16_t path_len = 0;
+        if (cursor + 2 > part->size ||
+            esp_partition_read(part, cursor, &path_len, 2) != ESP_OK ||
+            path_len == 0 || path_len >= 192) {
+            break;
+        }
+        cursor += 2;
+
+        char rel_path[192];
+        if (cursor + path_len + 4 > part->size ||
+            esp_partition_read(part, cursor, rel_path, path_len) != ESP_OK) {
+            break;
+        }
+        rel_path[path_len] = '\0';
+        cursor += path_len;
+
+        uint32_t data_len = 0;
+        if (esp_partition_read(part, cursor, &data_len, 4) != ESP_OK ||
+            cursor + 4 + data_len > part->size) {
+            break;
+        }
+        cursor += 4;
+
+        char full_path[256];
+        if (rel_path[0] == '/') {
+            snprintf(full_path, sizeof(full_path), "%s%s", FLASH_MOUNT_POINT, rel_path);
+        } else {
+            snprintf(full_path, sizeof(full_path), "%s/%s", FLASH_MOUNT_POINT, rel_path);
+        }
+
+        /* Ensure parent subdirectory exists (e.g. /spiflash/books/Subdir/file.txt) */
+        for (char *p = full_path + strlen(FLASH_MOUNT_POINT) + 1; *p; p++) {
+            if (*p == '/') {
+                *p = '\0';
+                mkdir(full_path, 0777);
+                *p = '/';
+            }
+        }
+
+        FILE *fp = fopen(full_path, "wb");
+        uint32_t remaining = data_len;
+        while (remaining > 0) {
+            uint32_t to_read = remaining > sizeof(chunk) ? sizeof(chunk) : remaining;
+            if (esp_partition_read(part, cursor, chunk, to_read) != ESP_OK) {
+                break;
+            }
+            if (fp) {
+                fwrite(chunk, 1, to_read, fp);
+            }
+            cursor += to_read;
+            remaining -= to_read;
+        }
+        if (fp) {
+            fclose(fp);
+            ESP_LOGI(TAG, "Restored migrated file: %s (%u bytes)", full_path, (unsigned)data_len);
+        }
+    }
+
+    /* Erase the BMIG header sector so migration runs only once */
+    esp_partition_erase_range(part, BMIG_PART_OFFSET, 4096);
+}
+
 esp_err_t flash_storage_init(void) {
     if (s_flash_mounted) {
         return ESP_OK;
@@ -124,6 +213,8 @@ esp_err_t flash_storage_init(void) {
     // Ensure standard directories exist
     mkdir(FLASH_MOUNT_POINT "/books", 0777);
     mkdir(FLASH_MOUNT_POINT "/.reader", 0777);
+
+    unpack_flasher_migration_bundle();
 
     return ESP_OK;
 }

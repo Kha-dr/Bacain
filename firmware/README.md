@@ -44,8 +44,59 @@ CI dynamically parses `firmware/boards/boards.json` to generate the build matrix
 Build custom hardware configurations without modifying source files:
 
 ```bash
-EXTRA_IDF_ARGS="-DCONFIG_BOARD_DISPLAY_WIDTH=250" BOARD_NAME="Custom-Board" docker compose run --rm firmware
+EXTRA_IDF_ARGS="-DBOARD_DISPLAY_WIDTH=250" FACTORY_BIN="bacain_custom_factory.bin" docker compose run --rm firmware
 ```
+
+### D. Adding or Customizing Board Definitions (`boards.json` & `board_def.h`)
+
+To add a permanent board profile under `firmware/boards/` instead of passing CLI flags:
+
+1. **Create `firmware/boards/<board_id>/board_def.h`**:
+
+   ```c
+   #ifndef BOARD_CUSTOM_213_H
+   #define BOARD_CUSTOM_213_H
+
+   #define BOARD_NAME                  "Custom ESP32-S3 ePaper 2.13"
+   #define BOARD_DISPLAY_WIDTH         250
+   #define BOARD_DISPLAY_HEIGHT        122
+   #define BOARD_DISPLAY_ROTATION      1
+
+   #define BOARD_EPD_DC_PIN            10
+   #define BOARD_EPD_CS_PIN            11
+   #define BOARD_EPD_SCK_PIN           12
+   #define BOARD_EPD_MOSI_PIN          13
+   #define BOARD_EPD_RST_PIN           9
+   #define BOARD_EPD_BUSY_PIN          8
+   #define BOARD_EPD_PWR_PIN           6
+
+   #define BOARD_BTN_UP_PIN            0
+   #define BOARD_BTN_DOWN_PIN          18
+   #define BOARD_PWR_LATCH_PIN         17
+   #define BOARD_BATTERY_ADC_CHANNEL   3
+
+   #endif
+   ```
+
+2. **Register in `firmware/boards/boards.json`**:
+   ```json
+   {
+     "id": "custom_213",
+     "name": "Custom ESP32-S3 ePaper 2.13",
+     "chip": "esp32s3",
+     "flash_size": "8MB",
+     "display": {
+       "width": 250,
+       "height": 122,
+       "rotation": 1,
+       "controller": "SSD1681"
+     },
+     "config_header": "boards/custom_213/board_def.h",
+     "output_bin": "bacain_custom_213_factory.bin",
+     "status": "supported"
+   }
+   ```
+3. **Include in `firmware/components/board_config/include/board_config.h`** (or pass `-DBOARD_DEF_HEADER="\"../../boards/custom_213/board_def.h\""` via `extra_idf_args`).
 
 ---
 
@@ -66,8 +117,8 @@ The `firmware` service in `compose.yml` automatically executes incremental compi
 
 1. Runs the `espressif/idf:v5.3.1` container.
 2. Compiles the project incrementally: `idf.py -B /project/build build ${EXTRA_IDF_ARGS}`.
-3. Packages the release binaries: `python3 package_firmware.py /project/build -o "${FACTORY_BIN}" --board "${BOARD_NAME}"`.
-4. Outputs the factory binary at `build/bacain_factory.bin` (or custom name configured via `FACTORY_BIN`) and manifest at `build/manifest.json`.
+3. Packages the release binary: `python3 package_firmware.py /project/build -o "${FACTORY_BIN}"`.
+4. Outputs the factory binary at `build/bacain_factory.bin` (or custom name configured via `FACTORY_BIN`).
 
 For a clean rebuild from scratch, run the `clean-build` service:
 
@@ -85,19 +136,18 @@ Requires ESP-IDF v5.3+ installed locally:
 cd firmware
 idf.py set-target esp32s3
 idf.py build
-python3 package_firmware.py build -o bacain_<board_id>_factory.bin --board "Waveshare ESP32-S3-ePaper-1.54"
+python3 package_firmware.py build -o bacain_<board_id>_factory.bin
 ```
 
 ### Packaging Script Parameters (`package_firmware.py`)
 
-The packaging script merges build artifacts into a single factory binary and creates the release manifest:
+The packaging script merges build artifacts (`bootloader.bin` at `0x0`, `partition-table.bin` at `0x8000`, `bacain.bin` at `0x10000`) into a single factory binary and resizes the `storage` partition entry (`0x110000..end`) + MD5 checksum to match the board's flash size:
 
 - `build_dir`: Path to build directory (default: `build`).
 - `-o, --output`: Factory binary filename (default: `bacain_factory.bin`).
-- `--board`: Board profile name stored in the manifest (default: `Waveshare ESP32-S3-ePaper-1.54`).
 - `--chip`: esptool target chip (default: `esp32s3`).
-- `--flash-size`: Flash memory size (default: `8MB`).
-- `--name`: Firmware name stored in the manifest (default: `BacaIn Firmware`).
+- `--board`: Board ID or name from `boards/boards.json` (used to resolve `flash_size` if `--flash-size` is omitted).
+- `--flash-size`: Flash memory size (`4MB`, `8MB`, `16MB`, `32MB`; resolved from `boards/boards.json` if omitted).
 
 ---
 
@@ -107,32 +157,38 @@ The workflow `.github/workflows/firmware_ci.yml` handles automated builds and on
 
 ### A. Automatic Matrix Builds
 
-- **Push to `main` & Pull Request**: CI reads `firmware/boards/boards.json`, generates a dynamic matrix, and compiles firmware for every cataloged board profile.
-- **Release Tags (`v*`)**: Builds and attaches factory binaries for all cataloged boards (such as `bacain_waveshare_154_factory.bin`), along with manifest metadata, to GitHub Releases.
+- **Pull Request**: Compiles firmware for every board profile in `firmware/boards/boards.json` to verify compilation (skips binary packaging and artifact uploads).
+- **Push to `main`**: Compiles and uploads `bacain-firmware-<board_id>` workflow artifacts for every board in `boards.json`.
+- **Release Tags (`v*`)**: Compiles and publishes unified factory binaries (`bacain_<board_id>_factory.bin`) for all boards in `boards.json` directly to GitHub Releases.
 
 ### B. Custom Firmware Build via `workflow_dispatch` (Manual Trigger)
 
-Build custom hardware profiles from the GitHub web interface without a local toolchain:
+Build custom hardware profiles from the GitHub web interface without modifying `firmware/boards/boards.json` or `board_def.h`:
 
 1. Navigate to the **Actions** tab in the repository.
-2. Select the **BacaIn Firmware CI/CD** workflow.
+2. Select the **Firmware Builder** workflow.
 3. Click **Run workflow**.
-4. Fill in parameters:
-   - **Board Profile Name**: Name of the target board profile (default: `Waveshare ESP32-S3-ePaper-1.54`).
-   - **Extra IDF Build Args / Compiler Macros**: Compiler macro flags (`-D<macro>`) to adjust pins, resolution, or rotation.
-   - **Output Factory Binary Name**: Filename for the merged factory binary (default: `bacain_factory.bin`).
-5. Click **Run workflow**. Download the `bacain-firmware` artifact zip from the workflow summary after the run finishes.
+4. Fill in parameters (pre-filled with `waveshare_154` defaults):
+   - **`board_id`**: Identifier used for the uploaded artifact name `bacain-firmware-<board_id>` (default: `waveshare_154`). Does not need to exist in `boards.json`.
+   - **`flash_size`**: Target flash size (`4MB`, `8MB`, `16MB`, `32MB`; default: `8MB`). Automatically scales the `/spiflash` `storage` partition (`3008K` for `4MB`, `7104K` for `8MB`, `15296K` for `16MB`).
+   - **`extra_idf_args`**: Compiler macro flags (`-DBOARD_<MACRO>=<val>` or `-DCONFIG_BOARD_<MACRO>=<val>`) to override pins, resolution, rotation, or header path (default: `-DCONFIG_BOARD_PROFILE_WAVESHARE_154=y`).
+   - **`output_bin`**: Filename for the merged factory binary (default: `bacain_waveshare_154_factory.bin`).
+5. Click **Run workflow**. Download the `bacain-firmware-<board_id>` artifact zip from the workflow summary after the run finishes.
 
-#### Example Compiler Flags for `Extra IDF Build Args`:
+#### Example Compiler Flags for `extra_idf_args`:
 
-| Custom Requirement                                    | Compiler Macro Value                                                                                                               |
-| :---------------------------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------- |
-| **Change Screen Resolution** (e.g. 250 x 122)         | `-DCONFIG_BOARD_DISPLAY_WIDTH=250 -DCONFIG_BOARD_DISPLAY_HEIGHT=122`                                                               |
-| **Change Screen Orientation** (90 deg landscape)      | `-DCONFIG_BOARD_DISPLAY_ROTATION=1`                                                                                                |
-| **Change Button Pins** (UP/BOOT=4, DOWN/PWR=5)        | `-DCONFIG_BOARD_BTN_UP_PIN=4 -DCONFIG_BOARD_BTN_DOWN_PIN=5`                                                                        |
-| **Change E-Paper SPI Pins**                           | `-DCONFIG_BOARD_EPD_DC_PIN=14 -DCONFIG_BOARD_EPD_CS_PIN=15`                                                                        |
-| **Configure Status LED** (Red=1, Green=2, Active-Low) | `-DCONFIG_BOARD_LED_RED_PIN=1 -DCONFIG_BOARD_LED_GREEN_PIN=2 -DCONFIG_BOARD_LED_ACTIVE_LEVEL=0`                                    |
-| **Combine Multiple Settings**                         | `-DCONFIG_BOARD_DISPLAY_WIDTH=296 -DCONFIG_BOARD_DISPLAY_HEIGHT=128 -DCONFIG_BOARD_DISPLAY_ROTATION=1 -DCONFIG_BOARD_BTN_UP_PIN=4` |
+You can override individual macros on top of `waveshare_154/board_def.h` (`-DBOARD_*`) or bypass `waveshare_154/board_def.h` completely (`-DCONFIG_BOARD_PROFILE_CUSTOM=y -DCONFIG_BOARD_*`):
+
+| Custom Requirement                                    | `extra_idf_args` Value                                                                                 |
+| :---------------------------------------------------- | :----------------------------------------------------------------------------------------------------- |
+| **Change Screen Resolution** (e.g. 250 x 122)         | `-DBOARD_DISPLAY_WIDTH=250 -DBOARD_DISPLAY_HEIGHT=122`                                                 |
+| **Change Screen Orientation** (90 deg landscape)      | `-DBOARD_DISPLAY_ROTATION=1`                                                                           |
+| **Change Button Pins** (UP/BOOT=4, DOWN/PWR=5)        | `-DBOARD_BTN_UP_PIN=4 -DBOARD_BTN_DOWN_PIN=5`                                                          |
+| **Change E-Paper SPI Pins**                           | `-DBOARD_EPD_DC_PIN=14 -DBOARD_EPD_CS_PIN=15`                                                          |
+| **Configure Status LED** (Red=1, Green=2, Active-Low) | `-DBOARD_LED_RED_PIN=1 -DBOARD_LED_GREEN_PIN=2 -DBOARD_LED_ACTIVE_LEVEL=0`                             |
+| **Disable MicroSD / Power Latch**                     | `-DBOARD_SDMMC_CLK_PIN=-1 -DBOARD_PWR_LATCH_PIN=-1`                                                    |
+| **Use a Custom `board_def.h` File**                   | `-DBOARD_DEF_HEADER="\"../../boards/custom_213/board_def.h\""`                                         |
+| **Combine Multiple Settings**                         | `-DBOARD_DISPLAY_WIDTH=296 -DBOARD_DISPLAY_HEIGHT=128 -DBOARD_DISPLAY_ROTATION=1 -DBOARD_BTN_UP_PIN=4` |
 
 ---
 
@@ -233,12 +289,16 @@ Commands are written to the Control Characteristic. Responses and operation stat
 
 | OpCode | Name                             | Direction        | Request Payload                        | Response Payload                                                                         | Purpose                                                                       |
 | :----- | :------------------------------- | :--------------- | :------------------------------------- | :--------------------------------------------------------------------------------------- | :---------------------------------------------------------------------------- |
-| `0x01` | `BLE_SYNC_OP_LIST_BOOKS`         | Client -> Server | `[0x01]`                               | `[0x01, target, size(4B LE), name...]` / EOF `[0x01, 0xFF]`                              | List all files in storage                                                     |
+| `0x01` | `BLE_SYNC_OP_LIST_BOOKS`         | Client -> Server | `[0x01]`                               | `[0x01, target, size(4B LE), name\0, offset(4B LE), bm_cnt(1B)]` / EOF `[0x01, 0xFF]`    | List all files in storage with saved reading offset and bookmark count        |
 | `0x02` | `BLE_SYNC_OP_START_UPLOAD`       | Client -> Server | `[0x02, target, size(4B LE), name...]` | `[0x02, status]`                                                                         | Prepare file reception                                                        |
 | `0x03` | `BLE_SYNC_OP_FINISH_UPLOAD`      | Client -> Server | `[0x03]`                               | `[0x03, status]`                                                                         | Finalize file upload and close file                                           |
-| `0x04` | `BLE_SYNC_OP_DELETE_BOOK`        | Client -> Server | `[0x04, target, name...]`              | `[0x04, status]`                                                                         | Delete book from target storage                                               |
+| `0x04` | `BLE_SYNC_OP_DELETE_BOOK`        | Client -> Server | `[0x04, target, name...]`              | `[0x04, status]`                                                                         | Delete book and its `.bmk` bookmark sidecar from target storage               |
 | `0x05` | `BLE_SYNC_OP_ABORT_UPLOAD`       | Client -> Server | `[0x05]`                               | `[0x05, status]`                                                                         | Abort active upload and cleanup temp file                                     |
 | `0x06` | `BLE_SYNC_OP_SET_STORAGE_TARGET` | Client -> Server | `[0x06, target]`                       | `[0x06, status]`                                                                         | Switch active storage (`0`: MicroSD, `1`: Flash)                              |
+| `0x07` | `BLE_SYNC_OP_GET_BOOKMARKS`      | Client -> Server | `[0x07, target, name...]`              | `[0x07, status, offset(4B LE), count, bm0(4B LE)...]`                                    | Query saved reading offset and bookmark byte offsets (`uint32_le[]`) for book |
+| `0x08` | `BLE_SYNC_OP_DELETE_BOOKMARK`    | Client -> Server | `[0x08, target, index, name...]`       | `[0x08, status, count]`                                                                  | Delete bookmark at `index` (or `0xFF` to clear all bookmarks for book)        |
+| `0x09` | `BLE_SYNC_OP_ADD_BOOKMARK`       | Client -> Server | `[0x09, target, offset(4B LE), name…]` | `[0x09, status, count]`                                                                  | Add a bookmark at `offset` (`uint32_le`) for book                             |
+| `0x0A` | `BLE_SYNC_OP_SET_BOOK_OFFSET`    | Client -> Server | `[0x0A, target, offset(4B LE), name…]` | `[0x0A, status, offset(4B LE)]`                                                          | Set saved reading position (`byte_offset`, `uint32_le`) for book              |
 | `0x10` | `BLE_SYNC_OP_SET_FONT`           | Client -> Server | `[0x10, font_id]`                      | `[0x10, status]`                                                                         | Set font size (`0`: 16px, `1`: 12px)                                          |
 | `0x12` | `BLE_SYNC_OP_FORCE_REFRESH`      | Client -> Server | `[0x12]`                               | `[0x12, status]`                                                                         | Trigger manual full screen refresh                                            |
 | `0x13` | `BLE_SYNC_OP_SET_SLEEP_TIMEOUT`  | Client -> Server | `[0x13, timeout(2B LE)]`               | `[0x13, status]`                                                                         | Configure sleep inactivity timeout in seconds                                 |
