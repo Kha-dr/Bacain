@@ -33,6 +33,12 @@ static int s_menu_index = 0;
 static int s_book_index = 0;
 static int s_bookmark_index = 0;
 static int64_t s_last_activity_us = 0;
+static int64_t s_ble_unconnected_since_us = 0;
+static bool s_ble_headsup_shown = false;
+
+#define BLE_SYNC_UNCONNECTED_TIMEOUT_SEC 60
+#define BLE_SYNC_HEADSUP_REMAINING_SEC   20
+#define BLE_SYNC_HEADSUP_AT_SEC          (BLE_SYNC_UNCONNECTED_TIMEOUT_SEC - BLE_SYNC_HEADSUP_REMAINING_SEC)
 
 RTC_DATA_ATTR static reader_view_t s_rtc_last_view = VIEW_MENU;
 RTC_DATA_ATTR static int s_rtc_menu_index = 0;
@@ -330,8 +336,10 @@ void app_main(void) {
 
             case VIEW_BLE_SYNC:
                 s_current_view = VIEW_BLE_SYNC;
+                s_ble_unconnected_since_us = esp_timer_get_time();
+                s_ble_headsup_shown = false;
                 ble_sync_start();
-                reader_ui_render_ble_sync(ble_sync_is_connected(), ble_sync_get_bytes_received());
+                reader_ui_render_ble_sync(ble_sync_is_connected(), ble_sync_get_bytes_received(), NULL);
                 break;
 
             default:
@@ -360,7 +368,23 @@ void app_main(void) {
     button_event_t evt;
     for (;;) {
         TickType_t wait_ticks = pdMS_TO_TICKS(5000);
-        if (s_current_view != VIEW_BLE_SYNC) {
+        if (s_current_view == VIEW_BLE_SYNC) {
+            if (ble_sync_is_connected()) {
+                s_ble_unconnected_since_us = esp_timer_get_time();
+                s_ble_headsup_shown = false;
+            } else {
+                int64_t elapsed_us = esp_timer_get_time() - s_ble_unconnected_since_us;
+                int64_t headsup_us = (int64_t)BLE_SYNC_HEADSUP_AT_SEC * 1000000LL;
+                int64_t timeout_us = (int64_t)BLE_SYNC_UNCONNECTED_TIMEOUT_SEC * 1000000LL;
+                int64_t next_target_us = s_ble_headsup_shown ? timeout_us : headsup_us;
+                int64_t remaining_ms = (next_target_us - elapsed_us) / 1000LL;
+                if (remaining_ms <= 0) {
+                    wait_ticks = 0;
+                } else if (remaining_ms < 5000) {
+                    wait_ticks = pdMS_TO_TICKS(remaining_ms);
+                }
+            }
+        } else {
             uint16_t timeout_sec = ble_sync_get_sleep_timeout();
             if (timeout_sec > 0) {
                 int64_t elapsed_us = esp_timer_get_time() - s_last_activity_us;
@@ -386,7 +410,9 @@ void app_main(void) {
                 if (s_current_view == VIEW_READING) {
                     reader_ui_render_reading_force_full();
                 } else if (s_current_view == VIEW_BLE_SYNC) {
-                    reader_ui_render_ble_sync(ble_sync_is_connected(), ble_sync_get_bytes_received());
+                    s_ble_unconnected_since_us = esp_timer_get_time();
+                    s_ble_headsup_shown = false;
+                    reader_ui_render_ble_sync(ble_sync_is_connected(), ble_sync_get_bytes_received(), NULL);
                 } else if (s_current_view == VIEW_BOOKMARKS) {
                     reader_ui_render_bookmarks(s_bookmark_index);
                 } else if (s_current_view == VIEW_MENU) {
@@ -469,8 +495,10 @@ void app_main(void) {
                         } else if (s_menu_index == 3) { // Sync BLE
                             book_library_scan();
                             s_current_view = VIEW_BLE_SYNC;
+                            s_ble_unconnected_since_us = esp_timer_get_time();
+                            s_ble_headsup_shown = false;
                             ble_sync_start();
-                            reader_ui_render_ble_sync(ble_sync_is_connected(), ble_sync_get_bytes_received());
+                            reader_ui_render_ble_sync(ble_sync_is_connected(), ble_sync_get_bytes_received(), NULL);
                         } else if (s_menu_index == 4) { // Nav Hints Screen
                             s_current_view = VIEW_NAV_HINTS;
                             reader_ui_render_nav_hints();
@@ -532,6 +560,12 @@ void app_main(void) {
                         load_settings(true);
                         s_current_view = VIEW_MENU;
                         reader_ui_render_menu(s_menu_index);
+                    } else {
+                        s_ble_unconnected_since_us = esp_timer_get_time();
+                        if (s_ble_headsup_shown) {
+                            s_ble_headsup_shown = false;
+                            reader_ui_render_ble_sync(ble_sync_is_connected(), ble_sync_get_bytes_received(), NULL);
+                        }
                     }
                     break;
 
@@ -587,6 +621,26 @@ void app_main(void) {
 
         if (s_current_view == VIEW_BLE_SYNC) {
             s_last_activity_us = esp_timer_get_time();
+            if (ble_sync_is_connected()) {
+                s_ble_unconnected_since_us = s_last_activity_us;
+                s_ble_headsup_shown = false;
+            } else {
+                int64_t unconnected_sec = (s_last_activity_us - s_ble_unconnected_since_us) / 1000000LL;
+                if (unconnected_sec >= BLE_SYNC_UNCONNECTED_TIMEOUT_SEC) {
+                    ESP_LOGI(TAG, "BLE Sync unconnected for %llds. Exiting to menu...", unconnected_sec);
+                    ble_sync_stop();
+                    book_library_invalidate_cache();
+                    book_library_scan();
+                    load_settings(true);
+                    s_current_view = VIEW_MENU;
+                    s_last_activity_us = esp_timer_get_time();
+                    reader_ui_render_menu(s_menu_index);
+                } else if (!s_ble_headsup_shown && unconnected_sec >= BLE_SYNC_HEADSUP_AT_SEC) {
+                    s_ble_headsup_shown = true;
+                    ESP_LOGI(TAG, "BLE Sync unconnected for %llds. Showing 20s heads-up note.", unconnected_sec);
+                    reader_ui_render_ble_sync(false, ble_sync_get_bytes_received(), "No link: Exit in 20s");
+                }
+            }
         } else {
             int64_t elapsed_sec = (esp_timer_get_time() - s_last_activity_us) / 1000000LL;
             uint16_t timeout_sec = ble_sync_get_sleep_timeout();

@@ -50,7 +50,7 @@ void      reader_ui_render_book_list_full(int selected_index);
 void      reader_ui_render_bookmarks(int selected_index);
 void      reader_ui_render_bookmarks_full(int selected_index);
 void      reader_ui_render_nav_hints(void);
-void      reader_ui_render_ble_sync(bool is_connected, uint32_t bytes_received);
+void      reader_ui_render_ble_sync(bool is_connected, uint32_t bytes_received, const char *status_override);
 /**
  * @brief Render splash screen with official BacaIn icon and title/subtitle.
  */

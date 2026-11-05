@@ -672,7 +672,7 @@ static void draw_bacain_icon(int center_x, int top_y) {
     }
 }
 
-void reader_ui_render_ble_sync(bool is_connected, uint32_t bytes_received) {
+void reader_ui_render_ble_sync(bool is_connected, uint32_t bytes_received, const char *status_override) {
     if (!s_canvas) return;
 
     epaper_power_on();
@@ -704,7 +704,9 @@ void reader_ui_render_ble_sync(bool is_connected, uint32_t bytes_received) {
     }
 
     // Connection status below QR code
-    if (is_connected) {
+    if (status_override && status_override[0] != '\0') {
+        draw_centered_string(162, status_override, &Font12);
+    } else if (is_connected) {
         char rx_buf[32];
         snprintf(rx_buf, sizeof(rx_buf), "Rx: %u bytes", (unsigned int)bytes_received);
         draw_centered_string(162, rx_buf, &Font12);
