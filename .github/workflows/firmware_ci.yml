@@ -12,9 +12,14 @@ on:
   workflow_dispatch:
     inputs:
       board_id:
-        description: "Board ID from boards.json"
+        description: "Board ID for artifact naming"
         required: true
         default: "waveshare_154"
+        type: string
+      flash_size:
+        description: "Flash size (4MB, 8MB, 16MB, 32MB)"
+        required: true
+        default: "8MB"
         type: string
       extra_idf_args:
         description: "Extra IDF Build Args / Compiler Macros"
@@ -39,6 +44,7 @@ jobs:
     env:
       EVENT_NAME: ${{ github.event_name }}
       INPUT_BOARD_ID: ${{ inputs.board_id }}
+      INPUT_FLASH_SIZE: ${{ inputs.flash_size }}
       INPUT_EXTRA_ARGS: ${{ inputs.extra_idf_args }}
       INPUT_OUTPUT_BIN: ${{ inputs.output_bin }}
     steps:
@@ -49,7 +55,7 @@ jobs:
         id: set-matrix
         run: |
           if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
-            MATRIX_JSON=$(jq -nc --arg id "$INPUT_BOARD_ID" --arg args "$INPUT_EXTRA_ARGS" --arg bin "$INPUT_OUTPUT_BIN" '[{id: $id, chip: "esp32s3", flash_size: "8MB", output_bin: $bin, extra_args: $args}]')
+            MATRIX_JSON=$(jq -nc --arg id "$INPUT_BOARD_ID" --arg fsize "$INPUT_FLASH_SIZE" --arg args "$INPUT_EXTRA_ARGS" --arg bin "$INPUT_OUTPUT_BIN" '[{id: $id, chip: "esp32s3", flash_size: $fsize, output_bin: $bin, extra_args: $args}]')
           else
             MATRIX_JSON=$(jq -c '[.boards[] | {id: .id, name: .name, chip: .chip, flash_size: .flash_size, output_bin: .output_bin, extra_args: ("-DCONFIG_BOARD_PROFILE_" + (.id | ascii_upcase) + "=y")}]' firmware/boards/boards.json)
           fi
@@ -68,8 +74,9 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJson(needs.prepare-matrix.outputs.matrix) }}
     env:
+      BOARD_ID: ${{ matrix.board.id }}
       CHIP_TARGET: ${{ matrix.board.chip || 'esp32s3' }}
-      FLASH_SIZE: ${{ matrix.board.flash_size || '8MB' }}
+      FLASH_SIZE: ${{ inputs.flash_size || matrix.board.flash_size || '8MB' }}
       EXTRA_IDF_ARGS: ${{ inputs.extra_idf_args || matrix.board.extra_args }}
       FACTORY_BIN: ${{ inputs.output_bin || matrix.board.output_bin }}
     steps:
@@ -97,7 +104,7 @@ jobs:
             . "$IDF_PATH/export.sh"
           fi
 
-          python3 package_firmware.py -o "${FACTORY_BIN}" --chip "${CHIP_TARGET}" --flash-size "${FLASH_SIZE}"
+          python3 package_firmware.py -o "${FACTORY_BIN}" --chip "${CHIP_TARGET}" --board "${BOARD_ID}" --flash-size "${FLASH_SIZE}"
 
       - name: Upload Build Artifacts
         if: github.event_name != 'pull_request'

@@ -738,6 +738,83 @@ const book_info_t *book_library_find_book(const char *filename_or_path) {
     return found;
 }
 
+static void migrate_legacy_state_json(void) {
+    char legacy_path[96];
+    snprintf(legacy_path, sizeof(legacy_path), "%.63s/state.json", s_state_dir);
+    FILE *fp = fopen(legacy_path, "rb");
+    if (!fp) {
+        return;
+    }
+
+    char buf[768];
+    size_t n = fread(buf, 1, sizeof(buf) - 1, fp);
+    fclose(fp);
+    buf[n] = '\0';
+
+    char active_path[BOOK_PATH_MAX_LEN] = {0};
+    const char *p_key = strstr(buf, "\"active_book_path\"");
+    if (p_key) {
+        const char *colon = strchr(p_key + 18, ':');
+        if (colon) {
+            const char *q1 = strchr(colon + 1, '"');
+            if (q1) {
+                q1++;
+                const char *q2 = strchr(q1, '"');
+                if (q2 && (size_t)(q2 - q1) < sizeof(active_path)) {
+                    memcpy(active_path, q1, (size_t)(q2 - q1));
+                    active_path[q2 - q1] = '\0';
+                }
+            }
+        }
+    }
+
+    if (active_path[0] == '\0') {
+        unlink(legacy_path);
+        return;
+    }
+
+    size_t byte_offset = 0;
+    const char *o_key = strstr(buf, "\"byte_offset\"");
+    if (o_key) {
+        const char *colon = strchr(o_key + 13, ':');
+        if (colon) {
+            byte_offset = (size_t)strtoul(colon + 1, NULL, 10);
+        }
+    }
+
+    size_t bookmarks[BOOK_MAX_BOOKMARKS] = {0};
+    size_t bm_count = 0;
+    const char *b_key = strstr(buf, "\"bookmarks\"");
+    if (b_key) {
+        const char *br_open = strchr(b_key + 11, '[');
+        const char *br_close = br_open ? strchr(br_open + 1, ']') : NULL;
+        if (br_open && br_close) {
+            const char *cur = br_open + 1;
+            while (cur < br_close && bm_count < BOOK_MAX_BOOKMARKS) {
+                while (cur < br_close && (*cur == ' ' || *cur == ',' || *cur == '\n' || *cur == '\r' || *cur == '\t')) {
+                    cur++;
+                }
+                if (cur >= br_close || *cur < '0' || *cur > '9') {
+                    break;
+                }
+                char *endp = NULL;
+                unsigned long val = strtoul(cur, &endp, 10);
+                if (endp == cur) {
+                    break;
+                }
+                bookmarks[bm_count++] = (size_t)val;
+                cur = endp;
+            }
+        }
+    }
+
+    save_book_sidecar(active_path, byte_offset, bookmarks, bm_count);
+    save_active_book_record(active_path);
+    unlink(legacy_path);
+    ESP_LOGI(TAG, "Migrated legacy state.json for '%s' (offset=%u, bm=%u)",
+             active_path, (unsigned)byte_offset, (unsigned)bm_count);
+}
+
 esp_err_t book_library_load_state(reading_state_t *state) {
     if (s_mutex == NULL) {
         return ESP_ERR_INVALID_STATE;
@@ -763,6 +840,10 @@ esp_err_t book_library_load_state(reading_state_t *state) {
     memset(&s_reading_state, 0, sizeof(s_reading_state));
 
     FILE *fp = fopen(s_active_file, "rb");
+    if (!fp) {
+        migrate_legacy_state_json();
+        fp = fopen(s_active_file, "rb");
+    }
     if (fp) {
         active_book_record_t rec = {0};
         size_t r = fread(&rec, 1, sizeof(rec), fp);

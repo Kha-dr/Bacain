@@ -141,12 +141,13 @@ python3 package_firmware.py build -o bacain_<board_id>_factory.bin
 
 ### Packaging Script Parameters (`package_firmware.py`)
 
-The packaging script merges build artifacts (`bootloader.bin` at `0x0`, `partition-table.bin` at `0x8000`, `bacain.bin` at `0x20000`) into a single factory binary:
+The packaging script merges build artifacts (`bootloader.bin` at `0x0`, `partition-table.bin` at `0x8000`, `bacain.bin` at `0x10000`) into a single factory binary and resizes the `storage` partition entry (`0x110000..end`) + MD5 checksum to match the board's flash size:
 
 - `build_dir`: Path to build directory (default: `build`).
 - `-o, --output`: Factory binary filename (default: `bacain_factory.bin`).
 - `--chip`: esptool target chip (default: `esp32s3`).
-- `--flash-size`: Flash memory size (default: `8MB`).
+- `--board`: Board ID or name from `boards/boards.json` (used to resolve `flash_size` if `--flash-size` is omitted).
+- `--flash-size`: Flash memory size (`4MB`, `8MB`, `16MB`, `32MB`; resolved from `boards/boards.json` if omitted).
 
 ---
 
@@ -169,6 +170,7 @@ Build custom hardware profiles from the GitHub web interface without modifying `
 3. Click **Run workflow**.
 4. Fill in parameters (pre-filled with `waveshare_154` defaults):
    - **`board_id`**: Identifier used for the uploaded artifact name `bacain-firmware-<board_id>` (default: `waveshare_154`). Does not need to exist in `boards.json`.
+   - **`flash_size`**: Target flash size (`4MB`, `8MB`, `16MB`, `32MB`; default: `8MB`). Automatically scales the `/spiflash` `storage` partition (`3008K` for `4MB`, `7104K` for `8MB`, `15296K` for `16MB`).
    - **`extra_idf_args`**: Compiler macro flags (`-DBOARD_<MACRO>=<val>` or `-DCONFIG_BOARD_<MACRO>=<val>`) to override pins, resolution, rotation, or header path (default: `-DCONFIG_BOARD_PROFILE_WAVESHARE_154=y`).
    - **`output_bin`**: Filename for the merged factory binary (default: `bacain_waveshare_154_factory.bin`).
 5. Click **Run workflow**. Download the `bacain-firmware-<board_id>` artifact zip from the workflow summary after the run finishes.
@@ -287,12 +289,16 @@ Commands are written to the Control Characteristic. Responses and operation stat
 
 | OpCode | Name                             | Direction        | Request Payload                        | Response Payload                                                                         | Purpose                                                                       |
 | :----- | :------------------------------- | :--------------- | :------------------------------------- | :--------------------------------------------------------------------------------------- | :---------------------------------------------------------------------------- |
-| `0x01` | `BLE_SYNC_OP_LIST_BOOKS`         | Client -> Server | `[0x01]`                               | `[0x01, target, size(4B LE), name...]` / EOF `[0x01, 0xFF]`                              | List all files in storage                                                     |
+| `0x01` | `BLE_SYNC_OP_LIST_BOOKS`         | Client -> Server | `[0x01]`                               | `[0x01, target, size(4B LE), name\0, offset(4B LE), bm_cnt(1B)]` / EOF `[0x01, 0xFF]`    | List all files in storage with saved reading offset and bookmark count        |
 | `0x02` | `BLE_SYNC_OP_START_UPLOAD`       | Client -> Server | `[0x02, target, size(4B LE), name...]` | `[0x02, status]`                                                                         | Prepare file reception                                                        |
 | `0x03` | `BLE_SYNC_OP_FINISH_UPLOAD`      | Client -> Server | `[0x03]`                               | `[0x03, status]`                                                                         | Finalize file upload and close file                                           |
-| `0x04` | `BLE_SYNC_OP_DELETE_BOOK`        | Client -> Server | `[0x04, target, name...]`              | `[0x04, status]`                                                                         | Delete book from target storage                                               |
+| `0x04` | `BLE_SYNC_OP_DELETE_BOOK`        | Client -> Server | `[0x04, target, name...]`              | `[0x04, status]`                                                                         | Delete book and its `.bmk` bookmark sidecar from target storage               |
 | `0x05` | `BLE_SYNC_OP_ABORT_UPLOAD`       | Client -> Server | `[0x05]`                               | `[0x05, status]`                                                                         | Abort active upload and cleanup temp file                                     |
 | `0x06` | `BLE_SYNC_OP_SET_STORAGE_TARGET` | Client -> Server | `[0x06, target]`                       | `[0x06, status]`                                                                         | Switch active storage (`0`: MicroSD, `1`: Flash)                              |
+| `0x07` | `BLE_SYNC_OP_GET_BOOKMARKS`      | Client -> Server | `[0x07, target, name...]`              | `[0x07, status, offset(4B LE), count, bm0(4B LE)...]`                                    | Query saved reading offset and bookmark byte offsets (`uint32_le[]`) for book |
+| `0x08` | `BLE_SYNC_OP_DELETE_BOOKMARK`    | Client -> Server | `[0x08, target, index, name...]`       | `[0x08, status, count]`                                                                  | Delete bookmark at `index` (or `0xFF` to clear all bookmarks for book)        |
+| `0x09` | `BLE_SYNC_OP_ADD_BOOKMARK`       | Client -> Server | `[0x09, target, offset(4B LE), name…]` | `[0x09, status, count]`                                                                  | Add a bookmark at `offset` (`uint32_le`) for book                             |
+| `0x0A` | `BLE_SYNC_OP_SET_BOOK_OFFSET`    | Client -> Server | `[0x0A, target, offset(4B LE), name…]` | `[0x0A, status, offset(4B LE)]`                                                          | Set saved reading position (`byte_offset`, `uint32_le`) for book              |
 | `0x10` | `BLE_SYNC_OP_SET_FONT`           | Client -> Server | `[0x10, font_id]`                      | `[0x10, status]`                                                                         | Set font size (`0`: 16px, `1`: 12px)                                          |
 | `0x12` | `BLE_SYNC_OP_FORCE_REFRESH`      | Client -> Server | `[0x12]`                               | `[0x12, status]`                                                                         | Trigger manual full screen refresh                                            |
 | `0x13` | `BLE_SYNC_OP_SET_SLEEP_TIMEOUT`  | Client -> Server | `[0x13, timeout(2B LE)]`               | `[0x13, status]`                                                                         | Configure sleep inactivity timeout in seconds                                 |
