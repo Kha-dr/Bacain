@@ -20,6 +20,7 @@ Developed on [Waveshare ESP32-S3-ePaper-1.54](https://github.com/waveshareteam/E
 - **Formats**: Reads `.txt`, `.epub`, and `.fb2` files.
 - **Storage**: Internal flash with optional MicroSD.
 - **Power**: 20s auto-sleep, instant page turn on wake.
+- **Al-Quran (Optional)**: Offline Mushaf and translation reader (see [firmware/Al-Quran_Reader.md](firmware/Al-Quran_Reader.md)).
 
 ## Controls
 
