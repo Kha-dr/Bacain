@@ -210,6 +210,13 @@ function formatKb(kb) {
 
 let logCount = 0;
 function log(msg, type = 'info') {
+  if (type === 'error') {
+    console.error(`[BacaIn] ${msg}`);
+  } else if (type === 'warning' || type === 'warn') {
+    console.warn(`[BacaIn] ${msg}`);
+  } else {
+    console.log(`[BacaIn] ${msg}`);
+  }
   const modalComponent = document.getElementById('settingsModal');
   if (modalComponent && typeof modalComponent.appendLog === 'function') {
     modalComponent.appendLog(msg, type);
@@ -251,6 +258,11 @@ function log(msg, type = 'info') {
 }
 
 function showToast(message, type = 'info', duration = 3500) {
+  if (type === 'error') {
+    console.error(`[BacaIn Toast] ${message}`);
+  } else if (type === 'warning' || type === 'warn') {
+    console.warn(`[BacaIn Toast] ${message}`);
+  }
   const toast = document.createElement('div');
   toast.className = `toast ${type}`;
   toast.textContent = message;
@@ -1422,6 +1434,18 @@ async function processUploadQueue() {
   }
 }
 
+function describeUploadErrorStatus(status, rxBytes, expectedBytes) {
+  switch (status) {
+    case 0x02:
+    case 0x07: return 'Target storage not mounted or unavailable (0x07)';
+    case 0x03: return 'BLE chunk sequence mismatch / dropped packet (0x03)';
+    case 0x04: return 'Device ringbuffer overflow / storage write backpressure (0x04)';
+    case 0x05: return 'Flash/SD write failed or storage full (0x05)';
+    case 0x06: return `File size mismatch: device received ${rxBytes ?? '?'} of ${expectedBytes} bytes (0x06)`;
+    default:   return `Device error status 0x${Number(status).toString(16).padStart(2, '0')}`;
+  }
+}
+
 async function executeFileUpload(file) {
   if (!controlChar || !dataChar) {
     showToast('Upload failed: Bluetooth connection lost', 'error');
@@ -1459,7 +1483,7 @@ async function executeFileUpload(file) {
     const startResp = await startRespPromise;
 
     if (startResp.status !== 0) {
-      throw new Error(`Device rejected upload start (error code: ${startResp.status})`);
+      throw new Error(`Device rejected upload start: ${describeUploadErrorStatus(startResp.status, 0, fileSize)}`);
     }
 
     log(`Device accepted upload. Beginning chunk transfer (Chunk size: ${CHUNK_SIZE} B)...`, 'info');
@@ -1485,8 +1509,10 @@ async function executeFileUpload(file) {
       pktView.setUint16(0, seqId & 0xFFFF, true);
       packet.set(chunk, 2);
 
-      // Write chunk without response
-      if (dataChar.writeValueWithoutResponse) {
+      const isSyncChunk = ((seqId & 7) === 7) || (offset + CHUNK_SIZE >= fileBytes.length);
+      if (isSyncChunk && dataChar.writeValueWithResponse) {
+        await dataChar.writeValueWithResponse(packet);
+      } else if (dataChar.writeValueWithoutResponse) {
         await dataChar.writeValueWithoutResponse(packet);
       } else {
         await dataChar.writeValue(packet);
@@ -1507,26 +1533,33 @@ async function executeFileUpload(file) {
     // Step 3: Send FINISH_UPLOAD (0x03)
     log('All chunks sent. Sending FINISH_UPLOAD (0x03)...', 'info');
     const finishPacket = new Uint8Array([OPCODES.FINISH_UPLOAD]);
-    const finishRespPromise = waitForControlResponse(OPCODES.FINISH_UPLOAD, 10000);
+    const finishRespPromise = waitForControlResponse(OPCODES.FINISH_UPLOAD, 15000);
     await controlChar.writeValueWithResponse(finishPacket);
     const finishResp = await finishRespPromise;
 
     if (finishResp.status !== 0) {
-      throw new Error(`Device failed to finish upload (error code: ${finishResp.status})`);
+      const rxBytes = (finishResp.dataView && finishResp.dataView.byteLength >= 6) ? finishResp.dataView.getUint32(2, true) : null;
+      throw new Error(`Device failed to finish upload: ${describeUploadErrorStatus(finishResp.status, rxBytes, fileSize)}`);
     }
 
     const elapsedTotal = ((performance.now() - startTime) / 1000).toFixed(1);
     const avgSpeed = (fileSize / 1024 / (elapsedTotal || 1)).toFixed(1);
     log(`Upload complete: "${fileName}" in ${elapsedTotal}s (avg ${avgSpeed} KB/s)`, 'success');
     showToast(`Uploaded "${fileName}" successfully!`, 'success');
+    document.dispatchEvent(new CustomEvent('quran-upload-status', { detail: { ok: true, fileName, fileSize } }));
+    if (fileName.toLowerCase() === 'quran.bqm') {
+      await requestQuranState();
+    }
 
     // Refresh book list & storage stats
     await queryBooksList();
     await readDeviceStatus();
 
   } catch (err) {
-    log(`Upload Error: ${err.message}`, 'error');
-    showToast(`Upload failed: ${err.message}`, 'error');
+    console.error('[BacaIn Upload Failed]', fileName, err);
+    log(`Upload Error ("${fileName}"): ${err.message}`, 'error');
+    showToast(`Upload failed: ${err.message}`, 'error', 6000);
+    document.dispatchEvent(new CustomEvent('quran-upload-status', { detail: { ok: false, fileName, error: err.message } }));
     if (controlChar && isConnected) {
       try {
         const abortPacket = new Uint8Array([OPCODES.ABORT_UPLOAD]);
