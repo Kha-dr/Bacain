@@ -16,5 +16,5 @@ idf_component_register(
         nvs_flash
         status_led
         board_config
-        quran_reader
+        mushaf_reader
 )

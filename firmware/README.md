@@ -47,8 +47,8 @@ Build any board cataloged in `firmware/boards/boards.json` by specifying `BOARD=
 # Build standard board (waveshare_154)
 docker compose run --rm firmware
 
-# Build Al-Quran Edition
-BOARD=waveshare_154_alquran docker compose run --rm firmware
+# Build Mushaf Edition
+BOARD=waveshare_154_mushaf docker compose run --rm firmware
 ```
 
 You can also override build arguments or factory binary filenames directly without modifying source files:
@@ -126,11 +126,11 @@ docker compose run --rm firmware
 Any board defined in `firmware/boards/boards.json` can be built directly by passing its `id` via `BOARD=<id>`:
 
 ```bash
-# Build Al-Quran Edition (inside firmware/)
-BOARD=waveshare_154_alquran docker compose run --rm firmware
+# Build Mushaf Edition (inside firmware/)
+BOARD=waveshare_154_mushaf docker compose run --rm firmware
 
 # Or from repository root:
-docker compose -f firmware/compose.yml run --rm -e BOARD=waveshare_154_alquran firmware
+docker compose -f firmware/compose.yml run --rm -e BOARD=waveshare_154_mushaf firmware
 ```
 
 The `firmware` service in `compose.yml` automatically executes incremental compilation and packaging:
@@ -140,7 +140,7 @@ The `firmware` service in `compose.yml` automatically executes incremental compi
 3. Tracks `/project/build/.board_id`: automatically clears `CMakeCache.txt` when switching `BOARD` profiles so compiler definitions take effect, while preserving cached object files for fast incremental rebuilds of the same board.
 4. Compiles the project incrementally: `idf.py -B /project/build ${EXTRA_IDF_ARGS} build`.
 5. Packages the release binary: `python3 package_firmware.py /project/build -o "${FACTORY_BIN}" --chip "${CHIP}" --board "${BOARD}"`.
-6. Outputs the factory binary at `build/${FACTORY_BIN}` (e.g. `build/bacain_waveshare_154.bin` or `build/bacain_waveshare_154_alquran.bin`).
+6. Outputs the factory binary at `build/${FACTORY_BIN}` (e.g. `build/bacain_waveshare_154.bin` or `build/bacain_waveshare_154_mushaf.bin`).
 
 For a clean rebuild from scratch, run the `clean-build` service:
 
@@ -149,7 +149,7 @@ For a clean rebuild from scratch, run the `clean-build` service:
 docker compose run --rm clean-build
 
 # Clean build for specific board
-BOARD=waveshare_154_alquran docker compose run --rm clean-build
+BOARD=waveshare_154_mushaf docker compose run --rm clean-build
 ```
 
 The `clean-build` service deletes `/project/build`, initializes the target chip (`idf.py -B /project/build ${EXTRA_IDF_ARGS} set-target ${CHIP}`), compiles the project, writes `/project/build/.board_id`, and packages the factory binary.
@@ -203,8 +203,6 @@ Build custom hardware profiles from the GitHub web interface without modifying `
    - **`output_bin`**: Filename for the merged factory binary (default: `bacain_waveshare_154.bin`).
 5. Click **Run workflow**. Download the `bacain-firmware-<board_id>` artifact zip from the workflow summary after the run finishes.
 
-> [!warning] i haven't test it yet for other boards
-
 #### Example Compiler Flags for `extra_idf_args`:
 
 You can override individual macros on top of `waveshare_154/board_def.h` (`-DBOARD_*`) or bypass `waveshare_154/board_def.h` completely (`-DBOARD_PROFILE=custom -DBOARD_*`):
@@ -218,7 +216,7 @@ You can override individual macros on top of `waveshare_154/board_def.h` (`-DBOA
 | **Configure Status LED** (Red=1, Green=2, Active-Low) | `-DBOARD_LED_RED_PIN=1 -DBOARD_LED_GREEN_PIN=2 -DBOARD_LED_ACTIVE_LEVEL=0`                             |
 | **Disable MicroSD / Power Latch**                     | `-DBOARD_SDMMC_CLK_PIN=-1 -DBOARD_PWR_LATCH_PIN=-1`                                                    |
 | **Use a Custom `board_def.h` File**                   | `-DBOARD_DEF_HEADER="\"../../boards/custom_213/board_def.h\""`                                         |
-| **Enable Al-Quran Feature**                           | `-DBOARD_ALQURAN_ENABLE=1`                                                                             |
+| **Enable Mushaf Feature**                             | `-DBOARD_MUSHAF_ENABLE=1`                                                                              |
 | **Combine Multiple Settings**                         | `-DBOARD_DISPLAY_WIDTH=296 -DBOARD_DISPLAY_HEIGHT=128 -DBOARD_DISPLAY_ROTATION=1 -DBOARD_BTN_UP_PIN=4` |
 
 ---
@@ -321,15 +319,15 @@ Commands are written to the Control Characteristic. Responses and operation stat
 | OpCode | Name                             | Direction        | Request Payload                        | Response Payload                                                                         | Purpose                                                                                        |
 | :----- | :------------------------------- | :--------------- | :------------------------------------- | :--------------------------------------------------------------------------------------- | :--------------------------------------------------------------------------------------------- |
 | `0x01` | `BLE_SYNC_OP_LIST_BOOKS`         | Client -> Server | `[0x01]`                               | `[0x01, target, size(4B LE), name\0, offset(4B LE), bm_cnt(1B)]` / EOF `[0x01, 0xFF]`    | List all files in storage with saved reading offset and bookmark count                         |
-| `0x02` | `BLE_SYNC_OP_START_UPLOAD`       | Client -> Server | `[0x02, target, size(4B LE), name...]` | `[0x02, status]`                                                                         | Prepare file reception                                                                         |
+| `0x02` | `BLE_SYNC_OP_START_UPLOAD`       | Client -> Server | `[0x02, target, size(4B LE), name]`    | `[0x02, status]`                                                                         | Prepare file reception                                                                         |
 | `0x03` | `BLE_SYNC_OP_FINISH_UPLOAD`      | Client -> Server | `[0x03]`                               | `[0x03, status]`                                                                         | Finalize file upload and close file                                                            |
-| `0x04` | `BLE_SYNC_OP_DELETE_BOOK`        | Client -> Server | `[0x04, target, name...]`              | `[0x04, status]`                                                                         | Delete book and its `.bmk` bookmark sidecar from target storage                                |
+| `0x04` | `BLE_SYNC_OP_DELETE_BOOK`        | Client -> Server | `[0x04, target, name]`                 | `[0x04, status]`                                                                         | Delete book and its `.bmk` bookmark sidecar from target storage                                |
 | `0x05` | `BLE_SYNC_OP_ABORT_UPLOAD`       | Client -> Server | `[0x05]`                               | `[0x05, status]`                                                                         | Abort active upload and cleanup temp file                                                      |
 | `0x06` | `BLE_SYNC_OP_SET_STORAGE_TARGET` | Client -> Server | `[0x06, target]`                       | `[0x06, status]`                                                                         | Switch active storage (`0`: MicroSD, `1`: Flash)                                               |
-| `0x07` | `BLE_SYNC_OP_GET_BOOKMARKS`      | Client -> Server | `[0x07, target, name...]`              | `[0x07, status, offset(4B LE), count, bm0(4B LE)...]`                                    | Query saved reading offset and bookmark byte offsets (`uint32_le[]`) for book                  |
-| `0x08` | `BLE_SYNC_OP_DELETE_BOOKMARK`    | Client -> Server | `[0x08, target, index, name...]`       | `[0x08, status, count]`                                                                  | Delete bookmark at `index` (or `0xFF` to clear all bookmarks for book)                         |
-| `0x09` | `BLE_SYNC_OP_ADD_BOOKMARK`       | Client -> Server | `[0x09, target, offset(4B LE), name…]` | `[0x09, status, count]`                                                                  | Add a bookmark at `offset` (`uint32_le`) for book                                              |
-| `0x0A` | `BLE_SYNC_OP_SET_BOOK_OFFSET`    | Client -> Server | `[0x0A, target, offset(4B LE), name…]` | `[0x0A, status, offset(4B LE)]`                                                          | Set saved reading position (`byte_offset`, `uint32_le`) for book                               |
+| `0x07` | `BLE_SYNC_OP_GET_BOOKMARKS`      | Client -> Server | `[0x07, target, name]`                 | `[0x07, status, offset(4B LE), count, bookmarks(4B LE)[]]`                              | Query saved reading offset and bookmark byte offsets (`uint32_le[]`) for book                  |
+| `0x08` | `BLE_SYNC_OP_DELETE_BOOKMARK`    | Client -> Server | `[0x08, target, index, name]`          | `[0x08, status, count]`                                                                  | Delete bookmark at `index` (or `0xFF` to clear all bookmarks for book)                         |
+| `0x09` | `BLE_SYNC_OP_ADD_BOOKMARK`       | Client -> Server | `[0x09, target, offset(4B LE), name]`  | `[0x09, status, count]`                                                                  | Add a bookmark at `offset` (`uint32_le`) for book                                              |
+| `0x0A` | `BLE_SYNC_OP_SET_BOOK_OFFSET`    | Client -> Server | `[0x0A, target, offset(4B LE), name]`  | `[0x0A, status, offset(4B LE)]`                                                          | Set saved reading position (`byte_offset`, `uint32_le`) for book                               |
 | `0x10` | `BLE_SYNC_OP_SET_FONT`           | Client -> Server | `[0x10, font_id]`                      | `[0x10, status]`                                                                         | Set font size (`0`: 16px, `1`: 12px)                                                           |
 | `0x12` | `BLE_SYNC_OP_FORCE_REFRESH`      | Client -> Server | `[0x12]`                               | `[0x12, status]`                                                                         | Trigger manual full screen refresh                                                             |
 | `0x13` | `BLE_SYNC_OP_SET_SLEEP_TIMEOUT`  | Client -> Server | `[0x13, timeout(2B LE)]`               | `[0x13, status]`                                                                         | Configure sleep inactivity timeout in seconds                                                  |
@@ -339,8 +337,8 @@ Commands are written to the Control Characteristic. Responses and operation stat
 | `0x17` | `BLE_SYNC_OP_SET_BUTTON_INVERT`  | Client -> Server | `[0x17, invert]`                       | `[0x17, status]`                                                                         | Invert UP/DOWN button assignments (`0`: normal, `1`: inverted)                                 |
 | `0x18` | `BLE_SYNC_OP_SET_STATUS_LED`     | Client -> Server | `[0x18, enabled]`                      | `[0x18, status]`                                                                         | Enable or disable status LED indications (`0`: off, `1`: on)                                   |
 | `0x19` | `BLE_SYNC_OP_GET_CONFIG`         | Client -> Server | `[0x19]`                               | `[0x19, status, font_size, nav_hints, rotation, btn_invert, status_led, storage_target]` | Query active on-device and NVS configuration to synchronize PWA UI on connect                  |
-| `0x20` | `BLE_SYNC_OP_GET_QURAN_STATE`    | Client -> Server | `[0x20]`                               | `[0x20, status, started, surah, ayah(2B LE), layer, count, bookmarks[0..7]]`             | Query Al-Quran reading cursor and 8 bookmarks (see [Al-Quran_Reader.md](./Al-Quran_Reader.md)) |
-| `0x21` | `BLE_SYNC_OP_SET_QURAN_STATE`    | Client -> Server | `[0x21, sub, data]`                    | `[0x21, status]`                                                                         | Mutate Al-Quran cursor (`sub=1`) or bookmarks (`sub=2`) and commit to NVS                      |
+| `0x20` | `BLE_SYNC_OP_GET_MUSHAF_STATE`   | Client -> Server | `[0x20]`                               | `[0x20, status, started, surah, ayah(2B LE), layer, count, bookmarks[0..7]]`             | Query Mushaf reading cursor and 8 bookmarks (see [Mushaf_Reader.md](./Mushaf_Reader.md))  |
+| `0x21` | `BLE_SYNC_OP_SET_MUSHAF_STATE`   | Client -> Server | `[0x21, sub, data]`                    | `[0x21, status]`                                                                         | Mutate Mushaf cursor (`sub=1`) or bookmarks (`sub=2`) and commit to NVS                       |
 
 ---
 

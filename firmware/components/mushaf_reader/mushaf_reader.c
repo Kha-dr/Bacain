@@ -1,13 +1,13 @@
-#include "quran_reader.h"
+#include "mushaf_reader.h"
 
 _Static_assert(sizeof(bqm_header_t) == 64, "bqm_header_t must be 64 bytes");
 _Static_assert(sizeof(bqm_surah_entry_t) == 24, "bqm_surah_entry_t must be 24 bytes");
 _Static_assert(sizeof(bqm_ayah_entry_t) == 24, "bqm_ayah_entry_t must be 24 bytes");
 _Static_assert(sizeof(bqm_word_sprite_t) == 8, "bqm_word_sprite_t must be 8 bytes");
 _Static_assert(sizeof(bqm_placed_word_t) == 6, "bqm_placed_word_t must be 6 bytes");
-_Static_assert(sizeof(quran_bookmark_t) == 4, "quran_bookmark_t must be 4 bytes");
+_Static_assert(sizeof(mushaf_bookmark_t) == 4, "mushaf_bookmark_t must be 4 bytes");
 
-#if CONFIG_BOARD_ALQURAN_ENABLE
+#if CONFIG_BOARD_MUSHAF_ENABLE || BOARD_MUSHAF_ENABLE
 
 #include <stdio.h>
 #include <string.h>
@@ -19,15 +19,15 @@ _Static_assert(sizeof(quran_bookmark_t) == 4, "quran_bookmark_t must be 4 bytes"
 #include "GUI_Paint.h"
 #include "fonts.h"
 
-#define TAG "quran_reader"
-#define QURAN_NVS_NAMESPACE "quran"
-#define QURAN_NVS_KEY_STATE "state"
+#define TAG "mushaf_reader"
+#define MUSHAF_NVS_NAMESPACE "mushaf"
+#define MUSHAF_NVS_KEY_STATE "state"
 
 static bqm_header_t s_header;
 static bool s_has_bqm = false;
 static char s_bqm_path[64] = {0};
-static bqm_surah_entry_t s_surahs[QURAN_TOTAL_SURAHS];
-static quran_state_t s_state;
+static bqm_surah_entry_t s_surahs[MUSHAF_TOTAL_SURAHS];
+static mushaf_state_t s_state;
 
 static bool try_load_bqm(const char *path) {
     FILE *fp = fopen(path, "rb");
@@ -45,8 +45,8 @@ static bool try_load_bqm(const char *path) {
         hdr.version != BQM_VERSION ||
         hdr.display_width != BOARD_DISPLAY_WIDTH ||
         hdr.display_height != BOARD_DISPLAY_HEIGHT ||
-        hdr.total_surahs != QURAN_TOTAL_SURAHS ||
-        hdr.total_ayahs != QURAN_TOTAL_AYAHS) {
+        hdr.total_surahs != MUSHAF_TOTAL_SURAHS ||
+        hdr.total_ayahs != MUSHAF_TOTAL_AYAHS) {
         ESP_LOGE(TAG, "BQM header invalid: %s", path);
         fclose(fp);
         return false;
@@ -57,7 +57,7 @@ static bool try_load_bqm(const char *path) {
         return false;
     }
 
-    if (fread(s_surahs, sizeof(bqm_surah_entry_t), QURAN_TOTAL_SURAHS, fp) != QURAN_TOTAL_SURAHS) {
+    if (fread(s_surahs, sizeof(bqm_surah_entry_t), MUSHAF_TOTAL_SURAHS, fp) != MUSHAF_TOTAL_SURAHS) {
         ESP_LOGE(TAG, "Failed to read surah table: %s", path);
         fclose(fp);
         return false;
@@ -73,20 +73,20 @@ static bool try_load_bqm(const char *path) {
     return true;
 }
 
-esp_err_t quran_reader_init(const quran_state_t *rtc_state) {
+esp_err_t mushaf_reader_init(const mushaf_state_t *rtc_state) {
     bool state_loaded = false;
 
-    if (rtc_state != NULL && rtc_state->surah >= 1 && rtc_state->surah <= QURAN_TOTAL_SURAHS) {
-        memcpy(&s_state, rtc_state, sizeof(quran_state_t));
+    if (rtc_state != NULL && rtc_state->surah >= 1 && rtc_state->surah <= MUSHAF_TOTAL_SURAHS) {
+        memcpy(&s_state, rtc_state, sizeof(mushaf_state_t));
         state_loaded = true;
     } else {
         nvs_handle_t nvs_h;
-        esp_err_t err = nvs_open(QURAN_NVS_NAMESPACE, NVS_READONLY, &nvs_h);
+        esp_err_t err = nvs_open(MUSHAF_NVS_NAMESPACE, NVS_READONLY, &nvs_h);
         if (err == ESP_OK) {
-            size_t req_size = sizeof(quran_state_t);
-            err = nvs_get_blob(nvs_h, QURAN_NVS_KEY_STATE, &s_state, &req_size);
-            if (err == ESP_OK && req_size == sizeof(quran_state_t)) {
-                if (s_state.surah >= 1 && s_state.surah <= QURAN_TOTAL_SURAHS) {
+            size_t req_size = sizeof(mushaf_state_t);
+            err = nvs_get_blob(nvs_h, MUSHAF_NVS_KEY_STATE, &s_state, &req_size);
+            if (err == ESP_OK && req_size == sizeof(mushaf_state_t)) {
+                if (s_state.surah >= 1 && s_state.surah <= MUSHAF_TOTAL_SURAHS) {
                     state_loaded = true;
                 }
             }
@@ -98,7 +98,7 @@ esp_err_t quran_reader_init(const quran_state_t *rtc_state) {
         s_state.started = false;
         s_state.surah = 1;
         s_state.ayah = 1;
-        s_state.layer = QURAN_LAYER_MUSHAF;
+        s_state.layer = MUSHAF_LAYER_MUSHAF;
         s_state.subpage = 0;
         s_state.bookmark_count = 0;
         memset(s_state.bookmarks, 0, sizeof(s_state.bookmarks));
@@ -108,8 +108,8 @@ esp_err_t quran_reader_init(const quran_state_t *rtc_state) {
     s_bqm_path[0] = '\0';
 
     static const char * const candidates[] = {
-        SDCARD_MOUNT_POINT "/books/quran.bqm",
-        FLASH_MOUNT_POINT "/books/quran.bqm"
+        FLASH_MOUNT_POINT "/books/mushaf.bqm",
+        SDCARD_MOUNT_POINT "/books/mushaf.bqm"
     };
 
     for (size_t i = 0; i < sizeof(candidates) / sizeof(candidates[0]); i++) {
@@ -119,32 +119,32 @@ esp_err_t quran_reader_init(const quran_state_t *rtc_state) {
     }
 
     if (!s_has_bqm) {
-        ESP_LOGW(TAG, "No valid quran.bqm found");
+        ESP_LOGW(TAG, "No valid mushaf.bqm found");
     }
 
     return ESP_OK;
 }
 
-bool quran_reader_has_bqm(void) {
+bool mushaf_reader_is_available(void) {
     return s_has_bqm;
 }
 
-const bqm_header_t *quran_reader_get_header(void) {
+const bqm_header_t *mushaf_reader_get_header(void) {
     return s_has_bqm ? &s_header : NULL;
 }
 
-const quran_state_t *quran_reader_get_state(void) {
+const mushaf_state_t *mushaf_reader_get_state(void) {
     return &s_state;
 }
 
-esp_err_t quran_reader_save_state(void) {
+esp_err_t mushaf_reader_save_state(void) {
     nvs_handle_t nvs_h;
-    esp_err_t err = nvs_open(QURAN_NVS_NAMESPACE, NVS_READWRITE, &nvs_h);
+    esp_err_t err = nvs_open(MUSHAF_NVS_NAMESPACE, NVS_READWRITE, &nvs_h);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "NVS open failed: %s", esp_err_to_name(err));
         return err;
     }
-    err = nvs_set_blob(nvs_h, QURAN_NVS_KEY_STATE, &s_state, sizeof(quran_state_t));
+    err = nvs_set_blob(nvs_h, MUSHAF_NVS_KEY_STATE, &s_state, sizeof(mushaf_state_t));
     if (err == ESP_OK) {
         err = nvs_commit(nvs_h);
     } else {
@@ -154,16 +154,16 @@ esp_err_t quran_reader_save_state(void) {
     return err;
 }
 
-esp_err_t quran_reader_get_surah_info(uint8_t surah, bqm_surah_entry_t *out) {
-    if (!s_has_bqm || surah < 1 || surah > QURAN_TOTAL_SURAHS || out == NULL) {
+esp_err_t mushaf_reader_get_surah(uint8_t surah, bqm_surah_entry_t *out) {
+    if (!s_has_bqm || surah < 1 || surah > MUSHAF_TOTAL_SURAHS || out == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
     *out = s_surahs[surah - 1];
     return ESP_OK;
 }
 
-esp_err_t quran_reader_get_ayah_info(uint8_t surah, uint16_t ayah, bqm_ayah_entry_t *out, uint16_t *out_global_ayah) {
-    if (!s_has_bqm || surah < 1 || surah > QURAN_TOTAL_SURAHS || out == NULL) {
+esp_err_t mushaf_reader_get_ayah(uint8_t surah, uint16_t ayah, bqm_ayah_entry_t *out, uint16_t *out_global_ayah) {
+    if (!s_has_bqm || surah < 1 || surah > MUSHAF_TOTAL_SURAHS || out == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
 
@@ -173,7 +173,7 @@ esp_err_t quran_reader_get_ayah_info(uint8_t surah, uint16_t ayah, bqm_ayah_entr
     }
 
     uint16_t global_idx = s->first_global_ayah + (ayah - 1);
-    if (global_idx >= QURAN_TOTAL_AYAHS) {
+    if (global_idx >= MUSHAF_TOTAL_AYAHS) {
         return ESP_ERR_INVALID_ARG;
     }
 
@@ -201,32 +201,32 @@ esp_err_t quran_reader_get_ayah_info(uint8_t surah, uint16_t ayah, bqm_ayah_entr
     return ESP_OK;
 }
 
-uint8_t quran_reader_get_active_subpage_count(void) {
+uint8_t mushaf_reader_get_subpage_count(void) {
     if (!s_has_bqm) {
         return 0;
     }
 
     bqm_ayah_entry_t ayah_entry;
-    if (quran_reader_get_ayah_info(s_state.surah, s_state.ayah, &ayah_entry, NULL) != ESP_OK) {
+    if (mushaf_reader_get_ayah(s_state.surah, s_state.ayah, &ayah_entry, NULL) != ESP_OK) {
         return 0;
     }
 
     switch (s_state.layer) {
-    case QURAN_LAYER_MUSHAF:
+    case MUSHAF_LAYER_MUSHAF:
         return ayah_entry.mushaf_subpages;
-    case QURAN_LAYER_LATIN:
+    case MUSHAF_LAYER_LATIN:
         return ayah_entry.latin_subpages;
-    case QURAN_LAYER_TRANSLATE:
+    case MUSHAF_LAYER_TRANSLATE:
         return ayah_entry.trans_subpages;
-    case QURAN_LAYER_TAFSIR:
+    case MUSHAF_LAYER_TAFSIR:
         return ayah_entry.tafsir_subpages;
     default:
         return 0;
     }
 }
 
-esp_err_t quran_reader_set_cursor(uint8_t surah, uint16_t ayah, uint8_t layer) {
-    if (surah < 1 || surah > QURAN_TOTAL_SURAHS || layer >= QURAN_LAYER_COUNT) {
+esp_err_t mushaf_reader_set_cursor(uint8_t surah, uint16_t ayah, uint8_t layer) {
+    if (surah < 1 || surah > MUSHAF_TOTAL_SURAHS || layer >= MUSHAF_LAYER_COUNT) {
         return ESP_ERR_INVALID_ARG;
     }
 
@@ -241,11 +241,11 @@ esp_err_t quran_reader_set_cursor(uint8_t surah, uint16_t ayah, uint8_t layer) {
     s_state.ayah = ayah;
     s_state.layer = layer;
     s_state.subpage = 0;
-    return quran_reader_save_state();
+    return mushaf_reader_save_state();
 }
 
-esp_err_t quran_reader_set_bookmarks(const quran_bookmark_t *list, uint8_t count) {
-    if (count > QURAN_MAX_BOOKMARKS) {
+esp_err_t mushaf_reader_set_bookmarks(const mushaf_bookmark_t *list, uint8_t count) {
+    if (count > MUSHAF_MAX_BOOKMARKS) {
         return ESP_ERR_INVALID_ARG;
     }
     if (count > 0 && list == NULL) {
@@ -254,12 +254,12 @@ esp_err_t quran_reader_set_bookmarks(const quran_bookmark_t *list, uint8_t count
 
     s_state.bookmark_count = count;
     if (count > 0) {
-        memcpy(s_state.bookmarks, list, count * sizeof(quran_bookmark_t));
+        memcpy(s_state.bookmarks, list, count * sizeof(mushaf_bookmark_t));
     }
-    return quran_reader_save_state();
+    return mushaf_reader_save_state();
 }
 
-bool quran_reader_is_bookmarked(uint8_t surah, uint16_t ayah) {
+bool mushaf_reader_is_bookmarked(uint8_t surah, uint16_t ayah) {
     for (uint8_t i = 0; i < s_state.bookmark_count; i++) {
         if (s_state.bookmarks[i].surah == surah && s_state.bookmarks[i].ayah == ayah) {
             return true;
@@ -268,24 +268,24 @@ bool quran_reader_is_bookmarked(uint8_t surah, uint16_t ayah) {
     return false;
 }
 
-bool quran_reader_toggle_bookmark(void) {
+bool mushaf_reader_toggle_bookmark(void) {
     for (uint8_t i = 0; i < s_state.bookmark_count; i++) {
         if (s_state.bookmarks[i].surah == s_state.surah &&
             s_state.bookmarks[i].ayah == s_state.ayah) {
-            quran_reader_delete_bookmark(i);
+            mushaf_reader_delete_bookmark(i);
             return false;
         }
     }
 
-    if (s_state.bookmark_count >= QURAN_MAX_BOOKMARKS) {
-        ESP_LOGW(TAG, "Bookmark list full (%d max)", QURAN_MAX_BOOKMARKS);
+    if (s_state.bookmark_count >= MUSHAF_MAX_BOOKMARKS) {
+        ESP_LOGW(TAG, "Bookmark list full (%d max)", MUSHAF_MAX_BOOKMARKS);
         return false;
     }
 
     uint8_t juz = 1;
     if (s_has_bqm) {
         bqm_ayah_entry_t ayah_entry;
-        if (quran_reader_get_ayah_info(s_state.surah, s_state.ayah, &ayah_entry, NULL) == ESP_OK) {
+        if (mushaf_reader_get_ayah(s_state.surah, s_state.ayah, &ayah_entry, NULL) == ESP_OK) {
             juz = ayah_entry.juz;
         }
     }
@@ -294,11 +294,46 @@ bool quran_reader_toggle_bookmark(void) {
     s_state.bookmarks[s_state.bookmark_count].ayah = s_state.ayah;
     s_state.bookmarks[s_state.bookmark_count].juz = juz;
     s_state.bookmark_count++;
-    quran_reader_save_state();
+    mushaf_reader_save_state();
     return true;
 }
 
-esp_err_t quran_reader_delete_bookmark(uint8_t index) {
+esp_err_t mushaf_reader_add_bookmark(uint8_t surah, uint16_t ayah) {
+    if (surah == 0) {
+        surah = s_state.surah;
+        ayah = s_state.ayah;
+    }
+    if (surah < 1 || surah > MUSHAF_TOTAL_SURAHS) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    for (uint8_t i = 0; i < s_state.bookmark_count; i++) {
+        if (s_state.bookmarks[i].surah == surah && s_state.bookmarks[i].ayah == ayah) {
+            return ESP_OK;
+        }
+    }
+
+    if (s_state.bookmark_count >= MUSHAF_MAX_BOOKMARKS) {
+        ESP_LOGW(TAG, "Bookmark list full (%d max)", MUSHAF_MAX_BOOKMARKS);
+        return ESP_ERR_NO_MEM;
+    }
+
+    uint8_t juz = 1;
+    if (s_has_bqm) {
+        bqm_ayah_entry_t ayah_entry;
+        if (mushaf_reader_get_ayah(surah, ayah, &ayah_entry, NULL) == ESP_OK) {
+            juz = ayah_entry.juz;
+        }
+    }
+
+    s_state.bookmarks[s_state.bookmark_count].surah = surah;
+    s_state.bookmarks[s_state.bookmark_count].ayah = ayah;
+    s_state.bookmarks[s_state.bookmark_count].juz = juz;
+    s_state.bookmark_count++;
+    return mushaf_reader_save_state();
+}
+
+esp_err_t mushaf_reader_delete_bookmark(uint8_t index) {
     if (index >= s_state.bookmark_count) {
         return ESP_ERR_INVALID_ARG;
     }
@@ -306,13 +341,13 @@ esp_err_t quran_reader_delete_bookmark(uint8_t index) {
     if (index < s_state.bookmark_count - 1) {
         memmove(&s_state.bookmarks[index],
                 &s_state.bookmarks[index + 1],
-                (s_state.bookmark_count - 1 - index) * sizeof(quran_bookmark_t));
+                (s_state.bookmark_count - 1 - index) * sizeof(mushaf_bookmark_t));
     }
     s_state.bookmark_count--;
-    return quran_reader_save_state();
+    return mushaf_reader_save_state();
 }
 
-esp_err_t quran_reader_step_page(int8_t dir) {
+esp_err_t mushaf_reader_step_page(int8_t dir) {
     if (dir == 0) {
         return ESP_OK;
     }
@@ -320,14 +355,14 @@ esp_err_t quran_reader_step_page(int8_t dir) {
         return ESP_ERR_INVALID_STATE;
     }
 
-    if (s_state.surah < 1 || s_state.surah > QURAN_TOTAL_SURAHS) {
+    if (s_state.surah < 1 || s_state.surah > MUSHAF_TOTAL_SURAHS) {
         s_state.surah = 1;
         s_state.ayah = 1;
         s_state.subpage = 0;
     }
 
     uint16_t ayah_count = s_surahs[s_state.surah - 1].ayah_count;
-    uint8_t subpage_count = quran_reader_get_active_subpage_count();
+    uint8_t subpage_count = mushaf_reader_get_subpage_count();
     if (subpage_count == 0) {
         subpage_count = 1;
     }
@@ -340,7 +375,7 @@ esp_err_t quran_reader_step_page(int8_t dir) {
             if (s_state.ayah < ayah_count) {
                 s_state.ayah++;
             } else {
-                if (s_state.surah < QURAN_TOTAL_SURAHS) {
+                if (s_state.surah < MUSHAF_TOTAL_SURAHS) {
                     s_state.surah++;
                     s_state.ayah = 1;
                 } else {
@@ -354,13 +389,13 @@ esp_err_t quran_reader_step_page(int8_t dir) {
         } else {
             if (s_state.ayah > 1) {
                 s_state.ayah--;
-                uint8_t prev_subpages = quran_reader_get_active_subpage_count();
+                uint8_t prev_subpages = mushaf_reader_get_subpage_count();
                 s_state.subpage = (prev_subpages > 0) ? (prev_subpages - 1) : 0;
             } else {
                 if (s_state.surah > 1) {
                     s_state.surah--;
                     s_state.ayah = s_surahs[s_state.surah - 1].ayah_count;
-                    uint8_t prev_subpages = quran_reader_get_active_subpage_count();
+                    uint8_t prev_subpages = mushaf_reader_get_subpage_count();
                     s_state.subpage = (prev_subpages > 0) ? (prev_subpages - 1) : 0;
                 } else {
                     return ESP_ERR_NOT_FOUND;
@@ -370,29 +405,29 @@ esp_err_t quran_reader_step_page(int8_t dir) {
     }
 
     s_state.started = true;
-    return quran_reader_save_state();
+    return mushaf_reader_save_state();
 }
 
-esp_err_t quran_reader_cycle_layer(void) {
+esp_err_t mushaf_reader_cycle_layer(void) {
     uint8_t mask = s_has_bqm ? s_header.layer_mask : 0x0F;
     if (mask == 0) {
         mask = 0x0F;
     }
 
     uint8_t next = s_state.layer;
-    for (int i = 0; i < QURAN_LAYER_COUNT; i++) {
-        next = (next + 1) % QURAN_LAYER_COUNT;
+    for (int i = 0; i < MUSHAF_LAYER_COUNT; i++) {
+        next = (next + 1) % MUSHAF_LAYER_COUNT;
         if (mask & (1 << next)) {
             s_state.layer = next;
             s_state.subpage = 0;
             s_state.started = true;
-            return quran_reader_save_state();
+            return mushaf_reader_save_state();
         }
     }
     return ESP_OK;
 }
 
-esp_err_t quran_reader_render_subpage(uint8_t *canvas_buf) {
+esp_err_t mushaf_reader_render_subpage(uint8_t *canvas_buf) {
     if (!s_has_bqm) {
         return ESP_ERR_INVALID_STATE;
     }
@@ -408,7 +443,7 @@ esp_err_t quran_reader_render_subpage(uint8_t *canvas_buf) {
     Paint_ClearWindows(0, 16, BOARD_DISPLAY_WIDTH - 1, BOARD_DISPLAY_HEIGHT - 17, WHITE);
 
     bqm_ayah_entry_t ayah;
-    esp_err_t err = quran_reader_get_ayah_info(s_state.surah, s_state.ayah, &ayah, NULL);
+    esp_err_t err = mushaf_reader_get_ayah(s_state.surah, s_state.ayah, &ayah, NULL);
     if (err != ESP_OK) {
         return err;
     }
@@ -418,7 +453,7 @@ esp_err_t quran_reader_render_subpage(uint8_t *canvas_buf) {
         return ESP_ERR_NOT_FOUND;
     }
 
-    if (s_state.layer == QURAN_LAYER_MUSHAF) {
+    if (s_state.layer == MUSHAF_LAYER_MUSHAF) {
         if (ayah.mushaf_subpages == 0) {
             fclose(fp);
             return ESP_OK;
@@ -500,16 +535,16 @@ esp_err_t quran_reader_render_subpage(uint8_t *canvas_buf) {
                 }
             }
         }
-    } else if (s_state.layer == QURAN_LAYER_LATIN ||
-               s_state.layer == QURAN_LAYER_TRANSLATE ||
-               s_state.layer == QURAN_LAYER_TAFSIR) {
+    } else if (s_state.layer == MUSHAF_LAYER_LATIN ||
+               s_state.layer == MUSHAF_LAYER_TRANSLATE ||
+               s_state.layer == MUSHAF_LAYER_TAFSIR) {
         uint32_t layer_off = 0;
         uint8_t layer_subpages = 0;
 
-        if (s_state.layer == QURAN_LAYER_LATIN) {
+        if (s_state.layer == MUSHAF_LAYER_LATIN) {
             layer_off = ayah.latin_off;
             layer_subpages = ayah.latin_subpages;
-        } else if (s_state.layer == QURAN_LAYER_TRANSLATE) {
+        } else if (s_state.layer == MUSHAF_LAYER_TRANSLATE) {
             layer_off = ayah.trans_off;
             layer_subpages = ayah.trans_subpages;
         } else {

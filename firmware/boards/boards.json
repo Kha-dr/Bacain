@@ -16,8 +16,8 @@
       "status": "supported"
     },
     {
-      "id": "waveshare_154_alquran",
-      "name": "Waveshare ESP32-S3-ePaper-1.54 (Al-Quran Edition)",
+      "id": "waveshare_154_mushaf",
+      "name": "Waveshare ESP32-S3-ePaper-1.54 (Mushaf Edition)",
       "chip": "esp32s3",
       "flash_size": "8MB",
       "display": {
@@ -27,8 +27,8 @@
         "controller": "SSD1681"
       },
       "config_header": "boards/waveshare_154/board_def.h",
-      "extra_idf_args": "-DBOARD_PROFILE=waveshare_154 -DCONFIG_BOARD_ALQURAN_ENABLE=y",
-      "output_bin": "bacain_waveshare_154_alquran.bin",
+      "extra_idf_args": "-DBOARD_PROFILE=waveshare_154 -DBOARD_MUSHAF_ENABLE=1",
+      "output_bin": "bacain_waveshare_154_mushaf.bin",
       "status": "supported"
     }
   ]

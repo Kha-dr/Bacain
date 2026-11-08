@@ -4,6 +4,7 @@ const ASSETS_TO_CACHE = [
   './index.html',
   './style.css',
   './app.js',
+  './components/mushaf-builder.js',
   './manifest.json',
   './icon.svg'
 ];

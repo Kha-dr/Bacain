@@ -56,8 +56,8 @@ extern void reader_ui_set_rotation(uint8_t rotation);
 extern void button_set_inverted(bool inverted);
 #include "status_led.h"
 #include "board_config.h"
-#if CONFIG_BOARD_ALQURAN_ENABLE
-#include "quran_reader.h"
+#if CONFIG_BOARD_MUSHAF_ENABLE || BOARD_MUSHAF_ENABLE
+#include "mushaf_reader.h"
 #endif
 
 _Static_assert(sizeof(ble_sync_config_response_t) == 15, "ble_sync_config_response_t must be 15 bytes");
@@ -579,11 +579,11 @@ static void handle_cmd_finish_upload(void)
         ESP_LOGW(TAG, "Deleted corrupted/incomplete file on error: %s", fpath);
     }
 
-#if CONFIG_BOARD_ALQURAN_ENABLE
-    if (!s_upload_error && strcasecmp(s_upload_filename, "quran.bqm") == 0) {
-        quran_reader_init(quran_reader_get_state());
-        if (!quran_reader_has_bqm()) {
-            ESP_LOGE(TAG, "Uploaded quran.bqm failed BQM header validation");
+#if CONFIG_BOARD_MUSHAF_ENABLE || BOARD_MUSHAF_ENABLE
+    if (!s_upload_error && strcasecmp(s_upload_filename, "mushaf.bqm") == 0) {
+        mushaf_reader_init(mushaf_reader_get_state());
+        if (!mushaf_reader_has_bqm()) {
+            ESP_LOGE(TAG, "Uploaded %s failed BQM header validation", s_upload_filename);
             if (s_upload_err_status == BLE_SYNC_STATUS_OK) s_upload_err_status = BLE_SYNC_STATUS_BQM_INVALID;
             s_upload_error = true;
             if (books_dir != NULL) {
@@ -994,12 +994,12 @@ static int ble_sync_control_access_cb(uint16_t conn_handle, uint16_t attr_handle
     memset(&cmd, 0, sizeof(cmd));
 
     switch (opcode) {
-    case BLE_SYNC_OP_GET_QURAN_STATE: {
-#if CONFIG_BOARD_ALQURAN_ENABLE
-        const quran_state_t *qst = quran_reader_get_state();
+    case BLE_SYNC_OP_GET_MUSHAF_STATE: {
+#if CONFIG_BOARD_MUSHAF_ENABLE || BOARD_MUSHAF_ENABLE
+        const mushaf_state_t *qst = mushaf_reader_get_state();
         uint8_t resp[40];
         memset(resp, 0, sizeof(resp));
-        resp[0] = BLE_SYNC_OP_GET_QURAN_STATE;
+        resp[0] = BLE_SYNC_OP_GET_MUSHAF_STATE;
         resp[1] = BLE_SYNC_STATUS_OK;
         if (qst != NULL) {
             resp[2] = qst->started ? 1 : 0;
@@ -1008,7 +1008,7 @@ static int ble_sync_control_access_cb(uint16_t conn_handle, uint16_t attr_handle
             resp[5] = (uint8_t)((qst->ayah >> 8) & 0xFF);
             resp[6] = qst->layer;
             resp[7] = qst->bookmark_count;
-            for (uint8_t i = 0; i < qst->bookmark_count && i < QURAN_MAX_BOOKMARKS; i++) {
+            for (uint8_t i = 0; i < qst->bookmark_count && i < MUSHAF_MAX_BOOKMARKS; i++) {
                 size_t base = 8 + (size_t)i * 4;
                 resp[base + 0] = qst->bookmarks[i].surah;
                 resp[base + 1] = (uint8_t)(qst->bookmarks[i].ayah & 0xFF);
@@ -1018,48 +1018,48 @@ static int ble_sync_control_access_cb(uint16_t conn_handle, uint16_t attr_handle
         }
         ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
 #else
-        uint8_t resp[2] = { BLE_SYNC_OP_GET_QURAN_STATE, BLE_SYNC_STATUS_NOT_SUPPORTED };
+        uint8_t resp[2] = { BLE_SYNC_OP_GET_MUSHAF_STATE, BLE_SYNC_STATUS_NOT_SUPPORTED };
         ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
 #endif
         break;
     }
 
-    case BLE_SYNC_OP_SET_QURAN_STATE: {
-#if CONFIG_BOARD_ALQURAN_ENABLE
+    case BLE_SYNC_OP_SET_MUSHAF_STATE: {
+#if CONFIG_BOARD_MUSHAF_ENABLE || BOARD_MUSHAF_ENABLE
         if (copied < 2) {
-            uint8_t resp[2] = { BLE_SYNC_OP_SET_QURAN_STATE, BLE_SYNC_STATUS_ERROR };
+            uint8_t resp[2] = { BLE_SYNC_OP_SET_MUSHAF_STATE, BLE_SYNC_STATUS_ERROR };
             ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
             break;
         }
         uint8_t sub = buf[1];
         if (sub == 0x01) {
             if (copied < 6) {
-                uint8_t resp[2] = { BLE_SYNC_OP_SET_QURAN_STATE, BLE_SYNC_STATUS_ERROR };
+                uint8_t resp[2] = { BLE_SYNC_OP_SET_MUSHAF_STATE, BLE_SYNC_STATUS_ERROR };
                 ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
                 break;
             }
             uint8_t surah = buf[2];
             uint16_t ayah = (uint16_t)buf[3] | ((uint16_t)buf[4] << 8);
             uint8_t layer = buf[5];
-            esp_err_t err = quran_reader_set_cursor(surah, ayah, layer);
+            esp_err_t err = mushaf_reader_set_cursor(surah, ayah, layer);
             if (err == ESP_OK && s_event_cb) {
                 s_event_cb(BLE_SYNC_EVT_REQUEST_REFRESH, NULL, s_event_cb_arg);
             }
-            uint8_t resp[2] = { BLE_SYNC_OP_SET_QURAN_STATE, (err == ESP_OK) ? BLE_SYNC_STATUS_OK : BLE_SYNC_STATUS_ERROR };
+            uint8_t resp[2] = { BLE_SYNC_OP_SET_MUSHAF_STATE, (err == ESP_OK) ? BLE_SYNC_STATUS_OK : BLE_SYNC_STATUS_ERROR };
             ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
         } else if (sub == 0x02) {
             if (copied < 3) {
-                uint8_t resp[2] = { BLE_SYNC_OP_SET_QURAN_STATE, BLE_SYNC_STATUS_ERROR };
+                uint8_t resp[2] = { BLE_SYNC_OP_SET_MUSHAF_STATE, BLE_SYNC_STATUS_ERROR };
                 ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
                 break;
             }
             uint8_t count = buf[2];
-            if (count > QURAN_MAX_BOOKMARKS || copied < (uint16_t)(3 + count * 4)) {
-                uint8_t resp[2] = { BLE_SYNC_OP_SET_QURAN_STATE, BLE_SYNC_STATUS_ERROR };
+            if (count > MUSHAF_MAX_BOOKMARKS || copied < (uint16_t)(3 + count * 4)) {
+                uint8_t resp[2] = { BLE_SYNC_OP_SET_MUSHAF_STATE, BLE_SYNC_STATUS_ERROR };
                 ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
                 break;
             }
-            quran_bookmark_t list[QURAN_MAX_BOOKMARKS];
+            mushaf_bookmark_t list[MUSHAF_MAX_BOOKMARKS];
             memset(list, 0, sizeof(list));
             for (uint8_t i = 0; i < count; i++) {
                 const uint8_t *p = &buf[3 + i * 4];
@@ -1067,18 +1067,18 @@ static int ble_sync_control_access_cb(uint16_t conn_handle, uint16_t attr_handle
                 list[i].ayah = (uint16_t)p[1] | ((uint16_t)p[2] << 8);
                 list[i].juz = p[3];
             }
-            esp_err_t err = quran_reader_set_bookmarks(list, count);
+            esp_err_t err = mushaf_reader_set_bookmarks(list, count);
             if (err == ESP_OK && s_event_cb) {
                 s_event_cb(BLE_SYNC_EVT_REQUEST_REFRESH, NULL, s_event_cb_arg);
             }
-            uint8_t resp[2] = { BLE_SYNC_OP_SET_QURAN_STATE, (err == ESP_OK) ? BLE_SYNC_STATUS_OK : BLE_SYNC_STATUS_ERROR };
+            uint8_t resp[2] = { BLE_SYNC_OP_SET_MUSHAF_STATE, (err == ESP_OK) ? BLE_SYNC_STATUS_OK : BLE_SYNC_STATUS_ERROR };
             ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
         } else {
-            uint8_t resp[2] = { BLE_SYNC_OP_SET_QURAN_STATE, BLE_SYNC_STATUS_ERROR };
+            uint8_t resp[2] = { BLE_SYNC_OP_SET_MUSHAF_STATE, BLE_SYNC_STATUS_ERROR };
             ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
         }
 #else
-        uint8_t resp[2] = { BLE_SYNC_OP_SET_QURAN_STATE, BLE_SYNC_STATUS_NOT_SUPPORTED };
+        uint8_t resp[2] = { BLE_SYNC_OP_SET_MUSHAF_STATE, BLE_SYNC_STATUS_NOT_SUPPORTED };
         ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
 #endif
         break;
@@ -1353,8 +1353,8 @@ static int ble_sync_control_access_cb(uint16_t conn_handle, uint16_t attr_handle
         uint8_t storage_target = (s_storage_target == STORAGE_TARGET_FLASH) ? 1 : 0;
 
         uint8_t caps = 0;
-#if CONFIG_BOARD_ALQURAN_ENABLE
-        caps |= BLE_SYNC_CAP_ALQURAN;
+#if CONFIG_BOARD_MUSHAF_ENABLE || BOARD_MUSHAF_ENABLE
+        caps |= BLE_SYNC_CAP_MUSHAF;
 #endif
         uint8_t resp[15] = {
             BLE_SYNC_OP_GET_CONFIG,

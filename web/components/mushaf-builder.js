@@ -1,17 +1,16 @@
 /**
- * quran-builder.js
- * BacaIn PWA - Al-Quran Reader & BQM Manager Custom Element (<quran-builder>)
+ * mushaf-builder.js
+ * BacaIn PWA - Mushaf Reader & BQM Manager Custom Element (<mushaf-builder>)
  */
 
 import {
   buildBqmPackage,
   renderAyahPreviewToCanvas,
-  ensureQuranFont,
-  fetchQuranDatasets,
+  ensureMushafFont,
+  fetchMushafDatasets,
   fetchWithCache,
-  QURAN_FONTS,
-  QURAN_DATA_ENDPOINTS,
-  QURAN_CACHE_NAME,
+  MUSHAF_FONTS,
+  MUSHAF_DATA_ENDPOINTS,
   SURAHS,
   CANONICAL_SURAHS,
   JUZ_BOUNDARIES,
@@ -21,8 +20,10 @@ import {
   LAYER_TAGS,
   LAYER_NAMES,
   SUNNAH_PRESETS,
-  QURAN_LAYERS,
+  MUSHAF_LAYERS,
 } from "../processors/bqm-builder.js";
+
+export const MUSHAF_CACHE_NAME = "bacain-mushaf-assets-v1";
 
 function escapeHtml(str) {
   if (!str) return "";
@@ -36,7 +37,7 @@ function escapeHtml(str) {
 
 const BaseElement = typeof HTMLElement !== "undefined" ? HTMLElement : class {};
 
-class QuranBuilder extends BaseElement {
+class MushafBuilder extends BaseElement {
   constructor() {
     super();
     this._screenW = 200;
@@ -48,7 +49,7 @@ class QuranBuilder extends BaseElement {
     this._assetsReady = false;
     this._assetsLoading = false;
     this._loadedEditionsKey = "";
-    this._cachedQuranBase = null;
+    this._cachedMushafBase = null;
     this._cachedEditionsData = null;
     this._deviceState = {
       started: false,
@@ -61,7 +62,7 @@ class QuranBuilder extends BaseElement {
   }
 
   setStatusText(text, isError = false) {
-    const statusEl = this.querySelector("#quranStatusText");
+    const statusEl = this.querySelector("#mushafStatusText");
     if (statusEl) {
       statusEl.textContent = text;
       statusEl.style.color = isError
@@ -70,13 +71,21 @@ class QuranBuilder extends BaseElement {
       statusEl.style.fontWeight = isError ? "500" : "normal";
     }
     if (isError) {
-      console.error("[QuranBuilder]", text);
+      console.error("[MushafBuilder]", text);
     }
+    this.dispatchEvent(
+      new CustomEvent("mushaf-status", {
+        detail: { text, isError },
+        bubbles: true,
+        composed: true,
+      }),
+    );
   }
 
   connectedCallback() {
-    document.addEventListener("quran-upload-status", this._onUploadStatus);
-    if (!this.querySelector(".quran-section")) {
+    document.addEventListener("mushaf-upload-status", this._onUploadStatus);
+    document.addEventListener("mushaf-status", this._onUploadStatus);
+    if (!this.querySelector(".mushaf-section")) {
       this.render();
       this.bindEvents();
       this.updateGeometryBadge();
@@ -87,34 +96,40 @@ class QuranBuilder extends BaseElement {
   }
 
   disconnectedCallback() {
-    document.removeEventListener("quran-upload-status", this._onUploadStatus);
+    document.removeEventListener("mushaf-upload-status", this._onUploadStatus);
+    document.removeEventListener("mushaf-status", this._onUploadStatus);
   }
 
   _onUploadStatus(e) {
     if (!e || !e.detail) return;
     this._isUploadingBqm = false;
     this.updateConnectionStateUI();
-    const progressWrap = this.querySelector("#quranBuildProgressWrap");
+    const progressWrap = this.querySelector("#mushafBuildProgressWrap");
     if (progressWrap) progressWrap.style.display = "none";
     if (e.detail.ok === false) {
       this.setStatusText(`Upload failed: ${e.detail.error}`, true);
-    } else if (e.detail.ok === true && e.detail.fileName === "quran.bqm") {
-      this.setStatusText("quran.bqm uploaded and verified on device.");
+    } else if (
+      e.detail.ok === true &&
+      e.detail.fileName === "mushaf.bqm"
+    ) {
+      this.setStatusText(
+        `${e.detail.fileName} uploaded and verified on device.`,
+      );
     }
   }
 
   setBuilderControlsDisabled(disabled) {
     const selector = [
-      "#quranScriptSelect",
-      "#quranFontSizeSelect",
-      "#quranRangeSelect",
+      "#mushafScriptSelect",
+      "#mushafFontSizeSelect",
+      "#mushafRangeSelect",
       "#customStartSurah",
       "#customEndSurah",
       "#layerLatinCheckbox",
       "#layerTranslationCheckbox",
       "#layerTafsirCheckbox",
-      "#quranTranslationSelect",
-      "#quranTafsirSelect",
+      "#mushafTranslationSelect",
+      "#mushafTafsirSelect",
       "#cursorSurahSelect",
       "#cursorAyahInput",
       "#cursorLayerSelect",
@@ -124,8 +139,8 @@ class QuranBuilder extends BaseElement {
       el.disabled = Boolean(disabled);
     });
 
-    const uploadBtn = this.querySelector("#quranBuildUploadBtn");
-    const downloadBtn = this.querySelector("#quranDownloadBtn");
+    const uploadBtn = this.querySelector("#mushafBuildUploadBtn");
+    const downloadBtn = this.querySelector("#mushafDownloadBtn");
 
     if (disabled) {
       if (uploadBtn) uploadBtn.disabled = true;
@@ -147,23 +162,24 @@ class QuranBuilder extends BaseElement {
 
     this.setBuilderControlsDisabled(true);
 
-    const retryBtn = this.querySelector("#quranRetryAssetsBtn");
+    const retryBtn = this.querySelector("#mushafRetryAssetsBtn");
     if (retryBtn) retryBtn.style.display = "none";
 
-    const progressWrap = this.querySelector("#quranBuildProgressWrap");
+    const progressWrap = this.querySelector("#mushafBuildProgressWrap");
     if (progressWrap) progressWrap.style.display = "block";
 
-    this.setStatusText("Loading Quran fonts & corpora...");
+    this.setStatusText("Loading mushaf fonts and corpora.");
 
     try {
-      await ensureQuranFont(0, (msg) => this.setStatusText(msg));
-      await ensureQuranFont(1, (msg) => this.setStatusText(msg));
+      await ensureMushafFont(0, (msg) => this.setStatusText(msg));
+      await ensureMushafFont(1, (msg) => this.setStatusText(msg));
 
       const translationEdition =
-        this.querySelector("#quranTranslationSelect")?.value || "id_kemenag";
+        this.querySelector("#mushafTranslationSelect")?.value || "id_kemenag";
       const tafsirEdition =
-        this.querySelector("#quranTafsirSelect")?.value || "id_kemenag_ringkas";
-      const datasets = await fetchQuranDatasets(
+        this.querySelector("#mushafTafsirSelect")?.value ||
+        "id_kemenag_ringkas";
+      const datasets = await fetchMushafDatasets(
         {
           scriptStyle: 0,
           translationEdition,
@@ -178,7 +194,7 @@ class QuranBuilder extends BaseElement {
         (msg) => this.setStatusText(msg),
       );
 
-      this._cachedQuranBase = datasets.quranBase;
+      this._cachedMushafBase = datasets.mushafBase;
       this._cachedEditionsData = datasets.editionsData;
       this._loadedEditionsKey = `${translationEdition}|${tafsirEdition}`;
 
@@ -190,7 +206,7 @@ class QuranBuilder extends BaseElement {
       await this.renderAyahPreview();
     } catch (err) {
       this._assetsReady = false;
-      console.error("[QuranBuilder] Failed to preload Quran assets:", err);
+      console.error("[MushafBuilder] Failed to preload mushaf assets:", err);
       this.setBuilderControlsDisabled(true);
       this.setStatusText(`Assets unavailable: ${err.message}`, true);
       if (retryBtn) retryBtn.style.display = "inline-flex";
@@ -209,7 +225,7 @@ class QuranBuilder extends BaseElement {
     if (caps.isConnected !== undefined)
       this._isConnected = Boolean(caps.isConnected);
 
-    const canvas = this.querySelector("#quranPreviewCanvas");
+    const canvas = this.querySelector("#mushafPreviewCanvas");
     if (canvas) {
       canvas.width = this._screenW;
       canvas.height = this._screenH;
@@ -224,7 +240,7 @@ class QuranBuilder extends BaseElement {
     if (typeof width === "number" && width > 0) this._screenW = width;
     if (typeof height === "number" && height > 0) this._screenH = height;
 
-    const canvas = this.querySelector("#quranPreviewCanvas");
+    const canvas = this.querySelector("#mushafPreviewCanvas");
     if (canvas) {
       canvas.width = this._screenW;
       canvas.height = this._screenH;
@@ -249,21 +265,21 @@ class QuranBuilder extends BaseElement {
     this.renderDeviceStateUI();
   }
 
-  updateQuranState(state) {
+  updateMushafState(state) {
     this.updateDeviceState(state);
   }
 
   updateGeometryBadge() {
-    const badge = this.querySelector("#quranGeometryBadge");
+    const badge = this.querySelector("#mushafGeometryBadge");
     if (badge) {
       badge.textContent = `${this._screenW} × ${this._screenH} px`;
     }
   }
 
   updateConnectionStateUI() {
-    const syncBtn = this.querySelector("#quranSyncCursorBtn");
-    const uploadBtn = this.querySelector("#quranBuildUploadBtn");
-    const addBmBtn = this.querySelector("#quranAddBookmarkBtn");
+    const syncBtn = this.querySelector("#mushafSyncCursorBtn");
+    const uploadBtn = this.querySelector("#mushafBuildUploadBtn");
+    const addBmBtn = this.querySelector("#mushafAddBookmarkBtn");
 
     if (syncBtn) syncBtn.disabled = !this._isConnected;
     if (uploadBtn)
@@ -277,15 +293,15 @@ class QuranBuilder extends BaseElement {
 
   renderDeviceStateUI() {
     const state = this._deviceState;
-    const badge = this.querySelector("#quranTilawahBadge");
+    const badge = this.querySelector("#mushafTilawahBadge");
     const surahInfo = SURAHS[state.surah - 1] || SURAHS[0];
-    const layerName = QURAN_LAYERS[state.layer]?.name || "Mushaf";
+    const layerName = MUSHAF_LAYERS[state.layer]?.name || "Mushaf";
     const juz = getJuzForAyah(state.surah, state.ayah);
 
     if (state.started) {
       if (badge) {
         badge.className = "card-badge badge-success";
-        badge.textContent = `S.${state.surah}:${state.ayah} (${surahInfo.name}) • Juz ${juz} • ${layerName}`;
+        badge.textContent = `S.${state.surah}:${state.ayah} (${surahInfo.name}) (Juz ${juz}) [${layerName}]`;
       }
     } else if (badge) {
       badge.className = "card-badge badge-muted";
@@ -312,8 +328,8 @@ class QuranBuilder extends BaseElement {
   }
 
   renderBookmarksList() {
-    const container = this.querySelector("#quranBookmarksList");
-    const countBadge = this.querySelector("#quranBookmarkCountBadge");
+    const container = this.querySelector("#mushafBookmarksList");
+    const countBadge = this.querySelector("#mushafBookmarkCountBadge");
     if (!container) return;
 
     const bookmarks = this._deviceState.bookmarks || [];
@@ -343,8 +359,8 @@ class QuranBuilder extends BaseElement {
             </div>
           </div>
           <div style="display: flex; align-items: center; gap: 0.35rem;">
-            <button class="btn-control quran-bm-jump-btn" type="button" data-index="${idx}" style="padding: 0.2rem 0.5rem; font-size: 0.74rem;">Jump</button>
-            <button class="btn-control btn-danger-text quran-bm-del-btn" type="button" data-index="${idx}" style="padding: 0.2rem 0.5rem; font-size: 0.74rem;">Delete</button>
+            <button class="btn-control mushaf-bm-jump-btn" type="button" data-index="${idx}" style="padding: 0.2rem 0.5rem; font-size: 0.74rem;">Jump</button>
+            <button class="btn-control btn-danger-text mushaf-bm-del-btn" type="button" data-index="${idx}" style="padding: 0.2rem 0.5rem; font-size: 0.74rem;">Delete</button>
           </div>
         </div>
       `;
@@ -360,11 +376,11 @@ class QuranBuilder extends BaseElement {
 
     const presetButtonsHtml = SUNNAH_PRESETS.map(
       (p) =>
-        `<button class="btn-control quran-preset-btn" type="button" data-surah="${p.surah}" data-ayah="${p.ayah}" style="font-size: 0.75rem; padding: 0.25rem 0.55rem;">${escapeHtml(p.label)}</button>`,
+        `<button class="btn-control mushaf-preset-btn" type="button" data-surah="${p.surah}" data-ayah="${p.ayah}" style="font-size: 0.75rem; padding: 0.25rem 0.55rem;">${escapeHtml(p.label)}</button>`,
     ).join("");
 
     this.innerHTML = `
-      <section class="upload-section quran-section">
+      <section class="upload-section mushaf-section">
         <div class="section-title">
           <div class="section-title-left">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -373,10 +389,10 @@ class QuranBuilder extends BaseElement {
             </svg>
             <h2>Al-Quran Reader</h2>
           </div>
-          <div id="quranGeometryBadge" class="card-badge badge-flash">200 × 200 px</div>
+          <div id="mushafGeometryBadge" class="card-badge badge-flash">200 × 200 px</div>
         </div>
 
-        <!-- CARD 1: Quran Package Builder -->
+        <!-- CARD 1: Mushaf Package Builder -->
         <div class="card" style="margin-bottom: 0.85rem;">
           <div class="card-header">
             <div class="card-title">
@@ -387,20 +403,20 @@ class QuranBuilder extends BaseElement {
               </svg>
               <span>Package Builder</span>
             </div>
-            <div id="quranSizeEstimate" class="card-badge badge-muted">Est. Size: ~8.7 MB</div>
+            <div id="mushafSizeEstimate" class="card-badge badge-muted">Est. Size: ~8.7 MB</div>
           </div>
 
           <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0.65rem; margin-bottom: 0.65rem;">
             <div>
-              <label for="quranScriptSelect" class="input-label-sm">Mushaf Script</label>
-              <select id="quranScriptSelect" class="select-input" style="width: 100%;">
+              <label for="mushafScriptSelect" class="input-label-sm">Mushaf Script</label>
+              <select id="mushafScriptSelect" class="select-input" style="width: 100%;">
                 <option value="0" selected>Madinah Uthmani (KFGQPC)</option>
                 <option value="1">IndoPak 15-Line Naskh</option>
               </select>
             </div>
             <div>
-              <label for="quranFontSizeSelect" class="input-label-sm">Font Size</label>
-              <select id="quranFontSizeSelect" class="select-input" style="width: 100%;">
+              <label for="mushafFontSizeSelect" class="input-label-sm">Font Size</label>
+              <select id="mushafFontSizeSelect" class="select-input" style="width: 100%;">
                 <option value="20">20px (Compact)</option>
                 <option value="24">24px (Normal)</option>
                 <option value="28" selected>28px (Standard)</option>
@@ -408,8 +424,8 @@ class QuranBuilder extends BaseElement {
               </select>
             </div>
             <div>
-              <label for="quranRangeSelect" class="input-label-sm">Content Range</label>
-              <select id="quranRangeSelect" class="select-input" style="width: 100%;">
+              <label for="mushafRangeSelect" class="input-label-sm">Content Range</label>
+              <select id="mushafRangeSelect" class="select-input" style="width: 100%;">
                 <option value="full" selected>Full 30 Juz (1–114)</option>
                 <option value="juz30">Juz 30 ('Amma, 78–114)</option>
                 <option value="custom">Custom Surah Range</option>
@@ -417,7 +433,7 @@ class QuranBuilder extends BaseElement {
             </div>
           </div>
 
-          <div id="quranCustomRangeRow" style="display: none; grid-template-columns: 1fr 1fr; gap: 0.65rem; margin-bottom: 0.65rem;">
+          <div id="mushafCustomRangeRow" style="display: none; grid-template-columns: 1fr 1fr; gap: 0.65rem; margin-bottom: 0.65rem;">
             <div>
               <label for="customStartSurah" class="input-label-sm">From Surah</label>
               <select id="customStartSurah" class="select-input" style="width: 100%;">${surahOptionsHtml}</select>
@@ -438,7 +454,7 @@ class QuranBuilder extends BaseElement {
                 <input type="checkbox" id="layerTranslationCheckbox" checked>
                 <span>Translation:</span>
               </label>
-              <select id="quranTranslationSelect" class="select-input" style="font-size: 0.76rem; padding: 0.2rem 0.4rem; flex: 1; min-width: 0;">
+              <select id="mushafTranslationSelect" class="select-input" style="font-size: 0.76rem; padding: 0.2rem 0.4rem; flex: 1; min-width: 0;">
                 <option value="id_kemenag" selected>ID - Kemenag</option>
                 <option value="en_saheeh">EN - Sahih Intl</option>
               </select>
@@ -448,26 +464,26 @@ class QuranBuilder extends BaseElement {
                 <input type="checkbox" id="layerTafsirCheckbox" checked>
                 <span>Tafsir:</span>
               </label>
-              <select id="quranTafsirSelect" class="select-input" style="font-size: 0.76rem; padding: 0.2rem 0.4rem; flex: 1; min-width: 0;">
+              <select id="mushafTafsirSelect" class="select-input" style="font-size: 0.76rem; padding: 0.2rem 0.4rem; flex: 1; min-width: 0;">
                 <option value="id_kemenag_ringkas" selected>ID - Kemenag Ringkas</option>
                 <option value="jalalayn">EN - Al-Jalalayn</option>
               </select>
             </div>
           </div>
 
-          <div id="quranBuildProgressWrap" style="display: none; margin-bottom: 0.6rem;">
+          <div id="mushafBuildProgressWrap" style="display: none; margin-bottom: 0.6rem;">
             <div class="upload-progress-container">
-              <div id="quranBuildProgressBar" class="upload-progress-fill" style="width: 0%;"></div>
+              <div id="mushafBuildProgressBar" class="upload-progress-fill" style="width: 0%;"></div>
             </div>
           </div>
 
           <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.6rem;">
             <div style="display: flex; align-items: center; gap: 0.5rem; min-width: 0;">
-              <span id="quranStatusText" class="status-text" style="font-size: 0.78rem; color: var(--text-secondary); font-family: var(--font-mono);">Loading assets...</span>
-              <button id="quranRetryAssetsBtn" class="btn-control" type="button" style="display: none; font-size: 0.74rem; padding: 0.2rem 0.5rem;">Retry</button>
+              <span id="mushafStatusText" class="status-text" style="font-size: 0.78rem; color: var(--text-secondary); font-family: var(--font-mono);">Loading assets.</span>
+              <button id="mushafRetryAssetsBtn" class="btn-control" type="button" style="display: none; font-size: 0.74rem; padding: 0.2rem 0.5rem;">Retry</button>
             </div>
             <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
-              <button id="quranDownloadBtn" class="btn-secondary" type="button">
+              <button id="mushafDownloadBtn" class="btn-secondary" type="button">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                   <polyline points="7 10 12 15 17 10"></polyline>
@@ -475,7 +491,7 @@ class QuranBuilder extends BaseElement {
                 </svg>
                 <span>Download Package(.bqm)</span>
               </button>
-              <button id="quranBuildUploadBtn" class="btn-connect" type="button">
+              <button id="mushafBuildUploadBtn" class="btn-connect" type="button">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                   <polyline points="17 8 12 3 7 8"></polyline>
@@ -498,21 +514,21 @@ class QuranBuilder extends BaseElement {
               <span>Preview, Tilawah & Bookmarks</span>
             </div>
             <div style="display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;">
-              <div id="quranTilawahBadge" class="card-badge badge-muted">Ready (1:1)</div>
-              <div id="quranBookmarkCountBadge" class="card-badge badge-muted">0 / 8 Bookmarks</div>
+              <div id="mushafTilawahBadge" class="card-badge badge-muted">Ready (1:1)</div>
+              <div id="mushafBookmarkCountBadge" class="card-badge badge-muted">0 / 8 Bookmarks</div>
             </div>
           </div>
 
           <div style="display: grid; grid-template-columns: auto 1fr; gap: 1rem; align-items: start;">
             <!-- Left: 1-Bit E-Paper Preview Canvas -->
             <div style="display: flex; flex-direction: column; align-items: center; gap: 0.35rem; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 0.6rem;">
-              <canvas id="quranPreviewCanvas" width="${this._screenW}" height="${this._screenH}" style="background: #ffffff; image-rendering: pixelated; border: 1px solid var(--border-color); border-radius: 4px; max-width: 100%; height: auto;"></canvas>
+              <canvas id="mushafPreviewCanvas" width="${this._screenW}" height="${this._screenH}" style="background: #ffffff; image-rendering: pixelated; border: 1px solid var(--border-color); border-radius: 4px; max-width: 100%; height: auto;"></canvas>
               <span style="font-size: 0.7rem; color: var(--text-muted);">1-Bit E-Paper Preview</span>
             </div>
 
             <!-- Right: Unified Selector, Sunnah Presets & Bookmarks -->
             <div style="display: flex; flex-direction: column; gap: 0.75rem; min-width: 220px;">
-              <!-- Unified Surah / Ayah / Layer Selector + Actions -->
+              <!-- Unified Surah / Ayah / Layer Selector & Actions -->
               <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: flex-end;">
                 <div style="flex: 1 1 150px;">
                   <label for="cursorSurahSelect" class="input-label-sm">Surah</label>
@@ -531,10 +547,10 @@ class QuranBuilder extends BaseElement {
                     <option value="3">Tafsir</option>
                   </select>
                 </div>
-                <button id="quranSyncCursorBtn" class="btn-secondary" type="button" style="height: 36px; padding: 0 0.7rem;" title="Jump device to selected Surah, Ayah & Layer">
+                <button id="mushafSyncCursorBtn" class="btn-secondary" type="button" style="height: 36px; padding: 0 0.7rem;" title="Jump device to selected Surah, Ayah & Layer">
                   <span>Sync Cursor</span>
                 </button>
-                <button id="quranAddBookmarkBtn" class="btn-secondary" type="button" style="height: 36px; padding: 0 0.7rem;" title="Bookmark selected Surah & Ayah on device">
+                <button id="mushafAddBookmarkBtn" class="btn-secondary" type="button" style="height: 36px; padding: 0 0.7rem;" title="Bookmark selected Surah & Ayah on device">
                   <span>+ Bookmark</span>
                 </button>
               </div>
@@ -549,7 +565,7 @@ class QuranBuilder extends BaseElement {
 
               <!-- Saved Bookmarks List -->
               <div style="border-top: 1px solid var(--border-color); padding-top: 0.6rem;">
-                <div id="quranBookmarksList" class="books-list">
+                <div id="mushafBookmarksList" class="books-list">
                   <p style="font-size: 0.78rem; color: var(--text-muted); margin: 0;">No bookmarks saved on device.</p>
                 </div>
               </div>
@@ -561,13 +577,13 @@ class QuranBuilder extends BaseElement {
   }
 
   bindEvents() {
-    const retryBtn = this.querySelector("#quranRetryAssetsBtn");
+    const retryBtn = this.querySelector("#mushafRetryAssetsBtn");
     if (retryBtn) {
       retryBtn.addEventListener("click", () => this.preloadAssets());
     }
 
-    const rangeSelect = this.querySelector("#quranRangeSelect");
-    const customRangeRow = this.querySelector("#quranCustomRangeRow");
+    const rangeSelect = this.querySelector("#mushafRangeSelect");
+    const customRangeRow = this.querySelector("#mushafCustomRangeRow");
     if (rangeSelect && customRangeRow) {
       rangeSelect.addEventListener("change", () => {
         customRangeRow.style.display =
@@ -577,22 +593,22 @@ class QuranBuilder extends BaseElement {
     }
 
     const builderInputs = this.querySelectorAll(
-      "#layerLatinCheckbox, #layerTranslationCheckbox, #layerTafsirCheckbox, #customStartSurah, #customEndSurah, #quranScriptSelect, #quranFontSizeSelect",
+      "#layerLatinCheckbox, #layerTranslationCheckbox, #layerTafsirCheckbox, #customStartSurah, #customEndSurah, #mushafScriptSelect, #mushafFontSizeSelect",
     );
     builderInputs.forEach((input) => {
       input.addEventListener("change", () => {
         this.updateSizeEstimate();
         if (
-          input.id === "quranScriptSelect" ||
-          input.id === "quranFontSizeSelect"
+          input.id === "mushafScriptSelect" ||
+          input.id === "mushafFontSizeSelect"
         ) {
           this.renderAyahPreview();
         }
       });
     });
 
-    const transSelect = this.querySelector("#quranTranslationSelect");
-    const tafsirSelect = this.querySelector("#quranTafsirSelect");
+    const transSelect = this.querySelector("#mushafTranslationSelect");
+    const tafsirSelect = this.querySelector("#mushafTafsirSelect");
     const onEditionChange = () => {
       this.updateSizeEstimate();
       const translationEdition = transSelect?.value || "id_kemenag";
@@ -608,19 +624,19 @@ class QuranBuilder extends BaseElement {
     if (tafsirSelect) tafsirSelect.addEventListener("change", onEditionChange);
 
     // Build & Download buttons
-    const uploadBtn = this.querySelector("#quranBuildUploadBtn");
-    const downloadBtn = this.querySelector("#quranDownloadBtn");
+    const uploadBtn = this.querySelector("#mushafBuildUploadBtn");
+    const downloadBtn = this.querySelector("#mushafDownloadBtn");
     if (uploadBtn)
       uploadBtn.addEventListener("click", () => this.buildAndUpload(true));
     if (downloadBtn)
       downloadBtn.addEventListener("click", () => this.buildAndUpload(false));
 
-    // Unified Surah / Ayah / Layer selector drives Live Preview + Cursor Sync + Add Bookmark
+    // Unified Surah / Ayah / Layer selector drives Live Preview, Cursor Sync, Add Bookmark
     const curSurahSelect = this.querySelector("#cursorSurahSelect");
     const curAyahInput = this.querySelector("#cursorAyahInput");
     const curLayerSelect = this.querySelector("#cursorLayerSelect");
-    const syncCursorBtn = this.querySelector("#quranSyncCursorBtn");
-    const addBmBtn = this.querySelector("#quranAddBookmarkBtn");
+    const syncCursorBtn = this.querySelector("#mushafSyncCursorBtn");
+    const addBmBtn = this.querySelector("#mushafAddBookmarkBtn");
 
     if (curSurahSelect && curAyahInput) {
       curSurahSelect.addEventListener("change", () => {
@@ -662,7 +678,7 @@ class QuranBuilder extends BaseElement {
         const juz = getJuzForAyah(surah, ayah);
         bookmarks.push({ surah, ayah, juz });
         this.dispatchEvent(
-          new CustomEvent("quran-set-bookmarks", {
+          new CustomEvent("mushaf-set-bookmarks", {
             detail: { bookmarks },
             bubbles: true,
             composed: true,
@@ -672,7 +688,7 @@ class QuranBuilder extends BaseElement {
     }
 
     // Sunnah Quick Presets update preview AND sync cursor when connected
-    this.querySelectorAll(".quran-preset-btn").forEach((btn) => {
+    this.querySelectorAll(".mushaf-preset-btn").forEach((btn) => {
       btn.addEventListener("click", () => {
         const surah = parseInt(btn.getAttribute("data-surah"), 10);
         const ayah = parseInt(btn.getAttribute("data-ayah"), 10);
@@ -692,10 +708,10 @@ class QuranBuilder extends BaseElement {
     });
 
     // Bookmarks Jump / Delete delegation
-    const bmList = this.querySelector("#quranBookmarksList");
+    const bmList = this.querySelector("#mushafBookmarksList");
     if (bmList) {
       bmList.addEventListener("click", (e) => {
-        const jumpBtn = e.target.closest(".quran-bm-jump-btn");
+        const jumpBtn = e.target.closest(".mushaf-bm-jump-btn");
         if (jumpBtn) {
           const idx = parseInt(jumpBtn.getAttribute("data-index"), 10);
           const bm = this._deviceState.bookmarks[idx];
@@ -715,14 +731,14 @@ class QuranBuilder extends BaseElement {
           return;
         }
 
-        const delBtn = e.target.closest(".quran-bm-del-btn");
+        const delBtn = e.target.closest(".mushaf-bm-del-btn");
         if (delBtn) {
           const idx = parseInt(delBtn.getAttribute("data-index"), 10);
           const bookmarks = [...(this._deviceState.bookmarks || [])];
           if (idx >= 0 && idx < bookmarks.length) {
             bookmarks.splice(idx, 1);
             this.dispatchEvent(
-              new CustomEvent("quran-set-bookmarks", {
+              new CustomEvent("mushaf-set-bookmarks", {
                 detail: { bookmarks },
                 bubbles: true,
                 composed: true,
@@ -736,14 +752,7 @@ class QuranBuilder extends BaseElement {
 
   dispatchCursorSync(surah, ayah, layer) {
     this.dispatchEvent(
-      new CustomEvent("quran-set-cursor", {
-        detail: { surah, ayah, layer },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-    this.dispatchEvent(
-      new CustomEvent("quran-set-tilawah", {
+      new CustomEvent("mushaf-set-cursor", {
         detail: { surah, ayah, layer },
         bubbles: true,
         composed: true,
@@ -752,7 +761,8 @@ class QuranBuilder extends BaseElement {
   }
 
   updateSizeEstimate() {
-    const rangeType = this.querySelector("#quranRangeSelect")?.value || "full";
+    const rangeType =
+      this.querySelector("#mushafRangeSelect")?.value || "full";
     const customStart = parseInt(
       this.querySelector("#customStartSurah")?.value || "1",
       10,
@@ -762,11 +772,11 @@ class QuranBuilder extends BaseElement {
       10,
     );
     const scriptId = parseInt(
-      this.querySelector("#quranScriptSelect")?.value || "0",
+      this.querySelector("#mushafScriptSelect")?.value || "0",
       10,
     );
     const fontSize = parseInt(
-      this.querySelector("#quranFontSizeSelect")?.value || "24",
+      this.querySelector("#mushafFontSizeSelect")?.value || "24",
       10,
     );
     const latin = Boolean(this.querySelector("#layerLatinCheckbox")?.checked);
@@ -775,9 +785,9 @@ class QuranBuilder extends BaseElement {
     );
     const tafsir = Boolean(this.querySelector("#layerTafsirCheckbox")?.checked);
     const translationEdition =
-      this.querySelector("#quranTranslationSelect")?.value || "id_kemenag";
+      this.querySelector("#mushafTranslationSelect")?.value || "id_kemenag";
     const tafsirEdition =
-      this.querySelector("#quranTafsirSelect")?.value || "id_kemenag_ringkas";
+      this.querySelector("#mushafTafsirSelect")?.value || "id_kemenag_ringkas";
 
     const startSurah =
       rangeType === "custom"
@@ -790,14 +800,14 @@ class QuranBuilder extends BaseElement {
 
     let totalBytes = 64 + 114 * 24 + 6236 * 24;
 
-    if (this._cachedQuranBase && Array.isArray(this._cachedQuranBase.ayahs)) {
+    if (this._cachedMushafBase && Array.isArray(this._cachedMushafBase.ayahs)) {
       const uniqueWords = new Set();
       const trArr =
         this._cachedEditionsData?.translations?.[translationEdition];
       const tafArr = this._cachedEditionsData?.tafsirs?.[tafsirEdition];
 
-      for (let i = 0; i < this._cachedQuranBase.ayahs.length; i++) {
-        const a = this._cachedQuranBase.ayahs[i];
+      for (let i = 0; i < this._cachedMushafBase.ayahs.length; i++) {
+        const a = this._cachedMushafBase.ayahs[i];
         if (a.surah < startSurah || a.surah > endSurah) continue;
 
         const words =
@@ -847,13 +857,13 @@ class QuranBuilder extends BaseElement {
         ? `Est. Size: ~${Math.round(totalBytes / 1024)} KB`
         : `Est. Size: ~${(totalBytes / (1024 * 1024)).toFixed(1)} MB`;
 
-    const badge = this.querySelector("#quranSizeEstimate");
+    const badge = this.querySelector("#mushafSizeEstimate");
     if (badge) badge.textContent = formatted;
   }
 
   async renderAyahPreview() {
     if (!this._assetsReady) return;
-    const canvas = this.querySelector("#quranPreviewCanvas");
+    const canvas = this.querySelector("#mushafPreviewCanvas");
     if (!canvas) return;
 
     const surah = parseInt(
@@ -869,20 +879,20 @@ class QuranBuilder extends BaseElement {
       10,
     );
     const scriptStyle = parseInt(
-      this.querySelector("#quranScriptSelect")?.value || "0",
+      this.querySelector("#mushafScriptSelect")?.value || "0",
       10,
     );
     const mushafFontSize = parseInt(
-      this.querySelector("#quranFontSizeSelect")?.value || "28",
+      this.querySelector("#mushafFontSizeSelect")?.value || "28",
       10,
     );
     const translationEdition =
-      this.querySelector("#quranTranslationSelect")?.value || "id_kemenag";
+      this.querySelector("#mushafTranslationSelect")?.value || "id_kemenag";
     const tafsirEdition =
-      this.querySelector("#quranTafsirSelect")?.value || "id_kemenag_ringkas";
+      this.querySelector("#mushafTafsirSelect")?.value || "id_kemenag_ringkas";
 
     try {
-      await ensureQuranFont(scriptStyle);
+      await ensureMushafFont(scriptStyle);
       await renderAyahPreviewToCanvas(canvas, {
         surah,
         ayah,
@@ -894,11 +904,11 @@ class QuranBuilder extends BaseElement {
         displayHeight: this._screenH,
         translationEdition,
         tafsirEdition,
-        quranBase: this._cachedQuranBase,
+        mushafBase: this._cachedMushafBase,
         editionsData: this._cachedEditionsData,
       });
     } catch (err) {
-      console.error("[QuranBuilder] Preview render error:", err);
+      console.error("[MushafBuilder] Preview render error:", err);
       this.setStatusText(`Preview error: ${err.message}`, true);
     }
   }
@@ -907,10 +917,10 @@ class QuranBuilder extends BaseElement {
     if (this._isBuilding) return;
     this._isBuilding = true;
 
-    const progressWrap = this.querySelector("#quranBuildProgressWrap");
-    const progressBar = this.querySelector("#quranBuildProgressBar");
-    const uploadBtn = this.querySelector("#quranBuildUploadBtn");
-    const downloadBtn = this.querySelector("#quranDownloadBtn");
+    const progressWrap = this.querySelector("#mushafBuildProgressWrap");
+    const progressBar = this.querySelector("#mushafBuildProgressBar");
+    const uploadBtn = this.querySelector("#mushafBuildUploadBtn");
+    const downloadBtn = this.querySelector("#mushafDownloadBtn");
 
     if (progressWrap) progressWrap.style.display = "block";
     if (progressBar) progressBar.style.width = "0%";
@@ -918,14 +928,15 @@ class QuranBuilder extends BaseElement {
     if (downloadBtn) downloadBtn.disabled = true;
 
     const scriptStyle = parseInt(
-      this.querySelector("#quranScriptSelect")?.value || "0",
+      this.querySelector("#mushafScriptSelect")?.value || "0",
       10,
     );
     const mushafFontSize = parseInt(
-      this.querySelector("#quranFontSizeSelect")?.value || "28",
+      this.querySelector("#mushafFontSizeSelect")?.value || "28",
       10,
     );
-    const rangeType = this.querySelector("#quranRangeSelect")?.value || "full";
+    const rangeType =
+      this.querySelector("#mushafRangeSelect")?.value || "full";
     const customStart = parseInt(
       this.querySelector("#customStartSurah")?.value || "1",
       10,
@@ -946,9 +957,9 @@ class QuranBuilder extends BaseElement {
     );
 
     const translationEdition =
-      this.querySelector("#quranTranslationSelect")?.value || "id_kemenag";
+      this.querySelector("#mushafTranslationSelect")?.value || "id_kemenag";
     const tafsirEdition =
-      this.querySelector("#quranTafsirSelect")?.value || "id_kemenag_ringkas";
+      this.querySelector("#mushafTafsirSelect")?.value || "id_kemenag_ringkas";
 
     const buildOptions = {
       scriptStyle,
@@ -972,24 +983,24 @@ class QuranBuilder extends BaseElement {
       tafsirEdition,
       displayWidth: this._screenW,
       displayHeight: this._screenH,
-      quranBase: this._cachedQuranBase,
+      mushafBase: this._cachedMushafBase,
       editionsData: this._cachedEditionsData,
     };
 
     try {
-      await ensureQuranFont(scriptStyle, (msg) => this.setStatusText(msg));
+      await ensureMushafFont(scriptStyle, (msg) => this.setStatusText(msg));
 
-      if (!this._cachedQuranBase || !this._cachedEditionsData) {
-        const datasets = await fetchQuranDatasets(buildOptions, (msg) =>
+      if (!this._cachedMushafBase || !this._cachedEditionsData) {
+        const datasets = await fetchMushafDatasets(buildOptions, (msg) =>
           this.setStatusText(msg),
         );
-        this._cachedQuranBase = datasets.quranBase;
+        this._cachedMushafBase = datasets.mushafBase;
         this._cachedEditionsData = datasets.editionsData;
-        buildOptions.quranBase = this._cachedQuranBase;
+        buildOptions.mushafBase = this._cachedMushafBase;
         buildOptions.editionsData = this._cachedEditionsData;
       }
 
-      this.setStatusText("Compiling quran.bqm...");
+      this.setStatusText("Compiling mushaf.bqm.");
 
       const bqmArrayBuffer = await buildBqmPackage(buildOptions, (progress) => {
         if (!progress || typeof progress !== "object") return;
@@ -1001,17 +1012,17 @@ class QuranBuilder extends BaseElement {
         this.setStatusText(`${progress.stage || "Building"}: ${pct}%`);
       });
 
-      const file = new File([bqmArrayBuffer], "quran.bqm", {
+      const file = new File([bqmArrayBuffer], "mushaf.bqm", {
         type: "application/octet-stream",
       });
 
       if (isUpload) {
         this._isUploadingBqm = true;
         this.setStatusText(
-          `Uploading quran.bqm (${(file.size / 1024).toFixed(0)} KB)...`,
+          `Uploading mushaf.bqm (${(file.size / 1024).toFixed(0)} KB).`,
         );
         this.dispatchEvent(
-          new CustomEvent("quran-upload-bqm", {
+          new CustomEvent("mushaf-upload-bqm", {
             detail: { file },
             bubbles: true,
             composed: true,
@@ -1021,20 +1032,20 @@ class QuranBuilder extends BaseElement {
         const blobUrl = URL.createObjectURL(file);
         const a = document.createElement("a");
         a.href = blobUrl;
-        a.download = "quran.bqm";
+        a.download = "mushaf.bqm";
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(blobUrl);
         if (progressWrap) progressWrap.style.display = "none";
         this.setStatusText(
-          `quran.bqm downloaded (${(file.size / 1024).toFixed(0)} KB).`,
+          `mushaf.bqm downloaded (${(file.size / 1024).toFixed(0)} KB).`,
         );
       }
     } catch (err) {
       this._isUploadingBqm = false;
       if (progressWrap) progressWrap.style.display = "none";
-      console.error("[QuranBuilder] Build failed:", err);
+      console.error("[MushafBuilder] Build failed:", err);
       this.setStatusText(`Build failed: ${err.message}`, true);
     } finally {
       this._isBuilding = false;
@@ -1050,9 +1061,9 @@ class QuranBuilder extends BaseElement {
 
 if (
   typeof customElements !== "undefined" &&
-  !customElements.get("quran-builder")
+  !customElements.get("mushaf-builder")
 ) {
-  customElements.define("quran-builder", QuranBuilder);
+  customElements.define("mushaf-builder", MushafBuilder);
 }
 
-export { QuranBuilder };
+export { MushafBuilder };

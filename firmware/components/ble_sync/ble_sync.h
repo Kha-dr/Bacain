@@ -54,9 +54,12 @@ typedef enum {
 #define BLE_SYNC_OP_SET_BUTTON_INVERT    0x17
 #define BLE_SYNC_OP_SET_STATUS_LED       0x18
 #define BLE_SYNC_OP_GET_CONFIG           0x19
-#define BLE_SYNC_OP_GET_QURAN_STATE      0x20
-#define BLE_SYNC_OP_SET_QURAN_STATE      0x21
-#define BLE_SYNC_CAP_ALQURAN             (1 << 0)
+#define BLE_SYNC_OP_GET_MUSHAF_STATE     0x20
+
+#define BLE_SYNC_OP_SET_MUSHAF_STATE     0x21
+
+#define BLE_SYNC_CAP_MUSHAF              (1 << 0)
+
 /* Control Response Status Codes */
 #define BLE_SYNC_STATUS_OK               0x00
 #define BLE_SYNC_STATUS_ERROR            0x01
@@ -81,7 +84,7 @@ typedef struct __attribute__((packed)) {
     uint8_t  status_led;     /*!< 0 = disabled, 1 = enabled */
     uint8_t  storage_target; /*!< 0 = SD card, 1 = Flash */
     uint16_t sleep_timeout;  /*!< Sleep timeout in seconds (little-endian) */
-    uint8_t  capabilities;   /*!< Bit 0: BLE_SYNC_CAP_ALQURAN */
+    uint8_t  capabilities;   /*!< Bit 0: BLE_SYNC_CAP_MUSHAF */
     uint16_t display_width;  /*!< BOARD_DISPLAY_WIDTH (little-endian) */
     uint16_t display_height; /*!< BOARD_DISPLAY_HEIGHT (little-endian) */
 } ble_sync_config_response_t;

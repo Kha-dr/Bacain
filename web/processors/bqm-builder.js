@@ -1,10 +1,10 @@
 /**
  * bqm-builder.js
- * BacaIn PWA - Al-Quran Mushaf (.bqm) Binary Package Compiler & Canvas Previewer
+ * BacaIn PWA - Mushaf (.bqm) Binary Package Compiler & Canvas Previewer
  *
  * Implements:
  * 1. renderAyahPreviewToCanvas(canvas, options):
- *    1-bit preview renderer matching view_quran.c and quran_reader.c e-paper layouts.
+ *    1-bit preview renderer matching view_mushaf.c and mushaf_reader.c e-paper layouts.
  * 2. buildBqmPackage(options, onProgress):
  *    Assembles a valid BQM1 container with packed 1-bit word sprites and pre-wrapped text layers.
  */
@@ -195,7 +195,7 @@ export const SUNNAH_PRESETS = [
   { surah: 67, ayah: 1, name: 'Al-Mulk', label: 'Al-Mulk (67:1)' }
 ];
 
-export const QURAN_LAYERS = [
+export const MUSHAF_LAYERS = [
   { id: 0, tag: 'M', fullTag: '[M]', name: 'Mushaf', title: 'Mushaf Calligraphy' },
   { id: 1, tag: 'LAT', fullTag: '[LAT]', name: 'Latin', title: 'Latin Transliteration' },
   { id: 2, tag: 'TRN', fullTag: '[TRN]', name: 'Translation', title: 'Translation' },
@@ -203,11 +203,11 @@ export const QURAN_LAYERS = [
 ];
 
 // ---------------------------------------------------------------------------
-// Upstream CORS Font & Corpus Endpoints + CacheStorage ('bacain-quran-v1')
+// Upstream CORS Font & Corpus Endpoints + CacheStorage ('bacain-mushaf-assets-v1')
 // ---------------------------------------------------------------------------
-export const QURAN_CACHE_NAME = 'bacain-quran-v1';
+export const MUSHAF_CACHE_NAME = 'bacain-mushaf-assets-v1';
 
-export const QURAN_FONTS = {
+export const MUSHAF_FONTS = {
   uthmani: {
     family: 'KFGQPC-Uthmanic',
     url: 'https://verses.quran.foundation/fonts/quran/hafs/uthmanic_hafs/UthmanicHafs1Ver18.woff2'
@@ -218,7 +218,7 @@ export const QURAN_FONTS = {
   }
 };
 
-export const QURAN_DATA_ENDPOINTS = {
+export const MUSHAF_DATA_ENDPOINTS = {
   uthmani: 'https://api.alquran.cloud/v1/quran/quran-uthmani',
   indopakPrimary: 'https://cdn.jsdelivr.net/gh/fawazahmed0/quran-api@1/editions/ara-quranindopak.json',
   indopakFallback: 'https://api.alquran.cloud/v1/quran/quran-indopak',
@@ -230,7 +230,7 @@ export const QURAN_DATA_ENDPOINTS = {
 };
 
 /**
- * Fetch a resource with persistent CacheStorage ('bacain-quran-v1').
+ * Fetch a resource with persistent CacheStorage ('bacain-mushaf-assets-v1').
  * Checks cache first; if missing, fetches upstream, puts clone in cache, and returns response.
  * Falls back to standard fetch if globalThis.caches is unavailable.
  * @param {string} url
@@ -239,7 +239,7 @@ export const QURAN_DATA_ENDPOINTS = {
 export async function fetchWithCache(url) {
   if (typeof globalThis !== 'undefined' && globalThis.caches) {
     try {
-      const cache = await globalThis.caches.open(QURAN_CACHE_NAME);
+      const cache = await globalThis.caches.open(MUSHAF_CACHE_NAME);
       const cached = await cache.match(url);
       if (cached) {
         return cached;
@@ -268,7 +268,7 @@ export async function fetchWithCache(url) {
   return res;
 }
 
-const loadedQuranFonts = new Set();
+const loadedMushafFonts = new Set();
 
 /**
  * Ensure the required .woff2 calligraphy font is loaded in browser document.fonts.
@@ -276,21 +276,21 @@ const loadedQuranFonts = new Set();
  * @param {Function|null} onStatus
  * @returns {Promise<boolean>}
  */
-export async function ensureQuranFont(scriptId = 0, onStatus = null) {
+export async function ensureMushafFont(scriptId = 0, onStatus = null) {
   if (typeof FontFace === 'undefined' || typeof document === 'undefined' || !document.fonts) {
     return false;
   }
-  const fontConfig = scriptId === 1 ? QURAN_FONTS.indopak : QURAN_FONTS.uthmani;
-  if (loadedQuranFonts.has(fontConfig.family)) {
+  const fontConfig = scriptId === 1 ? MUSHAF_FONTS.indopak : MUSHAF_FONTS.uthmani;
+  if (loadedMushafFonts.has(fontConfig.family)) {
     return true;
   }
   if (document.fonts.check(`16px ${fontConfig.family}`)) {
-    loadedQuranFonts.add(fontConfig.family);
+    loadedMushafFonts.add(fontConfig.family);
     return true;
   }
 
   if (typeof onStatus === 'function') {
-    onStatus(`Fetching ${fontConfig.family} font (${QURAN_CACHE_NAME})...`);
+    onStatus(`Fetching ${fontConfig.family} font (${MUSHAF_CACHE_NAME})...`);
   }
 
   const res = await fetchWithCache(fontConfig.url);
@@ -298,16 +298,16 @@ export async function ensureQuranFont(scriptId = 0, onStatus = null) {
   const fontFace = new FontFace(fontConfig.family, arrayBuffer);
   const loaded = await fontFace.load();
   document.fonts.add(loaded);
-  loadedQuranFonts.add(fontConfig.family);
+  loadedMushafFonts.add(fontConfig.family);
   return true;
 }
 
 /**
- * Parse an AlQuranCloud JSON payload into an ayah map.
+ * Parse API JSON payload into an ayah map.
  * @param {object} json
  * @returns {Map<string, { text: string, juz: number, hizbQuarter: number }>}
  */
-export function parseAlQuranCloud(json) {
+export function parseMushafCloud(json) {
   const map = new Map();
   if (json?.data?.surahs && Array.isArray(json.data.surahs)) {
     for (const s of json.data.surahs) {
@@ -326,7 +326,7 @@ export function parseAlQuranCloud(json) {
 }
 
 /**
- * Parse IndoPak JSON format (primary array or fallback AlQuranCloud structure).
+ * Parse IndoPak JSON format (primary array or fallback API structure).
  * @param {object|Array} json
  * @returns {Map<string, string>}
  */
@@ -348,8 +348,8 @@ export function parseIndoPakData(json) {
         map.set(`${s}:${a}`, (item.text || '').trim());
       }
     }
-  } else if (json?.quran && Array.isArray(json.quran)) {
-    for (const item of json.quran) {
+  } else if (json && typeof json === 'object') {
+    const list = json.mushaf || Object.values(json).find(Array.isArray); if (Array.isArray(list)) for (const item of list) {
       const s = item.chapter || item.surah;
       const a = item.verse || item.ayah;
       if (s && a && item.text) {
@@ -361,12 +361,12 @@ export function parseIndoPakData(json) {
 }
 
 /**
- * Fetch and assemble canonical Quran corpora directly via CacheStorage / CORS endpoints.
+ * Fetch and assemble canonical Mushaf corpora directly via CacheStorage / CORS endpoints.
  * @param {object} options
  * @param {Function|null} onStatus
- * @returns {Promise<{ quranBase: object, editionsData: object }>}
+ * @returns {Promise<{ mushafBase: object, editionsData: object }>}
  */
-export async function fetchQuranDatasets(options = {}, onStatus = null) {
+export async function fetchMushafDatasets(options = {}, onStatus = null) {
   function status(msg) {
     if (typeof onStatus === 'function') onStatus(msg);
   }
@@ -381,20 +381,20 @@ export async function fetchQuranDatasets(options = {}, onStatus = null) {
   const tafsirLang = (options.tafsirEdition === 'jalalayn' || options.tafsirId === 2) ? 'en' : 'id';
 
   status('Fetching Uthmani text corpus...');
-  const uthmaniRes = await fetchWithCache(QURAN_DATA_ENDPOINTS.uthmani);
+  const uthmaniRes = await fetchWithCache(MUSHAF_DATA_ENDPOINTS.uthmani);
   const uthmaniJson = await uthmaniRes.json();
-  const uthmaniMap = parseAlQuranCloud(uthmaniJson);
+  const uthmaniMap = parseMushafCloud(uthmaniJson);
 
   let indopakMap = null;
   if (needIndopak) {
     status('Fetching IndoPak text corpus...');
     try {
-      const indopakRes = await fetchWithCache(QURAN_DATA_ENDPOINTS.indopakPrimary);
+      const indopakRes = await fetchWithCache(MUSHAF_DATA_ENDPOINTS.indopakPrimary);
       const indopakJson = await indopakRes.json();
       indopakMap = parseIndoPakData(indopakJson);
     } catch (err) {
       console.warn(`Primary IndoPak fetch failed: ${err.message}. Trying fallback...`);
-      const fbRes = await fetchWithCache(QURAN_DATA_ENDPOINTS.indopakFallback);
+      const fbRes = await fetchWithCache(MUSHAF_DATA_ENDPOINTS.indopakFallback);
       const fbJson = await fbRes.json();
       indopakMap = parseIndoPakData(fbJson);
     }
@@ -403,9 +403,9 @@ export async function fetchQuranDatasets(options = {}, onStatus = null) {
   let latinMap = null;
   if (needLatin) {
     status('Fetching Latin transliteration...');
-    const latinRes = await fetchWithCache(QURAN_DATA_ENDPOINTS.latin);
+    const latinRes = await fetchWithCache(MUSHAF_DATA_ENDPOINTS.latin);
     const latinJson = await latinRes.json();
-    latinMap = parseAlQuranCloud(latinJson);
+    latinMap = parseMushafCloud(latinJson);
   }
 
   let idTransMap = null;
@@ -413,15 +413,15 @@ export async function fetchQuranDatasets(options = {}, onStatus = null) {
   if (needTrans) {
     if (transLang === 'id' || !options.lazyEditions) {
       status('Fetching Indonesian translation...');
-      const idTrRes = await fetchWithCache(QURAN_DATA_ENDPOINTS.idTrans);
+      const idTrRes = await fetchWithCache(MUSHAF_DATA_ENDPOINTS.idTrans);
       const idTrJson = await idTrRes.json();
-      idTransMap = parseAlQuranCloud(idTrJson);
+      idTransMap = parseMushafCloud(idTrJson);
     }
     if (transLang === 'en' || !options.lazyEditions) {
       status('Fetching English translation...');
-      const enTrRes = await fetchWithCache(QURAN_DATA_ENDPOINTS.enTrans);
+      const enTrRes = await fetchWithCache(MUSHAF_DATA_ENDPOINTS.enTrans);
       const enTrJson = await enTrRes.json();
-      enTransMap = parseAlQuranCloud(enTrJson);
+      enTransMap = parseMushafCloud(enTrJson);
     }
   }
 
@@ -430,19 +430,19 @@ export async function fetchQuranDatasets(options = {}, onStatus = null) {
   if (needTafsir) {
     if (tafsirLang === 'id' || !options.lazyEditions) {
       status('Fetching Indonesian tafsir...');
-      const idTafRes = await fetchWithCache(QURAN_DATA_ENDPOINTS.idTafsir);
+      const idTafRes = await fetchWithCache(MUSHAF_DATA_ENDPOINTS.idTafsir);
       const idTafJson = await idTafRes.json();
-      idTafsirMap = parseAlQuranCloud(idTafJson);
+      idTafsirMap = parseMushafCloud(idTafJson);
     }
     if (tafsirLang === 'en' || !options.lazyEditions) {
       status('Fetching English tafsir...');
-      const enTafRes = await fetchWithCache(QURAN_DATA_ENDPOINTS.enTafsir);
+      const enTafRes = await fetchWithCache(MUSHAF_DATA_ENDPOINTS.enTafsir);
       const enTafJson = await enTafRes.json();
-      enTafsirMap = parseAlQuranCloud(enTafJson);
+      enTafsirMap = parseMushafCloud(enTafJson);
     }
   }
 
-  status('Assembling Quran datasets...');
+  status('Assembling Mushaf datasets...');
   const surahs = CANONICAL_SURAHS.map((s) => ({
     number: s.number,
     nameLatin: s.name,
@@ -502,7 +502,7 @@ export async function fetchQuranDatasets(options = {}, onStatus = null) {
     }
   }
 
-  const quranBase = {
+  const mushafBase = {
     surahs,
     ayahs
   };
@@ -518,7 +518,7 @@ export async function fetchQuranDatasets(options = {}, onStatus = null) {
     }
   };
 
-  return { quranBase, editionsData };
+  return { mushafBase, editionsData };
 }
 
 // ---------------------------------------------------------------------------
@@ -736,9 +736,9 @@ export async function renderAyahPreviewToCanvas(canvas, options = {}) {
   canvas.height = screenH;
 
   // Ensure font is loaded in browser
-  if (typeof ensureQuranFont === 'function') {
+  if (typeof ensureMushafFont === 'function') {
     try {
-      await ensureQuranFont(scriptId);
+      await ensureMushafFont(scriptId);
     } catch (fontErr) {
       console.warn('Font load warning in renderAyahPreviewToCanvas:', fontErr.message);
     }
@@ -753,10 +753,10 @@ export async function renderAyahPreviewToCanvas(canvas, options = {}) {
   ctx.fillStyle = '#FFFFFF';
   ctx.fillRect(0, 0, screenW, screenH);
 
-  const surahInfo = CANONICAL_SURAHS[surah - 1] || { number: surah, name: 'Al-Quran', ayahs: 7, startJuz: 1 };
+  const surahInfo = CANONICAL_SURAHS[surah - 1] || { number: surah, name: 'Mushaf', ayahs: 7, startJuz: 1 };
   const juz = getJuzForSurahAyah(surah, ayah);
 
-  // 1. Exact Header Geometry (y = 0..15, height 16px matching view_quran.c)
+  // 1. Exact Header Geometry (y = 0..15, height 16px matching view_mushaf.c)
   ctx.fillStyle = '#000000';
   ctx.font = '12px monospace';
   ctx.textBaseline = 'top';
@@ -785,8 +785,8 @@ export async function renderAyahPreviewToCanvas(canvas, options = {}) {
   // 3. Exact Body Geometry (y = 16 .. screenH - 17, height = screenH - 32)
   const key = `${surah}:${ayah}`;
   let ref = null;
-  if (options.quranBase && Array.isArray(options.quranBase.ayahs)) {
-    const found = options.quranBase.ayahs.find((a) => a.surah === surah && a.ayah === ayah);
+  if (options.mushafBase && Array.isArray(options.mushafBase.ayahs)) {
+    const found = options.mushafBase.ayahs.find((a) => a.surah === surah && a.ayah === ayah);
     if (found) {
       ref = {
         uthmaniWords: found.uthmaniWords,
@@ -800,7 +800,7 @@ export async function renderAyahPreviewToCanvas(canvas, options = {}) {
     }
   }
   if (!ref) {
-    throw new Error(`Ayah ${key} not found in loaded Quran dataset`);
+    throw new Error(`Ayah ${key} not found in loaded Mushaf dataset`);
   }
 
   if (layer === 0) {
@@ -941,25 +941,25 @@ export async function buildBqmPackage(options = {}, onProgress = null) {
     }
   }
 
-  reportProgress(0.05, 'Loading Quran datasets');
+  reportProgress(0.05, 'Loading Mushaf datasets');
 
   // Load or acquire datasets
-  let quranBase = options.quranBase || null;
+  let mushafBase = options.mushafBase || null;
   let editionsData = options.editionsData || null;
 
-  if (!quranBase || !editionsData) {
-    reportProgress(0.08, 'Fetching Quran datasets (bacain-quran-v1)...');
-    const datasets = await fetchQuranDatasets(options, (statusMsg) => {
+  if (!mushafBase || !editionsData) {
+    reportProgress(0.08, 'Fetching Mushaf datasets (bacain-mushaf-assets-v1)...');
+    const datasets = await fetchMushafDatasets(options, (statusMsg) => {
       reportProgress(0.10, statusMsg);
     });
-    if (!quranBase) quranBase = datasets.quranBase;
+    if (!mushafBase) mushafBase = datasets.mushafBase;
     if (!editionsData) editionsData = datasets.editionsData;
   }
 
   // Ensure calligraphy font is loaded in browser
-  if (typeof ensureQuranFont === 'function') {
+  if (typeof ensureMushafFont === 'function') {
     try {
-      await ensureQuranFont(scriptId, (statusMsg) => reportProgress(0.12, statusMsg));
+      await ensureMushafFont(scriptId, (statusMsg) => reportProgress(0.12, statusMsg));
     } catch (fontErr) {
       console.warn('Font loading notice in buildBqmPackage:', fontErr.message);
     }
@@ -973,8 +973,8 @@ export async function buildBqmPackage(options = {}, onProgress = null) {
 
   // Build map of provided ayahs
   const ayahMap = new Map();
-  if (quranBase && Array.isArray(quranBase.ayahs)) {
-    for (const a of quranBase.ayahs) {
+  if (mushafBase && Array.isArray(mushafBase.ayahs)) {
+    for (const a of mushafBase.ayahs) {
       ayahMap.set(`${a.surah}:${a.ayah}`, a);
     }
   }
@@ -1074,7 +1074,7 @@ export async function buildBqmPackage(options = {}, onProgress = null) {
       }
 
       if (!src) {
-        throw new Error(`Ayah ${key} missing from loaded Quran dataset`);
+        throw new Error(`Ayah ${key} missing from loaded Mushaf dataset`);
       }
 
       // --- 1. Mushaf Subpage Generation ---
@@ -1253,7 +1253,7 @@ export async function buildBqmPackage(options = {}, onProgress = null) {
 
   reportProgress(0.75, 'Assembling BQM container');
 
-  // Section Offsets matching bqm_header_t in quran_reader.h
+  // Section Offsets matching bqm_header_t in mushaf_reader.h
   const HEADER_SIZE = 64;
   const SURAH_TABLE_OFF = HEADER_SIZE;
   const SURAH_TABLE_SIZE = TOTAL_SURAHS * 24; // 2736 bytes
@@ -1390,11 +1390,11 @@ if (typeof window !== 'undefined') {
     renderAyahPreviewToCanvas,
     buildBqmPackage,
     fetchWithCache,
-    ensureQuranFont,
-    fetchQuranDatasets,
-    QURAN_CACHE_NAME,
-    QURAN_FONTS,
-    QURAN_DATA_ENDPOINTS,
+    ensureMushafFont,
+    fetchMushafDatasets,
+    MUSHAF_CACHE_NAME,
+    MUSHAF_FONTS,
+    MUSHAF_DATA_ENDPOINTS,
     SURAHS,
     CANONICAL_SURAHS,
     JUZ_BOUNDARIES,
@@ -1405,7 +1405,7 @@ if (typeof window !== 'undefined') {
     LAYER_TAGS,
     LAYER_NAMES,
     SUNNAH_PRESETS,
-    QURAN_LAYERS,
+    MUSHAF_LAYERS,
     calculateCrc32
   };
 }
