@@ -34,6 +34,7 @@
 static QueueHandle_t s_btn_queue = NULL;
 static reader_view_t s_current_view = VIEW_MENU;
 static int64_t s_last_activity_us = 0;
+static int64_t s_last_rx_refresh_us = 0;
 
 RTC_DATA_ATTR static reader_view_t s_rtc_last_view = VIEW_MENU;
 RTC_DATA_ATTR static bool s_rtc_has_sdcard = false;
@@ -71,9 +72,17 @@ static void on_ble_sync_event(ble_sync_event_t event, const void *param, void *u
 
     if (s_btn_queue && s_current_view == VIEW_BLE_SYNC) {
         if (event == BLE_SYNC_EVT_CONNECTED || event == BLE_SYNC_EVT_DISCONNECTED ||
-            event == BLE_SYNC_EVT_UPLOAD_COMPLETE || event == BLE_SYNC_EVT_FILE_DELETED) {
+            event == BLE_SYNC_EVT_UPLOAD_START || event == BLE_SYNC_EVT_UPLOAD_COMPLETE ||
+            event == BLE_SYNC_EVT_UPLOAD_ABORTED || event == BLE_SYNC_EVT_FILE_DELETED) {
             button_event_t evt = { .button = BTN_ID_BOOT, .type = BTN_EVENT_CUSTOM_REFRESH };
             xQueueSend(s_btn_queue, &evt, 0);
+        } else if (event == BLE_SYNC_EVT_UPLOAD_PROGRESS) {
+            int64_t now = esp_timer_get_time();
+            if (now - s_last_rx_refresh_us >= 500000) {
+                s_last_rx_refresh_us = now;
+                button_event_t evt = { .button = BTN_ID_BOOT, .type = BTN_EVENT_CUSTOM_REFRESH };
+                xQueueSend(s_btn_queue, &evt, 0);
+            }
         }
     }
 }

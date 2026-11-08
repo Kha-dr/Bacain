@@ -57,6 +57,10 @@ typedef enum {
 /* Control Response Status Codes */
 #define BLE_SYNC_STATUS_OK               0x00
 #define BLE_SYNC_STATUS_ERROR            0x01
+#define BLE_SYNC_STATUS_SEQ_ERR          0x03
+#define BLE_SYNC_STATUS_OVERFLOW         0x04
+#define BLE_SYNC_STATUS_WRITE_ERR        0x05
+#define BLE_SYNC_STATUS_SIZE_ERR         0x06
 #define BLE_SYNC_STATUS_STORAGE_ERR      0x07
 #define BLE_SYNC_STATUS_NOT_SUPPORTED    0x08
 

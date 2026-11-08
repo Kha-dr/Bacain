@@ -54,6 +54,8 @@ extern bool reader_ui_get_show_nav_hints(void);
 extern void reader_ui_set_rotation(uint8_t rotation);
 extern void button_set_inverted(bool inverted);
 #include "status_led.h"
+#include "board_config.h"
+_Static_assert(sizeof(ble_sync_config_response_t) == 15, "ble_sync_config_response_t must be 15 bytes");
 
 static const char *TAG = "ble_sync";
 
@@ -109,6 +111,7 @@ static bool             s_sleep_timeout_loaded = false;
 static FILE    *s_upload_fp = NULL;
 static bool     s_is_uploading = false;
 static bool     s_upload_error = false;
+static uint8_t  s_upload_err_status = BLE_SYNC_STATUS_OK;
 static uint32_t s_bytes_received = 0;
 static uint32_t s_expected_file_size = 0;
 static uint16_t s_expected_seq = 0;
@@ -479,6 +482,7 @@ static void handle_cmd_start_upload(const ble_sync_cmd_msg_t *cmd)
 
     sanitize_filename(cmd->filename, s_upload_filename, sizeof(s_upload_filename));
     s_expected_file_size = cmd->file_size;
+    s_upload_err_status = BLE_SYNC_STATUS_OK;
     s_bytes_received = 0;
     s_expected_seq = 0;
     s_upload_error = false;
@@ -518,6 +522,7 @@ static void handle_cmd_finish_upload(void)
         while ((item = (uint8_t *)xRingbufferReceiveUpTo(s_data_ringbuf, &item_sz, 0, 4096)) != NULL) {
             if (fwrite(item, 1, item_sz, s_upload_fp) != item_sz) {
                 ESP_LOGE(TAG, "fwrite failed while draining ringbuffer");
+                if (s_upload_err_status == BLE_SYNC_STATUS_OK) s_upload_err_status = BLE_SYNC_STATUS_WRITE_ERR;
                 s_upload_error = true;
             }
             vRingbufferReturnItem(s_data_ringbuf, item);
@@ -536,13 +541,14 @@ static void handle_cmd_finish_upload(void)
     if (s_expected_file_size > 0 && s_bytes_received != s_expected_file_size) {
         ESP_LOGE(TAG, "Upload size mismatch: got %u, expected %u",
                  (unsigned)s_bytes_received, (unsigned)s_expected_file_size);
+        if (s_upload_err_status == BLE_SYNC_STATUS_OK) s_upload_err_status = BLE_SYNC_STATUS_SIZE_ERR;
         s_upload_error = true;
     }
 
     uint8_t storage_err = BLE_SYNC_STATUS_OK;
     const char *books_dir = ble_sync_get_books_dir(&storage_err);
 
-    uint8_t status = s_upload_error ? BLE_SYNC_STATUS_ERROR : BLE_SYNC_STATUS_OK;
+    uint8_t status = s_upload_error ? (s_upload_err_status != BLE_SYNC_STATUS_OK ? s_upload_err_status : BLE_SYNC_STATUS_ERROR) : BLE_SYNC_STATUS_OK;
     if (storage_err != BLE_SYNC_STATUS_OK) {
         status = BLE_SYNC_STATUS_STORAGE_ERR;
     }
@@ -554,7 +560,19 @@ static void handle_cmd_finish_upload(void)
         ESP_LOGW(TAG, "Deleted corrupted/incomplete file on error: %s", fpath);
     }
 
-    uint8_t resp[2] = { BLE_SYNC_OP_FINISH_UPLOAD, status };
+    status = s_upload_error ? (s_upload_err_status != BLE_SYNC_STATUS_OK ? s_upload_err_status : BLE_SYNC_STATUS_ERROR) : BLE_SYNC_STATUS_OK;
+    if (storage_err != BLE_SYNC_STATUS_OK) {
+        status = BLE_SYNC_STATUS_STORAGE_ERR;
+    }
+
+    uint8_t resp[6] = {
+        BLE_SYNC_OP_FINISH_UPLOAD,
+        status,
+        (uint8_t)(s_bytes_received & 0xFF),
+        (uint8_t)((s_bytes_received >> 8) & 0xFF),
+        (uint8_t)((s_bytes_received >> 16) & 0xFF),
+        (uint8_t)((s_bytes_received >> 24) & 0xFF)
+    };
     ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
 
     ESP_LOGI(TAG, "Upload finished: %u bytes received, status=%d",
@@ -642,6 +660,7 @@ static void handle_cmd_abort_upload(void)
     s_expected_seq = 0;
     s_upload_error = false;
 
+    s_upload_err_status = BLE_SYNC_STATUS_OK;
     uint8_t resp[2] = { BLE_SYNC_OP_ABORT_UPLOAD, BLE_SYNC_STATUS_OK };
     ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
 
@@ -884,6 +903,7 @@ static void ble_sync_worker_task(void *pvParameters)
                     if (written != item_sz) {
                         ESP_LOGE(TAG, "fwrite failed: written %u != %u",
                                  (unsigned)written, (unsigned)item_sz);
+                        if (s_upload_err_status == BLE_SYNC_STATUS_OK) s_upload_err_status = BLE_SYNC_STATUS_WRITE_ERR;
                         s_upload_error = true;
                     }
                     vRingbufferReturnItem(s_data_ringbuf, item);
@@ -938,6 +958,14 @@ static int ble_sync_control_access_cb(uint16_t conn_handle, uint16_t attr_handle
     memset(&cmd, 0, sizeof(cmd));
 
     switch (opcode) {
+    case BLE_SYNC_OP_GET_QURAN_STATE: {
+        break;
+    }
+
+    case BLE_SYNC_OP_SET_QURAN_STATE: {
+        break;
+    }
+
     case BLE_SYNC_OP_LIST_BOOKS:
         cmd.type = CMD_LIST_BOOKS;
         xQueueSend(s_cmd_queue, &cmd, pdMS_TO_TICKS(50));
@@ -1206,7 +1234,8 @@ static int ble_sync_control_access_cb(uint16_t conn_handle, uint16_t attr_handle
         uint8_t status_led = status_led_is_enabled() ? 1 : 0;
         uint8_t storage_target = (s_storage_target == STORAGE_TARGET_FLASH) ? 1 : 0;
 
-        uint8_t resp[10] = {
+        uint8_t caps = 0;
+        uint8_t resp[15] = {
             BLE_SYNC_OP_GET_CONFIG,
             BLE_SYNC_STATUS_OK,
             pwa_font_id,
@@ -1216,7 +1245,12 @@ static int ble_sync_control_access_cb(uint16_t conn_handle, uint16_t attr_handle
             status_led,
             storage_target,
             (uint8_t)(sleep_timeout & 0xFF),
-            (uint8_t)(sleep_timeout >> 8)
+            (uint8_t)(sleep_timeout >> 8),
+            caps,
+            (uint8_t)(BOARD_DISPLAY_WIDTH & 0xFF),
+            (uint8_t)((BOARD_DISPLAY_WIDTH >> 8) & 0xFF),
+            (uint8_t)(BOARD_DISPLAY_HEIGHT & 0xFF),
+            (uint8_t)((BOARD_DISPLAY_HEIGHT >> 8) & 0xFF)
         };
         ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
         break;
@@ -1260,14 +1294,16 @@ static int ble_sync_data_access_cb(uint16_t conn_handle, uint16_t attr_handle,
 
     if (seq != s_expected_seq) {
         ESP_LOGE(TAG, "Seq mismatch: expected %u, got %u", s_expected_seq, seq);
+        if (s_upload_err_status == BLE_SYNC_STATUS_OK) s_upload_err_status = BLE_SYNC_STATUS_SEQ_ERR;
         s_upload_error = true;
     }
     s_expected_seq = seq + 1;
 
     if (payload_len > 0) {
-        BaseType_t sent = xRingbufferSend(s_data_ringbuf, payload, payload_len, pdMS_TO_TICKS(100));
+        BaseType_t sent = xRingbufferSend(s_data_ringbuf, payload, payload_len, pdMS_TO_TICKS(1500));
         if (sent != pdTRUE) {
             ESP_LOGE(TAG, "Ringbuffer full, dropped %u bytes", (unsigned)payload_len);
+            if (s_upload_err_status == BLE_SYNC_STATUS_OK) s_upload_err_status = BLE_SYNC_STATUS_OVERFLOW;
             s_upload_error = true;
             return BLE_ATT_ERR_INSUFFICIENT_RES;
         }
@@ -1632,6 +1668,7 @@ void ble_sync_stop(void)
     s_bytes_received = 0;
     s_expected_file_size = 0;
     s_expected_seq = 0;
+    s_upload_err_status = BLE_SYNC_STATUS_OK;
     s_current_mtu = 23;
 
     if (s_data_ringbuf != NULL) {
