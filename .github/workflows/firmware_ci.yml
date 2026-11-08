@@ -4,15 +4,21 @@ on:
   push:
     branches:
       - main
+    paths:
+      - "firmware/**"
+      - ".github/workflows/firmware_ci.yml"
     tags:
       - "v*"
   pull_request:
     branches:
       - main
+    paths:
+      - "firmware/**"
+      - ".github/workflows/firmware_ci.yml"
   workflow_dispatch:
     inputs:
       board_id:
-        description: "Board ID for artifact naming"
+        description: "Board ID to build"
         required: true
         default: "waveshare_154"
         type: string
@@ -43,6 +49,7 @@ jobs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     env:
       EVENT_NAME: ${{ github.event_name }}
+      GITHUB_REF: ${{ github.ref }}
       INPUT_BOARD_ID: ${{ inputs.board_id }}
       INPUT_FLASH_SIZE: ${{ inputs.flash_size }}
       INPUT_EXTRA_ARGS: ${{ inputs.extra_idf_args }}
@@ -56,8 +63,10 @@ jobs:
         run: |
           if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
             MATRIX_JSON=$(jq -nc --arg id "$INPUT_BOARD_ID" --arg fsize "$INPUT_FLASH_SIZE" --arg args "$INPUT_EXTRA_ARGS" --arg bin "$INPUT_OUTPUT_BIN" '[{id: $id, chip: "esp32s3", flash_size: $fsize, output_bin: $bin, extra_args: $args}]')
-          else
+          elif [[ "$GITHUB_REF" == refs/tags/* ]]; then
             MATRIX_JSON=$(jq -c '[.boards[] | {id: .id, name: .name, chip: .chip, flash_size: .flash_size, output_bin: .output_bin, extra_args: (.extra_idf_args // ("-DBOARD_PROFILE=" + .id))}]' firmware/boards/boards.json)
+          else
+            MATRIX_JSON=$(jq -c '[.boards[] | select(.id == "waveshare_154") | {id: .id, name: .name, chip: .chip, flash_size: .flash_size, output_bin: .output_bin, extra_args: (.extra_idf_args // ("-DBOARD_PROFILE=" + .id))}]' firmware/boards/boards.json)
           fi
           echo "matrix={\"board\":$MATRIX_JSON}" >> "$GITHUB_OUTPUT"
 
@@ -72,6 +81,7 @@ jobs:
         shell: bash
     strategy:
       fail-fast: false
+      max-parallel: 2
       matrix: ${{ fromJson(needs.prepare-matrix.outputs.matrix) }}
     env:
       BOARD_ID: ${{ matrix.board.id }}
