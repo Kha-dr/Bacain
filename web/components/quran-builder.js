@@ -21,20 +21,20 @@ import {
   LAYER_TAGS,
   LAYER_NAMES,
   SUNNAH_PRESETS,
-  QURAN_LAYERS
-} from '../processors/bqm-builder.js';
+  QURAN_LAYERS,
+} from "../processors/bqm-builder.js";
 
 function escapeHtml(str) {
-  if (!str) return '';
+  if (!str) return "";
   return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
-const BaseElement = typeof HTMLElement !== 'undefined' ? HTMLElement : class {};
+const BaseElement = typeof HTMLElement !== "undefined" ? HTMLElement : class {};
 
 class QuranBuilder extends BaseElement {
   constructor() {
@@ -47,7 +47,7 @@ class QuranBuilder extends BaseElement {
     this._isUploadingBqm = false;
     this._assetsReady = false;
     this._assetsLoading = false;
-    this._loadedEditionsKey = '';
+    this._loadedEditionsKey = "";
     this._cachedQuranBase = null;
     this._cachedEditionsData = null;
     this._deviceState = {
@@ -55,26 +55,28 @@ class QuranBuilder extends BaseElement {
       surah: 1,
       ayah: 1,
       layer: 0,
-      bookmarks: []
+      bookmarks: [],
     };
     this._onUploadStatus = this._onUploadStatus.bind(this);
   }
 
   setStatusText(text, isError = false) {
-    const statusEl = this.querySelector('#quranStatusText');
+    const statusEl = this.querySelector("#quranStatusText");
     if (statusEl) {
       statusEl.textContent = text;
-      statusEl.style.color = isError ? 'var(--danger-color, #ef4444)' : 'var(--text-secondary)';
-      statusEl.style.fontWeight = isError ? '500' : 'normal';
+      statusEl.style.color = isError
+        ? "var(--danger-color, #ef4444)"
+        : "var(--text-secondary)";
+      statusEl.style.fontWeight = isError ? "500" : "normal";
     }
     if (isError) {
-      console.error('[QuranBuilder]', text);
+      console.error("[QuranBuilder]", text);
     }
   }
 
   connectedCallback() {
-    document.addEventListener('quran-upload-status', this._onUploadStatus);
-    if (!this.querySelector('.quran-section')) {
+    document.addEventListener("quran-upload-status", this._onUploadStatus);
+    if (!this.querySelector(".quran-section")) {
       this.render();
       this.bindEvents();
       this.updateGeometryBadge();
@@ -85,51 +87,55 @@ class QuranBuilder extends BaseElement {
   }
 
   disconnectedCallback() {
-    document.removeEventListener('quran-upload-status', this._onUploadStatus);
+    document.removeEventListener("quran-upload-status", this._onUploadStatus);
   }
 
   _onUploadStatus(e) {
     if (!e || !e.detail) return;
     this._isUploadingBqm = false;
     this.updateConnectionStateUI();
-    const progressWrap = this.querySelector('#quranBuildProgressWrap');
-    if (progressWrap) progressWrap.style.display = 'none';
+    const progressWrap = this.querySelector("#quranBuildProgressWrap");
+    if (progressWrap) progressWrap.style.display = "none";
     if (e.detail.ok === false) {
       this.setStatusText(`Upload failed: ${e.detail.error}`, true);
-    } else if (e.detail.ok === true && e.detail.fileName === 'quran.bqm') {
-      this.setStatusText('quran.bqm uploaded and verified on device.');
+    } else if (e.detail.ok === true && e.detail.fileName === "quran.bqm") {
+      this.setStatusText("quran.bqm uploaded and verified on device.");
     }
   }
 
   setBuilderControlsDisabled(disabled) {
     const selector = [
-      '#quranScriptSelect',
-      '#quranFontSizeSelect',
-      '#quranRangeSelect',
-      '#customStartSurah',
-      '#customEndSurah',
-      '#layerLatinCheckbox',
-      '#layerTranslationCheckbox',
-      '#layerTafsirCheckbox',
-      '#quranTranslationSelect',
-      '#quranTafsirSelect',
-      '#cursorSurahSelect',
-      '#cursorAyahInput',
-      '#cursorLayerSelect'
-    ].join(', ');
+      "#quranScriptSelect",
+      "#quranFontSizeSelect",
+      "#quranRangeSelect",
+      "#customStartSurah",
+      "#customEndSurah",
+      "#layerLatinCheckbox",
+      "#layerTranslationCheckbox",
+      "#layerTafsirCheckbox",
+      "#quranTranslationSelect",
+      "#quranTafsirSelect",
+      "#cursorSurahSelect",
+      "#cursorAyahInput",
+      "#cursorLayerSelect",
+    ].join(", ");
 
     this.querySelectorAll(selector).forEach((el) => {
       el.disabled = Boolean(disabled);
     });
 
-    const uploadBtn = this.querySelector('#quranBuildUploadBtn');
-    const downloadBtn = this.querySelector('#quranDownloadBtn');
+    const uploadBtn = this.querySelector("#quranBuildUploadBtn");
+    const downloadBtn = this.querySelector("#quranDownloadBtn");
 
     if (disabled) {
       if (uploadBtn) uploadBtn.disabled = true;
       if (downloadBtn) downloadBtn.disabled = true;
     } else {
-      if (uploadBtn) uploadBtn.disabled = !this._isConnected || !this._assetsReady || Boolean(this._isUploadingBqm);
+      if (uploadBtn)
+        uploadBtn.disabled =
+          !this._isConnected ||
+          !this._assetsReady ||
+          Boolean(this._isUploadingBqm);
       if (downloadBtn) downloadBtn.disabled = !this._assetsReady;
     }
   }
@@ -141,43 +147,53 @@ class QuranBuilder extends BaseElement {
 
     this.setBuilderControlsDisabled(true);
 
-    const retryBtn = this.querySelector('#quranRetryAssetsBtn');
-    if (retryBtn) retryBtn.style.display = 'none';
+    const retryBtn = this.querySelector("#quranRetryAssetsBtn");
+    if (retryBtn) retryBtn.style.display = "none";
 
-    const progressWrap = this.querySelector('#quranBuildProgressWrap');
-    if (progressWrap) progressWrap.style.display = 'block';
+    const progressWrap = this.querySelector("#quranBuildProgressWrap");
+    if (progressWrap) progressWrap.style.display = "block";
 
-    this.setStatusText('Loading Quran fonts & corpora...');
+    this.setStatusText("Loading Quran fonts & corpora...");
 
     try {
       await ensureQuranFont(0, (msg) => this.setStatusText(msg));
       await ensureQuranFont(1, (msg) => this.setStatusText(msg));
 
-      const translationEdition = this.querySelector('#quranTranslationSelect')?.value || 'id_kemenag';
-      const tafsirEdition = this.querySelector('#quranTafsirSelect')?.value || 'id_kemenag_ringkas';
-      const datasets = await fetchQuranDatasets({
-        scriptStyle: 0,
-        translationEdition,
-        tafsirEdition,
-        layers: { mushaf: true, latin: true, translation: true, tafsir: true }
-      }, (msg) => this.setStatusText(msg));
+      const translationEdition =
+        this.querySelector("#quranTranslationSelect")?.value || "id_kemenag";
+      const tafsirEdition =
+        this.querySelector("#quranTafsirSelect")?.value || "id_kemenag_ringkas";
+      const datasets = await fetchQuranDatasets(
+        {
+          scriptStyle: 0,
+          translationEdition,
+          tafsirEdition,
+          layers: {
+            mushaf: true,
+            latin: true,
+            translation: true,
+            tafsir: true,
+          },
+        },
+        (msg) => this.setStatusText(msg),
+      );
 
       this._cachedQuranBase = datasets.quranBase;
       this._cachedEditionsData = datasets.editionsData;
       this._loadedEditionsKey = `${translationEdition}|${tafsirEdition}`;
 
       this._assetsReady = true;
-      if (progressWrap) progressWrap.style.display = 'none';
+      if (progressWrap) progressWrap.style.display = "none";
       this.setBuilderControlsDisabled(false);
-      this.setStatusText('Assets ready (cached).');
+      this.setStatusText("Assets ready (cached).");
       this.updateSizeEstimate();
       await this.renderAyahPreview();
     } catch (err) {
       this._assetsReady = false;
-      console.error('[QuranBuilder] Failed to preload Quran assets:', err);
+      console.error("[QuranBuilder] Failed to preload Quran assets:", err);
       this.setBuilderControlsDisabled(true);
       this.setStatusText(`Assets unavailable: ${err.message}`, true);
-      if (retryBtn) retryBtn.style.display = 'inline-flex';
+      if (retryBtn) retryBtn.style.display = "inline-flex";
     } finally {
       this._assetsLoading = false;
     }
@@ -186,11 +202,14 @@ class QuranBuilder extends BaseElement {
   setDeviceCapabilities(caps) {
     if (!caps) return;
     this._supported = Boolean(caps.supported);
-    if (typeof caps.screenW === 'number' && caps.screenW > 0) this._screenW = caps.screenW;
-    if (typeof caps.screenH === 'number' && caps.screenH > 0) this._screenH = caps.screenH;
-    if (caps.isConnected !== undefined) this._isConnected = Boolean(caps.isConnected);
+    if (typeof caps.screenW === "number" && caps.screenW > 0)
+      this._screenW = caps.screenW;
+    if (typeof caps.screenH === "number" && caps.screenH > 0)
+      this._screenH = caps.screenH;
+    if (caps.isConnected !== undefined)
+      this._isConnected = Boolean(caps.isConnected);
 
-    const canvas = this.querySelector('#quranPreviewCanvas');
+    const canvas = this.querySelector("#quranPreviewCanvas");
     if (canvas) {
       canvas.width = this._screenW;
       canvas.height = this._screenH;
@@ -202,10 +221,10 @@ class QuranBuilder extends BaseElement {
   }
 
   setDisplayGeometry(width, height) {
-    if (typeof width === 'number' && width > 0) this._screenW = width;
-    if (typeof height === 'number' && height > 0) this._screenH = height;
+    if (typeof width === "number" && width > 0) this._screenW = width;
+    if (typeof height === "number" && height > 0) this._screenH = height;
 
-    const canvas = this.querySelector('#quranPreviewCanvas');
+    const canvas = this.querySelector("#quranPreviewCanvas");
     if (canvas) {
       canvas.width = this._screenW;
       canvas.height = this._screenH;
@@ -222,7 +241,9 @@ class QuranBuilder extends BaseElement {
       surah: Math.max(1, Math.min(114, Number(state.surah) || 1)),
       ayah: Math.max(1, Number(state.ayah) || 1),
       layer: Math.max(0, Math.min(3, Number(state.layer) || 0)),
-      bookmarks: Array.isArray(state.bookmarks) ? state.bookmarks.slice(0, 8) : []
+      bookmarks: Array.isArray(state.bookmarks)
+        ? state.bookmarks.slice(0, 8)
+        : [],
     };
 
     this.renderDeviceStateUI();
@@ -233,42 +254,47 @@ class QuranBuilder extends BaseElement {
   }
 
   updateGeometryBadge() {
-    const badge = this.querySelector('#quranGeometryBadge');
+    const badge = this.querySelector("#quranGeometryBadge");
     if (badge) {
       badge.textContent = `${this._screenW} × ${this._screenH} px`;
     }
   }
 
   updateConnectionStateUI() {
-    const syncBtn = this.querySelector('#quranSyncCursorBtn');
-    const uploadBtn = this.querySelector('#quranBuildUploadBtn');
-    const addBmBtn = this.querySelector('#quranAddBookmarkBtn');
+    const syncBtn = this.querySelector("#quranSyncCursorBtn");
+    const uploadBtn = this.querySelector("#quranBuildUploadBtn");
+    const addBmBtn = this.querySelector("#quranAddBookmarkBtn");
 
     if (syncBtn) syncBtn.disabled = !this._isConnected;
-    if (uploadBtn) uploadBtn.disabled = !this._isConnected || !this._assetsReady || this._isBuilding || Boolean(this._isUploadingBqm);
+    if (uploadBtn)
+      uploadBtn.disabled =
+        !this._isConnected ||
+        !this._assetsReady ||
+        this._isBuilding ||
+        Boolean(this._isUploadingBqm);
     if (addBmBtn) addBmBtn.disabled = !this._isConnected;
   }
 
   renderDeviceStateUI() {
     const state = this._deviceState;
-    const badge = this.querySelector('#quranTilawahBadge');
+    const badge = this.querySelector("#quranTilawahBadge");
     const surahInfo = SURAHS[state.surah - 1] || SURAHS[0];
-    const layerName = QURAN_LAYERS[state.layer]?.name || 'Mushaf';
+    const layerName = QURAN_LAYERS[state.layer]?.name || "Mushaf";
     const juz = getJuzForAyah(state.surah, state.ayah);
 
     if (state.started) {
       if (badge) {
-        badge.className = 'card-badge badge-success';
+        badge.className = "card-badge badge-success";
         badge.textContent = `S.${state.surah}:${state.ayah} (${surahInfo.name}) • Juz ${juz} • ${layerName}`;
       }
     } else if (badge) {
-      badge.className = 'card-badge badge-muted';
-      badge.textContent = 'Ready (1:1)';
+      badge.className = "card-badge badge-muted";
+      badge.textContent = "Ready (1:1)";
     }
 
-    const curSurahSelect = this.querySelector('#cursorSurahSelect');
-    const curAyahInput = this.querySelector('#cursorAyahInput');
-    const curLayerSelect = this.querySelector('#cursorLayerSelect');
+    const curSurahSelect = this.querySelector("#cursorSurahSelect");
+    const curAyahInput = this.querySelector("#cursorAyahInput");
+    const curLayerSelect = this.querySelector("#cursorLayerSelect");
 
     if (curSurahSelect && document.activeElement !== curSurahSelect) {
       curSurahSelect.value = String(state.surah);
@@ -286,14 +312,17 @@ class QuranBuilder extends BaseElement {
   }
 
   renderBookmarksList() {
-    const container = this.querySelector('#quranBookmarksList');
-    const countBadge = this.querySelector('#quranBookmarkCountBadge');
+    const container = this.querySelector("#quranBookmarksList");
+    const countBadge = this.querySelector("#quranBookmarkCountBadge");
     if (!container) return;
 
     const bookmarks = this._deviceState.bookmarks || [];
     if (countBadge) {
       countBadge.textContent = `${bookmarks.length} / 8 Bookmarks`;
-      countBadge.className = bookmarks.length > 0 ? 'card-badge badge-flash' : 'card-badge badge-muted';
+      countBadge.className =
+        bookmarks.length > 0
+          ? "card-badge badge-flash"
+          : "card-badge badge-muted";
     }
 
     if (bookmarks.length === 0) {
@@ -301,9 +330,9 @@ class QuranBuilder extends BaseElement {
       return;
     }
 
-    let html = '';
+    let html = "";
     bookmarks.forEach((bm, idx) => {
-      const sInfo = SURAHS[bm.surah - 1] || { name: 'Surah' };
+      const sInfo = SURAHS[bm.surah - 1] || { name: "Surah" };
       html += `
         <div class="book-item" style="padding: 0.4rem 0.65rem;">
           <div class="book-info">
@@ -324,14 +353,15 @@ class QuranBuilder extends BaseElement {
   }
 
   render() {
-    let surahOptionsHtml = '';
+    let surahOptionsHtml = "";
     SURAHS.forEach((s) => {
       surahOptionsHtml += `<option value="${s.number}">${s.number}. ${escapeHtml(s.name)} (${s.ayahs})</option>`;
     });
 
-    const presetButtonsHtml = SUNNAH_PRESETS.map((p) =>
-      `<button class="btn-control quran-preset-btn" type="button" data-surah="${p.surah}" data-ayah="${p.ayah}" style="font-size: 0.75rem; padding: 0.25rem 0.55rem;">${escapeHtml(p.label)}</button>`
-    ).join('');
+    const presetButtonsHtml = SUNNAH_PRESETS.map(
+      (p) =>
+        `<button class="btn-control quran-preset-btn" type="button" data-surah="${p.surah}" data-ayah="${p.ayah}" style="font-size: 0.75rem; padding: 0.25rem 0.55rem;">${escapeHtml(p.label)}</button>`,
+    ).join("");
 
     this.innerHTML = `
       <section class="upload-section quran-section">
@@ -341,12 +371,12 @@ class QuranBuilder extends BaseElement {
               <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
               <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
             </svg>
-            <h2>Al-Quran Reader & BQM Manager</h2>
+            <h2>Al-Quran Reader</h2>
           </div>
           <div id="quranGeometryBadge" class="card-badge badge-flash">200 × 200 px</div>
         </div>
 
-        <!-- CARD 1: Package Builder (quran.bqm) -->
+        <!-- CARD 1: Quran Package Builder -->
         <div class="card" style="margin-bottom: 0.85rem;">
           <div class="card-header">
             <div class="card-title">
@@ -355,7 +385,7 @@ class QuranBuilder extends BaseElement {
                 <polyline points="2 17 12 22 22 17"></polyline>
                 <polyline points="2 12 12 17 22 12"></polyline>
               </svg>
-              <span>BQM Package Builder</span>
+              <span>Package Builder</span>
             </div>
             <div id="quranSizeEstimate" class="card-badge badge-muted">Est. Size: ~8.7 MB</div>
           </div>
@@ -443,7 +473,7 @@ class QuranBuilder extends BaseElement {
                   <polyline points="7 10 12 15 17 10"></polyline>
                   <line x1="12" y1="15" x2="12" y2="3"></line>
                 </svg>
-                <span>Download .bqm</span>
+                <span>Download Package(.bqm)</span>
               </button>
               <button id="quranBuildUploadBtn" class="btn-connect" type="button">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -531,36 +561,42 @@ class QuranBuilder extends BaseElement {
   }
 
   bindEvents() {
-    const retryBtn = this.querySelector('#quranRetryAssetsBtn');
+    const retryBtn = this.querySelector("#quranRetryAssetsBtn");
     if (retryBtn) {
-      retryBtn.addEventListener('click', () => this.preloadAssets());
+      retryBtn.addEventListener("click", () => this.preloadAssets());
     }
 
-    const rangeSelect = this.querySelector('#quranRangeSelect');
-    const customRangeRow = this.querySelector('#quranCustomRangeRow');
+    const rangeSelect = this.querySelector("#quranRangeSelect");
+    const customRangeRow = this.querySelector("#quranCustomRangeRow");
     if (rangeSelect && customRangeRow) {
-      rangeSelect.addEventListener('change', () => {
-        customRangeRow.style.display = rangeSelect.value === 'custom' ? 'grid' : 'none';
+      rangeSelect.addEventListener("change", () => {
+        customRangeRow.style.display =
+          rangeSelect.value === "custom" ? "grid" : "none";
         this.updateSizeEstimate();
       });
     }
 
-    const builderInputs = this.querySelectorAll('#layerLatinCheckbox, #layerTranslationCheckbox, #layerTafsirCheckbox, #customStartSurah, #customEndSurah, #quranScriptSelect, #quranFontSizeSelect');
+    const builderInputs = this.querySelectorAll(
+      "#layerLatinCheckbox, #layerTranslationCheckbox, #layerTafsirCheckbox, #customStartSurah, #customEndSurah, #quranScriptSelect, #quranFontSizeSelect",
+    );
     builderInputs.forEach((input) => {
-      input.addEventListener('change', () => {
+      input.addEventListener("change", () => {
         this.updateSizeEstimate();
-        if (input.id === 'quranScriptSelect' || input.id === 'quranFontSizeSelect') {
+        if (
+          input.id === "quranScriptSelect" ||
+          input.id === "quranFontSizeSelect"
+        ) {
           this.renderAyahPreview();
         }
       });
     });
 
-    const transSelect = this.querySelector('#quranTranslationSelect');
-    const tafsirSelect = this.querySelector('#quranTafsirSelect');
+    const transSelect = this.querySelector("#quranTranslationSelect");
+    const tafsirSelect = this.querySelector("#quranTafsirSelect");
     const onEditionChange = () => {
       this.updateSizeEstimate();
-      const translationEdition = transSelect?.value || 'id_kemenag';
-      const tafsirEdition = tafsirSelect?.value || 'id_kemenag_ringkas';
+      const translationEdition = transSelect?.value || "id_kemenag";
+      const tafsirEdition = tafsirSelect?.value || "id_kemenag_ringkas";
       const key = `${translationEdition}|${tafsirEdition}`;
       if (key !== this._loadedEditionsKey) {
         this.preloadAssets();
@@ -568,72 +604,79 @@ class QuranBuilder extends BaseElement {
         this.renderAyahPreview();
       }
     };
-    if (transSelect) transSelect.addEventListener('change', onEditionChange);
-    if (tafsirSelect) tafsirSelect.addEventListener('change', onEditionChange);
+    if (transSelect) transSelect.addEventListener("change", onEditionChange);
+    if (tafsirSelect) tafsirSelect.addEventListener("change", onEditionChange);
 
     // Build & Download buttons
-    const uploadBtn = this.querySelector('#quranBuildUploadBtn');
-    const downloadBtn = this.querySelector('#quranDownloadBtn');
-    if (uploadBtn) uploadBtn.addEventListener('click', () => this.buildAndUpload(true));
-    if (downloadBtn) downloadBtn.addEventListener('click', () => this.buildAndUpload(false));
+    const uploadBtn = this.querySelector("#quranBuildUploadBtn");
+    const downloadBtn = this.querySelector("#quranDownloadBtn");
+    if (uploadBtn)
+      uploadBtn.addEventListener("click", () => this.buildAndUpload(true));
+    if (downloadBtn)
+      downloadBtn.addEventListener("click", () => this.buildAndUpload(false));
 
     // Unified Surah / Ayah / Layer selector drives Live Preview + Cursor Sync + Add Bookmark
-    const curSurahSelect = this.querySelector('#cursorSurahSelect');
-    const curAyahInput = this.querySelector('#cursorAyahInput');
-    const curLayerSelect = this.querySelector('#cursorLayerSelect');
-    const syncCursorBtn = this.querySelector('#quranSyncCursorBtn');
-    const addBmBtn = this.querySelector('#quranAddBookmarkBtn');
+    const curSurahSelect = this.querySelector("#cursorSurahSelect");
+    const curAyahInput = this.querySelector("#cursorAyahInput");
+    const curLayerSelect = this.querySelector("#cursorLayerSelect");
+    const syncCursorBtn = this.querySelector("#quranSyncCursorBtn");
+    const addBmBtn = this.querySelector("#quranAddBookmarkBtn");
 
     if (curSurahSelect && curAyahInput) {
-      curSurahSelect.addEventListener('change', () => {
+      curSurahSelect.addEventListener("change", () => {
         const sNum = parseInt(curSurahSelect.value, 10);
         const sInfo = SURAHS[sNum - 1] || SURAHS[0];
         curAyahInput.max = String(sInfo.ayahs);
         if (parseInt(curAyahInput.value, 10) > sInfo.ayahs) {
-          curAyahInput.value = '1';
+          curAyahInput.value = "1";
         }
         this.renderAyahPreview();
       });
-      curAyahInput.addEventListener('change', () => this.renderAyahPreview());
+      curAyahInput.addEventListener("change", () => this.renderAyahPreview());
     }
     if (curLayerSelect) {
-      curLayerSelect.addEventListener('change', () => this.renderAyahPreview());
+      curLayerSelect.addEventListener("change", () => this.renderAyahPreview());
     }
 
     if (syncCursorBtn) {
-      syncCursorBtn.addEventListener('click', () => {
-        const surah = parseInt(curSurahSelect?.value || '1', 10);
-        const ayah = parseInt(curAyahInput?.value || '1', 10);
-        const layer = parseInt(curLayerSelect?.value || '0', 10);
+      syncCursorBtn.addEventListener("click", () => {
+        const surah = parseInt(curSurahSelect?.value || "1", 10);
+        const ayah = parseInt(curAyahInput?.value || "1", 10);
+        const layer = parseInt(curLayerSelect?.value || "0", 10);
         this.dispatchCursorSync(surah, ayah, layer);
       });
     }
 
     if (addBmBtn) {
-      addBmBtn.addEventListener('click', () => {
+      addBmBtn.addEventListener("click", () => {
         const bookmarks = [...(this._deviceState.bookmarks || [])];
         if (bookmarks.length >= 8) {
-          this.setStatusText('Maximum 8 bookmark slots supported by device.', true);
+          this.setStatusText(
+            "Maximum 8 bookmark slots supported by device.",
+            true,
+          );
           return;
         }
-        const surah = parseInt(curSurahSelect?.value || '1', 10);
-        const ayah = parseInt(curAyahInput?.value || '1', 10);
+        const surah = parseInt(curSurahSelect?.value || "1", 10);
+        const ayah = parseInt(curAyahInput?.value || "1", 10);
         const juz = getJuzForAyah(surah, ayah);
         bookmarks.push({ surah, ayah, juz });
-        this.dispatchEvent(new CustomEvent('quran-set-bookmarks', {
-          detail: { bookmarks },
-          bubbles: true,
-          composed: true
-        }));
+        this.dispatchEvent(
+          new CustomEvent("quran-set-bookmarks", {
+            detail: { bookmarks },
+            bubbles: true,
+            composed: true,
+          }),
+        );
       });
     }
 
     // Sunnah Quick Presets update preview AND sync cursor when connected
-    this.querySelectorAll('.quran-preset-btn').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const surah = parseInt(btn.getAttribute('data-surah'), 10);
-        const ayah = parseInt(btn.getAttribute('data-ayah'), 10);
-        const layer = parseInt(curLayerSelect?.value || '0', 10);
+    this.querySelectorAll(".quran-preset-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const surah = parseInt(btn.getAttribute("data-surah"), 10);
+        const ayah = parseInt(btn.getAttribute("data-ayah"), 10);
+        const layer = parseInt(curLayerSelect?.value || "0", 10);
 
         if (curSurahSelect) curSurahSelect.value = String(surah);
         if (curAyahInput) {
@@ -649,15 +692,15 @@ class QuranBuilder extends BaseElement {
     });
 
     // Bookmarks Jump / Delete delegation
-    const bmList = this.querySelector('#quranBookmarksList');
+    const bmList = this.querySelector("#quranBookmarksList");
     if (bmList) {
-      bmList.addEventListener('click', (e) => {
-        const jumpBtn = e.target.closest('.quran-bm-jump-btn');
+      bmList.addEventListener("click", (e) => {
+        const jumpBtn = e.target.closest(".quran-bm-jump-btn");
         if (jumpBtn) {
-          const idx = parseInt(jumpBtn.getAttribute('data-index'), 10);
+          const idx = parseInt(jumpBtn.getAttribute("data-index"), 10);
           const bm = this._deviceState.bookmarks[idx];
           if (bm) {
-            const layer = parseInt(curLayerSelect?.value || '0', 10);
+            const layer = parseInt(curLayerSelect?.value || "0", 10);
             if (curSurahSelect) curSurahSelect.value = String(bm.surah);
             if (curAyahInput) {
               const sInfo = SURAHS[bm.surah - 1] || SURAHS[0];
@@ -672,17 +715,19 @@ class QuranBuilder extends BaseElement {
           return;
         }
 
-        const delBtn = e.target.closest('.quran-bm-del-btn');
+        const delBtn = e.target.closest(".quran-bm-del-btn");
         if (delBtn) {
-          const idx = parseInt(delBtn.getAttribute('data-index'), 10);
+          const idx = parseInt(delBtn.getAttribute("data-index"), 10);
           const bookmarks = [...(this._deviceState.bookmarks || [])];
           if (idx >= 0 && idx < bookmarks.length) {
             bookmarks.splice(idx, 1);
-            this.dispatchEvent(new CustomEvent('quran-set-bookmarks', {
-              detail: { bookmarks },
-              bubbles: true,
-              composed: true
-            }));
+            this.dispatchEvent(
+              new CustomEvent("quran-set-bookmarks", {
+                detail: { bookmarks },
+                bubbles: true,
+                composed: true,
+              }),
+            );
           }
         }
       });
@@ -690,59 +735,94 @@ class QuranBuilder extends BaseElement {
   }
 
   dispatchCursorSync(surah, ayah, layer) {
-    this.dispatchEvent(new CustomEvent('quran-set-cursor', {
-      detail: { surah, ayah, layer },
-      bubbles: true,
-      composed: true
-    }));
-    this.dispatchEvent(new CustomEvent('quran-set-tilawah', {
-      detail: { surah, ayah, layer },
-      bubbles: true,
-      composed: true
-    }));
+    this.dispatchEvent(
+      new CustomEvent("quran-set-cursor", {
+        detail: { surah, ayah, layer },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    this.dispatchEvent(
+      new CustomEvent("quran-set-tilawah", {
+        detail: { surah, ayah, layer },
+        bubbles: true,
+        composed: true,
+      }),
+    );
   }
 
   updateSizeEstimate() {
-    const rangeType = this.querySelector('#quranRangeSelect')?.value || 'full';
-    const customStart = parseInt(this.querySelector('#customStartSurah')?.value || '1', 10);
-    const customEnd = parseInt(this.querySelector('#customEndSurah')?.value || '114', 10);
-    const scriptId = parseInt(this.querySelector('#quranScriptSelect')?.value || '0', 10);
-    const fontSize = parseInt(this.querySelector('#quranFontSizeSelect')?.value || '24', 10);
-    const latin = Boolean(this.querySelector('#layerLatinCheckbox')?.checked);
-    const trans = Boolean(this.querySelector('#layerTranslationCheckbox')?.checked);
-    const tafsir = Boolean(this.querySelector('#layerTafsirCheckbox')?.checked);
-    const translationEdition = this.querySelector('#quranTranslationSelect')?.value || 'id_kemenag';
-    const tafsirEdition = this.querySelector('#quranTafsirSelect')?.value || 'id_kemenag_ringkas';
+    const rangeType = this.querySelector("#quranRangeSelect")?.value || "full";
+    const customStart = parseInt(
+      this.querySelector("#customStartSurah")?.value || "1",
+      10,
+    );
+    const customEnd = parseInt(
+      this.querySelector("#customEndSurah")?.value || "114",
+      10,
+    );
+    const scriptId = parseInt(
+      this.querySelector("#quranScriptSelect")?.value || "0",
+      10,
+    );
+    const fontSize = parseInt(
+      this.querySelector("#quranFontSizeSelect")?.value || "24",
+      10,
+    );
+    const latin = Boolean(this.querySelector("#layerLatinCheckbox")?.checked);
+    const trans = Boolean(
+      this.querySelector("#layerTranslationCheckbox")?.checked,
+    );
+    const tafsir = Boolean(this.querySelector("#layerTafsirCheckbox")?.checked);
+    const translationEdition =
+      this.querySelector("#quranTranslationSelect")?.value || "id_kemenag";
+    const tafsirEdition =
+      this.querySelector("#quranTafsirSelect")?.value || "id_kemenag_ringkas";
 
-    const startSurah = rangeType === 'custom' ? Math.min(customStart, customEnd) : (rangeType === 'juz30' ? 78 : 1);
-    const endSurah = rangeType === 'custom' ? Math.max(customStart, customEnd) : 114;
+    const startSurah =
+      rangeType === "custom"
+        ? Math.min(customStart, customEnd)
+        : rangeType === "juz30"
+          ? 78
+          : 1;
+    const endSurah =
+      rangeType === "custom" ? Math.max(customStart, customEnd) : 114;
 
-    let totalBytes = 64 + (114 * 24) + (6236 * 24);
+    let totalBytes = 64 + 114 * 24 + 6236 * 24;
 
     if (this._cachedQuranBase && Array.isArray(this._cachedQuranBase.ayahs)) {
       const uniqueWords = new Set();
-      const trArr = this._cachedEditionsData?.translations?.[translationEdition];
+      const trArr =
+        this._cachedEditionsData?.translations?.[translationEdition];
       const tafArr = this._cachedEditionsData?.tafsirs?.[tafsirEdition];
 
       for (let i = 0; i < this._cachedQuranBase.ayahs.length; i++) {
         const a = this._cachedQuranBase.ayahs[i];
         if (a.surah < startSurah || a.surah > endSurah) continue;
 
-        const words = scriptId === 1 ? (a.indopakWords || a.words || []) : (a.uthmaniWords || a.words || []);
+        const words =
+          scriptId === 1
+            ? a.indopakWords || a.words || []
+            : a.uthmaniWords || a.words || [];
         for (let w = 0; w < words.length; w++) {
           uniqueWords.add(words[w]);
         }
-        totalBytes += 4 + (words.length * 6);
+        totalBytes += 4 + words.length * 6;
 
         if (latin && a.latin) {
           totalBytes += a.latin.length + 12;
         }
         if (trans) {
-          const trStr = trArr?.[a.globalAyahIndex ?? i] || a.translationId || a.translationEn || '';
+          const trStr =
+            trArr?.[a.globalAyahIndex ?? i] ||
+            a.translationId ||
+            a.translationEn ||
+            "";
           totalBytes += trStr.length + 16;
         }
         if (tafsir) {
-          const tafStr = tafArr?.[a.globalAyahIndex ?? i] || a.tafsirId || a.tafsirEn || '';
+          const tafStr =
+            tafArr?.[a.globalAyahIndex ?? i] || a.tafsirId || a.tafsirEn || "";
           totalBytes += tafStr.length + 24;
         }
       }
@@ -762,26 +842,44 @@ class QuranBuilder extends BaseElement {
       totalBytes += totalAyahs * bytesPerAyah;
     }
 
-    const formatted = totalBytes < 1024 * 1024
-      ? `Est. Size: ~${Math.round(totalBytes / 1024)} KB`
-      : `Est. Size: ~${(totalBytes / (1024 * 1024)).toFixed(1)} MB`;
+    const formatted =
+      totalBytes < 1024 * 1024
+        ? `Est. Size: ~${Math.round(totalBytes / 1024)} KB`
+        : `Est. Size: ~${(totalBytes / (1024 * 1024)).toFixed(1)} MB`;
 
-    const badge = this.querySelector('#quranSizeEstimate');
+    const badge = this.querySelector("#quranSizeEstimate");
     if (badge) badge.textContent = formatted;
   }
 
   async renderAyahPreview() {
     if (!this._assetsReady) return;
-    const canvas = this.querySelector('#quranPreviewCanvas');
+    const canvas = this.querySelector("#quranPreviewCanvas");
     if (!canvas) return;
 
-    const surah = parseInt(this.querySelector('#cursorSurahSelect')?.value || '1', 10);
-    const ayah = parseInt(this.querySelector('#cursorAyahInput')?.value || '1', 10);
-    const layer = parseInt(this.querySelector('#cursorLayerSelect')?.value || '0', 10);
-    const scriptStyle = parseInt(this.querySelector('#quranScriptSelect')?.value || '0', 10);
-    const mushafFontSize = parseInt(this.querySelector('#quranFontSizeSelect')?.value || '28', 10);
-    const translationEdition = this.querySelector('#quranTranslationSelect')?.value || 'id_kemenag';
-    const tafsirEdition = this.querySelector('#quranTafsirSelect')?.value || 'id_kemenag_ringkas';
+    const surah = parseInt(
+      this.querySelector("#cursorSurahSelect")?.value || "1",
+      10,
+    );
+    const ayah = parseInt(
+      this.querySelector("#cursorAyahInput")?.value || "1",
+      10,
+    );
+    const layer = parseInt(
+      this.querySelector("#cursorLayerSelect")?.value || "0",
+      10,
+    );
+    const scriptStyle = parseInt(
+      this.querySelector("#quranScriptSelect")?.value || "0",
+      10,
+    );
+    const mushafFontSize = parseInt(
+      this.querySelector("#quranFontSizeSelect")?.value || "28",
+      10,
+    );
+    const translationEdition =
+      this.querySelector("#quranTranslationSelect")?.value || "id_kemenag";
+    const tafsirEdition =
+      this.querySelector("#quranTafsirSelect")?.value || "id_kemenag_ringkas";
 
     try {
       await ensureQuranFont(scriptStyle);
@@ -797,10 +895,10 @@ class QuranBuilder extends BaseElement {
         translationEdition,
         tafsirEdition,
         quranBase: this._cachedQuranBase,
-        editionsData: this._cachedEditionsData
+        editionsData: this._cachedEditionsData,
       });
     } catch (err) {
-      console.error('[QuranBuilder] Preview render error:', err);
+      console.error("[QuranBuilder] Preview render error:", err);
       this.setStatusText(`Preview error: ${err.message}`, true);
     }
   }
@@ -809,107 +907,152 @@ class QuranBuilder extends BaseElement {
     if (this._isBuilding) return;
     this._isBuilding = true;
 
-    const progressWrap = this.querySelector('#quranBuildProgressWrap');
-    const progressBar = this.querySelector('#quranBuildProgressBar');
-    const uploadBtn = this.querySelector('#quranBuildUploadBtn');
-    const downloadBtn = this.querySelector('#quranDownloadBtn');
+    const progressWrap = this.querySelector("#quranBuildProgressWrap");
+    const progressBar = this.querySelector("#quranBuildProgressBar");
+    const uploadBtn = this.querySelector("#quranBuildUploadBtn");
+    const downloadBtn = this.querySelector("#quranDownloadBtn");
 
-    if (progressWrap) progressWrap.style.display = 'block';
-    if (progressBar) progressBar.style.width = '0%';
+    if (progressWrap) progressWrap.style.display = "block";
+    if (progressBar) progressBar.style.width = "0%";
     if (uploadBtn) uploadBtn.disabled = true;
     if (downloadBtn) downloadBtn.disabled = true;
 
-    const scriptStyle = parseInt(this.querySelector('#quranScriptSelect')?.value || '0', 10);
-    const mushafFontSize = parseInt(this.querySelector('#quranFontSizeSelect')?.value || '28', 10);
-    const rangeType = this.querySelector('#quranRangeSelect')?.value || 'full';
-    const customStart = parseInt(this.querySelector('#customStartSurah')?.value || '1', 10);
-    const customEnd = parseInt(this.querySelector('#customEndSurah')?.value || '114', 10);
+    const scriptStyle = parseInt(
+      this.querySelector("#quranScriptSelect")?.value || "0",
+      10,
+    );
+    const mushafFontSize = parseInt(
+      this.querySelector("#quranFontSizeSelect")?.value || "28",
+      10,
+    );
+    const rangeType = this.querySelector("#quranRangeSelect")?.value || "full";
+    const customStart = parseInt(
+      this.querySelector("#customStartSurah")?.value || "1",
+      10,
+    );
+    const customEnd = parseInt(
+      this.querySelector("#customEndSurah")?.value || "114",
+      10,
+    );
 
-    const layerLatin = Boolean(this.querySelector('#layerLatinCheckbox')?.checked);
-    const layerTranslation = Boolean(this.querySelector('#layerTranslationCheckbox')?.checked);
-    const layerTafsir = Boolean(this.querySelector('#layerTafsirCheckbox')?.checked);
+    const layerLatin = Boolean(
+      this.querySelector("#layerLatinCheckbox")?.checked,
+    );
+    const layerTranslation = Boolean(
+      this.querySelector("#layerTranslationCheckbox")?.checked,
+    );
+    const layerTafsir = Boolean(
+      this.querySelector("#layerTafsirCheckbox")?.checked,
+    );
 
-    const translationEdition = this.querySelector('#quranTranslationSelect')?.value || 'id_kemenag';
-    const tafsirEdition = this.querySelector('#quranTafsirSelect')?.value || 'id_kemenag_ringkas';
+    const translationEdition =
+      this.querySelector("#quranTranslationSelect")?.value || "id_kemenag";
+    const tafsirEdition =
+      this.querySelector("#quranTafsirSelect")?.value || "id_kemenag_ringkas";
 
     const buildOptions = {
       scriptStyle,
       scriptId: scriptStyle,
       mushafFontSize,
       rangeType,
-      startSurah: rangeType === 'custom' ? Math.min(customStart, customEnd) : (rangeType === 'juz30' ? 78 : 1),
-      endSurah: rangeType === 'custom' ? Math.max(customStart, customEnd) : 114,
+      startSurah:
+        rangeType === "custom"
+          ? Math.min(customStart, customEnd)
+          : rangeType === "juz30"
+            ? 78
+            : 1,
+      endSurah: rangeType === "custom" ? Math.max(customStart, customEnd) : 114,
       layers: {
         mushaf: true,
         latin: layerLatin,
         translation: layerTranslation,
-        tafsir: layerTafsir
+        tafsir: layerTafsir,
       },
       translationEdition,
       tafsirEdition,
       displayWidth: this._screenW,
       displayHeight: this._screenH,
       quranBase: this._cachedQuranBase,
-      editionsData: this._cachedEditionsData
+      editionsData: this._cachedEditionsData,
     };
 
     try {
       await ensureQuranFont(scriptStyle, (msg) => this.setStatusText(msg));
 
       if (!this._cachedQuranBase || !this._cachedEditionsData) {
-        const datasets = await fetchQuranDatasets(buildOptions, (msg) => this.setStatusText(msg));
+        const datasets = await fetchQuranDatasets(buildOptions, (msg) =>
+          this.setStatusText(msg),
+        );
         this._cachedQuranBase = datasets.quranBase;
         this._cachedEditionsData = datasets.editionsData;
         buildOptions.quranBase = this._cachedQuranBase;
         buildOptions.editionsData = this._cachedEditionsData;
       }
 
-      this.setStatusText('Compiling quran.bqm...');
+      this.setStatusText("Compiling quran.bqm...");
 
       const bqmArrayBuffer = await buildBqmPackage(buildOptions, (progress) => {
-        if (!progress || typeof progress !== 'object') return;
-        const pct = Math.max(0, Math.min(100, Math.round(progress.percent ?? progress.current ?? 0)));
+        if (!progress || typeof progress !== "object") return;
+        const pct = Math.max(
+          0,
+          Math.min(100, Math.round(progress.percent ?? progress.current ?? 0)),
+        );
         if (progressBar) progressBar.style.width = `${pct}%`;
-        this.setStatusText(`${progress.stage || 'Building'}: ${pct}%`);
+        this.setStatusText(`${progress.stage || "Building"}: ${pct}%`);
       });
 
-      const file = new File([bqmArrayBuffer], 'quran.bqm', { type: 'application/octet-stream' });
+      const file = new File([bqmArrayBuffer], "quran.bqm", {
+        type: "application/octet-stream",
+      });
 
       if (isUpload) {
         this._isUploadingBqm = true;
-        this.setStatusText(`Uploading quran.bqm (${(file.size / 1024).toFixed(0)} KB)...`);
-        this.dispatchEvent(new CustomEvent('quran-upload-bqm', {
-          detail: { file },
-          bubbles: true,
-          composed: true
-        }));
+        this.setStatusText(
+          `Uploading quran.bqm (${(file.size / 1024).toFixed(0)} KB)...`,
+        );
+        this.dispatchEvent(
+          new CustomEvent("quran-upload-bqm", {
+            detail: { file },
+            bubbles: true,
+            composed: true,
+          }),
+        );
       } else {
         const blobUrl = URL.createObjectURL(file);
-        const a = document.createElement('a');
+        const a = document.createElement("a");
         a.href = blobUrl;
-        a.download = 'quran.bqm';
+        a.download = "quran.bqm";
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(blobUrl);
-        if (progressWrap) progressWrap.style.display = 'none';
-        this.setStatusText(`quran.bqm downloaded (${(file.size / 1024).toFixed(0)} KB).`);
+        if (progressWrap) progressWrap.style.display = "none";
+        this.setStatusText(
+          `quran.bqm downloaded (${(file.size / 1024).toFixed(0)} KB).`,
+        );
       }
     } catch (err) {
       this._isUploadingBqm = false;
-      if (progressWrap) progressWrap.style.display = 'none';
-      console.error('[QuranBuilder] Build failed:', err);
+      if (progressWrap) progressWrap.style.display = "none";
+      console.error("[QuranBuilder] Build failed:", err);
       this.setStatusText(`Build failed: ${err.message}`, true);
     } finally {
       this._isBuilding = false;
-      if (uploadBtn) uploadBtn.disabled = !this._isConnected || !this._assetsReady || Boolean(this._isUploadingBqm);
+      if (uploadBtn)
+        uploadBtn.disabled =
+          !this._isConnected ||
+          !this._assetsReady ||
+          Boolean(this._isUploadingBqm);
       if (downloadBtn) downloadBtn.disabled = !this._assetsReady;
     }
   }
 }
 
-if (typeof customElements !== 'undefined' && !customElements.get('quran-builder')) {
-  customElements.define('quran-builder', QuranBuilder);
+if (
+  typeof customElements !== "undefined" &&
+  !customElements.get("quran-builder")
+) {
+  customElements.define("quran-builder", QuranBuilder);
 }
 
 export { QuranBuilder };
