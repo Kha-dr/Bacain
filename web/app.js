@@ -30,7 +30,10 @@ const OPCODES = appConfig?.ble?.opcodes || {
   SET_ROTATION: 0x16,
   SET_BUTTON_INVERT: 0x17,
   SET_STATUS_LED: 0x18,
-  GET_CONFIG: 0x19
+  GET_CONFIG: 0x19,
+  GET_QURAN_STATE: 0x20,
+  SET_QURAN_STATE: 0x21,
+  CAP_ALQURAN: 0x01
 };
 OPCODES.GET_BOOKMARKS = OPCODES.GET_BOOKMARKS || 0x07;
 OPCODES.DELETE_BOOKMARK = OPCODES.DELETE_BOOKMARK || 0x08;
@@ -41,6 +44,9 @@ OPCODES.SET_ROTATION = OPCODES.SET_ROTATION || 0x16;
 OPCODES.SET_BUTTON_INVERT = OPCODES.SET_BUTTON_INVERT || 0x17;
 OPCODES.SET_STATUS_LED = OPCODES.SET_STATUS_LED || 0x18;
 OPCODES.GET_CONFIG = OPCODES.GET_CONFIG || 0x19;
+OPCODES.GET_QURAN_STATE = OPCODES.GET_QURAN_STATE || 0x20;
+OPCODES.SET_QURAN_STATE = OPCODES.SET_QURAN_STATE || 0x21;
+OPCODES.CAP_ALQURAN = OPCODES.CAP_ALQURAN || 0x01;
 
 const CHUNK_SIZE = appConfig?.ble?.chunkSize || 506;
 const CHUNK_DELAY_MS = appConfig?.ble?.chunkDelayMs || 6;
@@ -493,6 +499,16 @@ function updateConnectionUI(state) {
     if (bookLibrary && typeof bookLibrary.setDeviceConnected === 'function') {
       bookLibrary.setDeviceConnected(true);
     }
+    const qb = document.getElementById('quranBuilder');
+    if (qb) {
+      if (typeof qb.setDeviceCapabilities === 'function') {
+        qb.setDeviceCapabilities({
+          supported: true,
+          isConnected: true
+        });
+      }
+      requestQuranState();
+    }
   } else if (state === 'connecting') {
     if (onboardingConnectBtn) {
       onboardingConnectBtn.disabled = true;
@@ -572,6 +588,7 @@ function updateConnectionUI(state) {
 
     remoteBooks = [];
     renderBooksList();
+    unmountQuranBuilder();
   }
 }
 
@@ -742,6 +759,22 @@ function onControlNotification(event) {
   // Opcode 0x19: GET_CONFIG stream/notification handler
   if (opcode === OPCODES.GET_CONFIG) {
     applyDeviceConfigPayload(val);
+    return;
+  }
+
+  // Opcode 0x20: GET_QURAN_STATE stream/notification handler
+  if (opcode === OPCODES.GET_QURAN_STATE) {
+    const quranState = parseQuranStatePayload(val);
+    const qb = document.getElementById('quranBuilder');
+    if (qb) {
+      if (typeof qb.updateDeviceState === 'function') {
+        qb.updateDeviceState(quranState);
+      }
+      if (typeof qb.updateQuranState === 'function') {
+        qb.updateQuranState(quranState);
+      }
+    }
+    return;
   }
 }
 
@@ -1412,7 +1445,8 @@ function handleFilesSelected(files) {
 
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
-    if (!file.name.toLowerCase().endsWith('.txt')) {
+    const lower = file.name.toLowerCase();
+    if (!lower.endsWith('.txt') && !lower.endsWith('.bqm')) {
       showToast(`Warning: "${file.name}" is not a .txt file, attempting plain text upload`, 'warning');
     }
     uploadQueue.push(file);
@@ -1442,6 +1476,7 @@ function describeUploadErrorStatus(status, rxBytes, expectedBytes) {
     case 0x04: return 'Device ringbuffer overflow / storage write backpressure (0x04)';
     case 0x05: return 'Flash/SD write failed or storage full (0x05)';
     case 0x06: return `File size mismatch: device received ${rxBytes ?? '?'} of ${expectedBytes} bytes (0x06)`;
+    case 0x09: return 'Invalid quran.bqm header or display geometry mismatch (0x09)';
     default:   return `Device error status 0x${Number(status).toString(16).padStart(2, '0')}`;
   }
 }
@@ -1997,8 +2032,235 @@ function applyDeviceConfigPayload(val) {
     log(`Failed to cache synchronized configuration: ${err.message}`, 'warning');
   }
 
+  // Al-Quran capability (bit 0) and screen geometry (bytes 11..14)
+  const caps = val.byteLength >= 11 ? val.getUint8(10) : 0;
+  const rawW = val.byteLength >= 13 ? val.getUint16(11, true) : 200;
+  const rawH = val.byteLength >= 15 ? val.getUint16(13, true) : 200;
+  const screenW = (rotation % 2 === 1) ? rawH : rawW;
+  const screenH = (rotation % 2 === 1) ? rawW : rawH;
+  const alquranSupported = (caps & OPCODES.CAP_ALQURAN) !== 0;
+
+  if (alquranSupported) {
+    mountQuranBuilder(screenW, screenH);
+  } else {
+    unmountQuranBuilder();
+  }
+
   log('Device config synchronized on connection.', 'success');
   return true;
+}
+
+async function mountQuranBuilder(screenW = 200, screenH = 200) {
+  try {
+    let qb = document.getElementById('quranBuilder');
+    if (!qb) {
+      await import('./components/quran-builder.js');
+      qb = document.getElementById('quranBuilder');
+      if (!qb) {
+        qb = document.createElement('quran-builder');
+        qb.id = 'quranBuilder';
+        const bookUploader = document.getElementById('bookUploader');
+        const mainContent = el.mainContent || document.getElementById('mainContent');
+        if (bookUploader && bookUploader.parentNode === mainContent) {
+          bookUploader.after(qb);
+        } else if (mainContent) {
+          mainContent.appendChild(qb);
+        }
+      }
+    }
+    if (qb) {
+      if (typeof qb.setDeviceCapabilities === 'function') {
+        qb.setDeviceCapabilities({
+          supported: true,
+          screenW,
+          screenH,
+          isConnected
+        });
+      }
+      if (typeof qb.setDisplayGeometry === 'function') {
+        qb.setDisplayGeometry(screenW, screenH);
+      }
+      if (isConnected) {
+        requestQuranState();
+      }
+    }
+  } catch (err) {
+    log(`Failed to mount Quran component: ${err.message}`, 'error');
+  }
+}
+
+function unmountQuranBuilder() {
+  const qb = document.getElementById('quranBuilder');
+  if (qb) {
+    qb.remove();
+  }
+}
+
+function parseQuranStatePayload(val) {
+  if (!val || val.byteLength < 8) {
+    return {
+      started: false,
+      surah: 1,
+      ayah: 1,
+      layer: 0,
+      bookmarks: []
+    };
+  }
+
+  const started = val.getUint8(2) !== 0;
+  const surah = val.getUint8(3) || 1;
+  const ayah = val.getUint16(4, true) || 1;
+  const layer = val.getUint8(6);
+  const bookmarkCount = Math.min(val.getUint8(7), 8);
+
+  const bookmarks = [];
+  for (let i = 0; i < bookmarkCount; i++) {
+    const offset = 8 + i * 4;
+    if (offset + 4 <= val.byteLength) {
+      const bmSurah = val.getUint8(offset);
+      const bmAyah = val.getUint16(offset + 1, true);
+      const bmJuz = val.getUint8(offset + 3);
+      if (bmSurah > 0) {
+        bookmarks.push({ surah: bmSurah, ayah: bmAyah, juz: bmJuz });
+      }
+    }
+  }
+
+  return {
+    started,
+    surah,
+    ayah,
+    layer,
+    bookmarks
+  };
+}
+
+async function requestQuranState() {
+  if (!isConnected || !controlChar) return null;
+
+  try {
+    log('Querying Al-Quran state from device (OpCode 0x20)...', 'info');
+    const respPromise = waitForControlResponse(OPCODES.GET_QURAN_STATE, 5000);
+    const packet = new Uint8Array([OPCODES.GET_QURAN_STATE]);
+    if (controlChar.writeValueWithResponse) {
+      await controlChar.writeValueWithResponse(packet);
+    } else {
+      await controlChar.writeValue(packet);
+    }
+
+    const { status, dataView: val } = await respPromise;
+    if (status !== 0x00 || !val) {
+      log(`Al-Quran state request returned status: 0x${(status || 0).toString(16)}`, 'warning');
+      return null;
+    }
+
+    const quranState = parseQuranStatePayload(val);
+    const qb = document.getElementById('quranBuilder');
+    if (qb) {
+      if (typeof qb.updateDeviceState === 'function') {
+        qb.updateDeviceState(quranState);
+      }
+      if (typeof qb.updateQuranState === 'function') {
+        qb.updateQuranState(quranState);
+      }
+    }
+    return quranState;
+  } catch (err) {
+    log(`Failed to retrieve Al-Quran state: ${err.message}`, 'error');
+    return null;
+  }
+}
+
+async function setQuranCursor(surah, ayah, layer = 0) {
+  if (!isConnected || !controlChar) {
+    showToast('Connect device first', 'warning');
+    return;
+  }
+
+  try {
+    const s = Math.max(1, Math.min(114, parseInt(surah, 10) || 1));
+    const a = Math.max(1, parseInt(ayah, 10) || 1);
+    const l = Math.max(0, Math.min(3, parseInt(layer, 10) || 0));
+
+    log(`Setting Al-Quran cursor to ${s}:${a} layer ${l} (OpCode 0x21 sub 0x01)...`, 'info');
+    const respPromise = waitForControlResponse(OPCODES.SET_QURAN_STATE, 5000);
+    const packet = new Uint8Array([
+      OPCODES.SET_QURAN_STATE,
+      0x01,
+      s,
+      a & 0xFF,
+      (a >> 8) & 0xFF,
+      l
+    ]);
+
+    if (controlChar.writeValueWithResponse) {
+      await controlChar.writeValueWithResponse(packet);
+    } else {
+      await controlChar.writeValue(packet);
+    }
+
+    const { status } = await respPromise;
+    if (status === 0x00) {
+      showToast(`Quran position synced to ${s}:${a}`, 'success');
+      log(`Al-Quran cursor updated to ${s}:${a} successfully.`, 'success');
+    } else {
+      log(`Device returned status 0x${status.toString(16)} setting cursor`, 'warning');
+      showToast('Failed to sync cursor to device', 'error');
+    }
+
+    await requestQuranState();
+  } catch (err) {
+    log(`Failed to set Al-Quran cursor: ${err.message}`, 'error');
+    showToast('Failed to sync cursor', 'error');
+  }
+}
+
+async function setQuranBookmarks(bookmarks) {
+  if (!isConnected || !controlChar) {
+    showToast('Connect device first', 'warning');
+    return;
+  }
+
+  try {
+    const list = Array.isArray(bookmarks) ? bookmarks.slice(0, 8) : [];
+    const count = list.length;
+    log(`Updating Al-Quran bookmarks (${count} entries) (OpCode 0x21 sub 0x02)...`, 'info');
+
+    const packet = new Uint8Array(3 + count * 4);
+    packet[0] = OPCODES.SET_QURAN_STATE;
+    packet[1] = 0x02;
+    packet[2] = count;
+
+    for (let i = 0; i < count; i++) {
+      const bm = list[i];
+      const offset = 3 + i * 4;
+      packet[offset] = bm.surah & 0xFF;
+      packet[offset + 1] = bm.ayah & 0xFF;
+      packet[offset + 2] = (bm.ayah >> 8) & 0xFF;
+      packet[offset + 3] = bm.juz & 0xFF;
+    }
+
+    const respPromise = waitForControlResponse(OPCODES.SET_QURAN_STATE, 5000);
+    if (controlChar.writeValueWithResponse) {
+      await controlChar.writeValueWithResponse(packet);
+    } else {
+      await controlChar.writeValue(packet);
+    }
+
+    const { status } = await respPromise;
+    if (status === 0x00) {
+      showToast('Bookmarks updated on device', 'success');
+      log('Al-Quran bookmarks committed to device NVS successfully.', 'success');
+    } else {
+      log(`Device returned status 0x${status.toString(16)} setting bookmarks`, 'warning');
+      showToast('Failed to update bookmarks', 'error');
+    }
+
+    await requestQuranState();
+  } catch (err) {
+    log(`Failed to update bookmarks: ${err.message}`, 'error');
+    showToast('Failed to update bookmarks', 'error');
+  }
 }
 
 async function requestDeviceConfig() {
@@ -2384,6 +2646,38 @@ function initEventListeners() {
       setSleepTimeout(e.detail.timeout);
     }
   });
+
+  // Al-Quran Custom Event Listeners
+  document.addEventListener('quran-set-cursor', (e) => {
+    if (e.detail) {
+      setQuranCursor(e.detail.surah, e.detail.ayah, e.detail.layer);
+    }
+  });
+
+  document.addEventListener('quran-set-tilawah', (e) => {
+    if (e.detail) {
+      setQuranCursor(e.detail.surah, e.detail.ayah, e.detail.layer);
+    }
+  });
+
+  document.addEventListener('quran-set-bookmarks', (e) => {
+    if (e.detail && e.detail.bookmarks) {
+      setQuranBookmarks(e.detail.bookmarks);
+    }
+  });
+
+  document.addEventListener('quran-upload-bqm', (e) => {
+    if (e.detail) {
+      const file = e.detail.file || e.detail;
+      if (file) {
+        handleFilesSelected([file]);
+      }
+    }
+  });
+
+  document.addEventListener('quran-request-state', () => {
+    requestQuranState();
+  });
 }
 
 // ============================================================================
@@ -2459,6 +2753,12 @@ if (typeof window !== 'undefined') {
   window.setBookReadingOffset = setBookReadingOffset;
   window.openBookmarksModal = openBookmarksModal;
   window.closeBookmarksModal = closeBookmarksModal;
+  window.requestQuranState = requestQuranState;
+  window.setQuranCursor = setQuranCursor;
+  window.setQuranBookmarks = setQuranBookmarks;
+  window.parseQuranStatePayload = parseQuranStatePayload;
+  window.mountQuranBuilder = mountQuranBuilder;
+  window.unmountQuranBuilder = unmountQuranBuilder;
 }
 
 document.addEventListener('DOMContentLoaded', init);
