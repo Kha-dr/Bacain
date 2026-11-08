@@ -103,8 +103,8 @@ jobs:
           if [ -f "$IDF_PATH/export.sh" ]; then
             . "$IDF_PATH/export.sh"
           fi
-          idf.py set-target "${CHIP_TARGET}" ${EXTRA_IDF_ARGS}
-          idf.py build ${EXTRA_IDF_ARGS}
+          idf.py ${EXTRA_IDF_ARGS} set-target "${CHIP_TARGET}"
+          idf.py ${EXTRA_IDF_ARGS} build
 
       - name: Resolve Version and Binary Name
         id: resolve-bin
