@@ -13,9 +13,19 @@
 #include "view_ble_sync.h"
 #include "view_nav_hints.h"
 
-#define MENU_ITEM_COUNT 7
+typedef enum {
+    MENU_ITEM_CONTINUE = 0,
+    MENU_ITEM_LIBRARY,
+    MENU_ITEM_FONT_SIZE,
+    MENU_ITEM_SYNC,
+    MENU_ITEM_NAV_HINTS,
+    MENU_ITEM_REFRESH,
+    MENU_ITEM_POWER_OFF,
+    MENU_ITEM_COUNT
+} menu_item_id_t;
 
 RTC_DATA_ATTR static int s_rtc_menu_index = 0;
+static size_t s_menu_list_start_idx = 0;
 
 int view_menu_get_index(void) {
     return s_rtc_menu_index;
@@ -23,6 +33,19 @@ int view_menu_get_index(void) {
 
 void view_menu_set_index(int index) {
     s_rtc_menu_index = index;
+}
+
+static bool menu_range_fits(const char *const *items, size_t start, size_t target, int max_width, int bottom_limit) {
+    int cur_y = 24;
+    for (size_t i = start; i <= target; i++) {
+        int lines = ui_get_wrapped_line_count(items[i], &Font12, max_width, 3);
+        int text_h = lines * Font12.Height;
+        if (cur_y + text_h + 2 >= bottom_limit) {
+            return false;
+        }
+        cur_y += (lines > 1) ? (text_h + 6) : 22;
+    }
+    return true;
 }
 
 void view_menu_render(bool full_refresh) {
@@ -44,29 +67,47 @@ void view_menu_render(bool full_refresh) {
 
     Paint_DrawLine(0, UI_HEADER_HEIGHT + 1, DISPLAY_WIDTH - 1, UI_HEADER_HEIGHT + 1, BLACK, DOT_PIXEL_1X1, LINE_STYLE_SOLID);
 
-    // Menu Options
-    const char *items[MENU_ITEM_COUNT] = {
-        "Continue Reading",
-        "Book Library",
-        "Font Size: [16px]",
-        "Sync Books",
-        "Nav Hints",
-        "Refresh Screen",
-        "Power Off"
-    };
-
     char font_str[32];
     if (text_pager_get_font_size() == TEXT_PAGER_FONT_12) {
         snprintf(font_str, sizeof(font_str), "Font Size: [12px]");
     } else {
         snprintf(font_str, sizeof(font_str), "Font Size: [16px]");
     }
-    items[2] = font_str;
+
+    const char *items[MENU_ITEM_COUNT] = {
+        [MENU_ITEM_CONTINUE]  = "Continue Reading",
+        [MENU_ITEM_LIBRARY]   = "Book Library",
+        [MENU_ITEM_FONT_SIZE] = font_str,
+        [MENU_ITEM_SYNC]      = "Sync Books",
+        [MENU_ITEM_NAV_HINTS] = "Nav Hints",
+        [MENU_ITEM_REFRESH]   = "Refresh Screen",
+        [MENU_ITEM_POWER_OFF] = "Power Off"
+    };
+
+    int selected_index = s_rtc_menu_index;
+    if (selected_index < 0) {
+        selected_index = 0;
+    } else if (selected_index >= MENU_ITEM_COUNT) {
+        selected_index = MENU_ITEM_COUNT - 1;
+    }
+    s_rtc_menu_index = selected_index;
 
     int max_width = DISPLAY_WIDTH - 24;
     int bottom_limit = reader_ui_get_show_nav_hints() ? (UI_FOOTER_Y - 2) : (DISPLAY_HEIGHT - 2);
+
+    if (s_menu_list_start_idx >= MENU_ITEM_COUNT) {
+        s_menu_list_start_idx = 0;
+    }
+    if ((size_t)selected_index < s_menu_list_start_idx) {
+        s_menu_list_start_idx = (size_t)selected_index;
+    }
+    while (s_menu_list_start_idx < (size_t)selected_index &&
+           !menu_range_fits(items, s_menu_list_start_idx, (size_t)selected_index, max_width, bottom_limit)) {
+        s_menu_list_start_idx++;
+    }
+
     int y = 24;
-    for (int i = 0; i < MENU_ITEM_COUNT; i++) {
+    for (size_t i = s_menu_list_start_idx; i < MENU_ITEM_COUNT; i++) {
         int lines = ui_get_wrapped_line_count(items[i], &Font12, max_width, 3);
         int text_h = lines * Font12.Height;
 
@@ -74,7 +115,7 @@ void view_menu_render(bool full_refresh) {
             break;
         }
 
-        if (i == s_rtc_menu_index) {
+        if ((int)i == selected_index) {
             Paint_DrawRectangle(4, y - 2, DISPLAY_WIDTH - 4, y + text_h + 2, BLACK, DOT_PIXEL_1X1, DRAW_FILL_EMPTY);
             Paint_DrawString_EN(8, y, ">", &Font12, BLACK, WHITE);
         }
@@ -126,36 +167,40 @@ reader_view_t view_menu_handle_event(button_event_t evt) {
             view_menu_render(false);
         }
     } else if (evt.type == BTN_DOUBLE_CLICK) {
-        if (s_rtc_menu_index == 0) {
-            view_reading_render(false);
-            return VIEW_READING;
-        } else if (s_rtc_menu_index == 1) {
-            book_library_scan();
-            view_library_set_index(0);
-            view_library_render(false);
-            return VIEW_BOOK_LIST;
-        } else if (s_rtc_menu_index == 2) {
-            text_pager_font_size_t f = text_pager_get_font_size();
-            text_pager_font_size_t new_font = (f == TEXT_PAGER_FONT_16 ? TEXT_PAGER_FONT_12 : TEXT_PAGER_FONT_16);
-            text_pager_set_font_size(new_font);
-            app_settings_save_font_size(new_font == TEXT_PAGER_FONT_12 ? 0 : 1);
-            view_menu_render(false);
-            return VIEW_MENU;
-        } else if (s_rtc_menu_index == 3) {
-            book_library_scan();
-            view_ble_sync_enter();
-            return VIEW_BLE_SYNC;
-        } else if (s_rtc_menu_index == 4) {
-            view_nav_hints_render();
-            return VIEW_NAV_HINTS;
-        } else if (s_rtc_menu_index == 5) {
-            view_reading_reset_redraw_counter();
-            view_menu_render(true);
-            return VIEW_MENU;
-        } else if (s_rtc_menu_index == 6) {
-            reader_ui_render_sleeping();
-            app_enter_deep_sleep();
-            return VIEW_MENU;
+        switch ((menu_item_id_t)s_rtc_menu_index) {
+            case MENU_ITEM_CONTINUE:
+                view_reading_render(false);
+                return VIEW_READING;
+            case MENU_ITEM_LIBRARY:
+                book_library_scan();
+                view_library_set_index(0);
+                view_library_render(false);
+                return VIEW_BOOK_LIST;
+            case MENU_ITEM_FONT_SIZE: {
+                text_pager_font_size_t f = text_pager_get_font_size();
+                text_pager_font_size_t new_font = (f == TEXT_PAGER_FONT_16 ? TEXT_PAGER_FONT_12 : TEXT_PAGER_FONT_16);
+                text_pager_set_font_size(new_font);
+                app_settings_save_font_size(new_font == TEXT_PAGER_FONT_12 ? 0 : 1);
+                view_menu_render(false);
+                return VIEW_MENU;
+            }
+            case MENU_ITEM_SYNC:
+                book_library_scan();
+                view_ble_sync_enter();
+                return VIEW_BLE_SYNC;
+            case MENU_ITEM_NAV_HINTS:
+                view_nav_hints_render();
+                return VIEW_NAV_HINTS;
+            case MENU_ITEM_REFRESH:
+                view_reading_reset_redraw_counter();
+                view_menu_render(true);
+                return VIEW_MENU;
+            case MENU_ITEM_POWER_OFF:
+                reader_ui_render_sleeping();
+                app_enter_deep_sleep();
+                return VIEW_MENU;
+            default:
+                break;
         }
     }
 
