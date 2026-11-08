@@ -8,6 +8,7 @@ idf_component_register(
         "views/view_ble_sync.c"
         "views/view_bookmarks.c"
         "views/view_nav_hints.c"
+        "views/view_quran.c"
     INCLUDE_DIRS
         "."
         "views"
@@ -25,6 +26,7 @@ idf_component_register(
         reader_core
         ble_sync
         status_led
+        quran_reader
 )
 
 idf_build_get_property(python_cmd PYTHON)

@@ -28,13 +28,15 @@
 #include "view_ble_sync.h"
 #include "view_bookmarks.h"
 #include "view_nav_hints.h"
+#if CONFIG_BOARD_ALQURAN_ENABLE
+#include "view_quran.h"
+#endif
 
 #define TAG "MAIN"
 
 static QueueHandle_t s_btn_queue = NULL;
 static reader_view_t s_current_view = VIEW_MENU;
 static int64_t s_last_activity_us = 0;
-static int64_t s_last_rx_refresh_us = 0;
 
 RTC_DATA_ATTR static reader_view_t s_rtc_last_view = VIEW_MENU;
 RTC_DATA_ATTR static bool s_rtc_has_sdcard = false;
@@ -47,6 +49,9 @@ void app_enter_deep_sleep(void) {
     s_rtc_last_view = s_current_view;
     book_library_update_offset(text_pager_get_current_offset());
     book_library_flush_state();
+#if CONFIG_BOARD_ALQURAN_ENABLE
+    view_quran_save_before_sleep();
+#endif
     status_led_trigger(STATUS_LED_EVT_SLEEP);
     epaper_port_sleep();
     epaper_power_off();
@@ -70,19 +75,30 @@ static void on_ble_sync_event(ble_sync_event_t event, const void *param, void *u
         return;
     }
 
-    if (s_btn_queue && s_current_view == VIEW_BLE_SYNC) {
+    if (s_btn_queue && (s_current_view == VIEW_BLE_SYNC
+#if CONFIG_BOARD_ALQURAN_ENABLE
+        || s_current_view == VIEW_QURAN_MENU
+#endif
+    )) {
+        bool should_refresh = false;
         if (event == BLE_SYNC_EVT_CONNECTED || event == BLE_SYNC_EVT_DISCONNECTED ||
-            event == BLE_SYNC_EVT_UPLOAD_START || event == BLE_SYNC_EVT_UPLOAD_COMPLETE ||
-            event == BLE_SYNC_EVT_UPLOAD_ABORTED || event == BLE_SYNC_EVT_FILE_DELETED) {
+            event == BLE_SYNC_EVT_UPLOAD_COMPLETE || event == BLE_SYNC_EVT_FILE_DELETED) {
+            should_refresh = true;
+        } else if (s_current_view == VIEW_BLE_SYNC) {
+            if (event == BLE_SYNC_EVT_UPLOAD_START || event == BLE_SYNC_EVT_UPLOAD_ABORTED) {
+                should_refresh = true;
+            } else if (event == BLE_SYNC_EVT_UPLOAD_PROGRESS) {
+                static int64_t s_last_rx_refresh_us = 0;
+                int64_t now_us = esp_timer_get_time();
+                if (now_us - s_last_rx_refresh_us >= 500000) {
+                    s_last_rx_refresh_us = now_us;
+                    should_refresh = true;
+                }
+            }
+        }
+        if (should_refresh) {
             button_event_t evt = { .button = BTN_ID_BOOT, .type = BTN_EVENT_CUSTOM_REFRESH };
             xQueueSend(s_btn_queue, &evt, 0);
-        } else if (event == BLE_SYNC_EVT_UPLOAD_PROGRESS) {
-            int64_t now = esp_timer_get_time();
-            if (now - s_last_rx_refresh_us >= 500000) {
-                s_last_rx_refresh_us = now;
-                button_event_t evt = { .button = BTN_ID_BOOT, .type = BTN_EVENT_CUSTOM_REFRESH };
-                xQueueSend(s_btn_queue, &evt, 0);
-            }
         }
     }
 }
@@ -101,6 +117,13 @@ static reader_view_t dispatch_wake_view(reader_view_t last_view, wakeup_reason_t
             return view_nav_hints_on_wake(wakeup);
         case VIEW_BLE_SYNC:
             return view_ble_sync_on_wake(wakeup);
+#if CONFIG_BOARD_ALQURAN_ENABLE
+        case VIEW_QURAN_MENU:
+        case VIEW_QURAN_READING:
+        case VIEW_QURAN_JUMP:
+        case VIEW_QURAN_BOOKMARKS:
+            return view_quran_on_wake(last_view, wakeup);
+#endif
         default:
             view_menu_set_index(0);
             view_menu_render(false);
@@ -122,6 +145,13 @@ static reader_view_t dispatch_view_event(reader_view_t view, button_event_t evt)
             return view_bookmarks_handle_event(evt);
         case VIEW_NAV_HINTS:
             return view_nav_hints_handle_event(evt);
+#if CONFIG_BOARD_ALQURAN_ENABLE
+        case VIEW_QURAN_MENU:
+        case VIEW_QURAN_READING:
+        case VIEW_QURAN_JUMP:
+        case VIEW_QURAN_BOOKMARKS:
+            return view_quran_handle_event(view, evt);
+#endif
         default:
             return view;
     }
@@ -200,6 +230,9 @@ void app_main(void) {
 
     // 4. Initialize Reader Core
     book_library_init();
+#if CONFIG_BOARD_ALQURAN_ENABLE
+    view_quran_init(is_cold_boot);
+#endif
     book_library_set_storage_target(STORAGE_TARGET_FLASH);
     ble_sync_set_storage_target(STORAGE_TARGET_FLASH);
     if (is_cold_boot) {

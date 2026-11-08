@@ -13,9 +13,16 @@
 #include "view_ble_sync.h"
 #include "view_nav_hints.h"
 
+#if CONFIG_BOARD_ALQURAN_ENABLE
+#include "view_quran.h"
+#endif
+
 typedef enum {
     MENU_ITEM_CONTINUE = 0,
     MENU_ITEM_LIBRARY,
+#if CONFIG_BOARD_ALQURAN_ENABLE
+    MENU_ITEM_ALQURAN,
+#endif
     MENU_ITEM_FONT_SIZE,
     MENU_ITEM_SYNC,
     MENU_ITEM_NAV_HINTS,
@@ -77,6 +84,9 @@ void view_menu_render(bool full_refresh) {
     const char *items[MENU_ITEM_COUNT] = {
         [MENU_ITEM_CONTINUE]  = "Continue Reading",
         [MENU_ITEM_LIBRARY]   = "Book Library",
+#if CONFIG_BOARD_ALQURAN_ENABLE
+        [MENU_ITEM_ALQURAN]   = "Al-Quran",
+#endif
         [MENU_ITEM_FONT_SIZE] = font_str,
         [MENU_ITEM_SYNC]      = "Sync Books",
         [MENU_ITEM_NAV_HINTS] = "Nav Hints",
@@ -176,6 +186,11 @@ reader_view_t view_menu_handle_event(button_event_t evt) {
                 view_library_set_index(0);
                 view_library_render(false);
                 return VIEW_BOOK_LIST;
+#if CONFIG_BOARD_ALQURAN_ENABLE
+            case MENU_ITEM_ALQURAN:
+                view_quran_enter_menu();
+                return VIEW_QURAN_MENU;
+#endif
             case MENU_ITEM_FONT_SIZE: {
                 text_pager_font_size_t f = text_pager_get_font_size();
                 text_pager_font_size_t new_font = (f == TEXT_PAGER_FONT_16 ? TEXT_PAGER_FONT_12 : TEXT_PAGER_FONT_16);
