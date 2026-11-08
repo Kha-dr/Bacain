@@ -1,10 +1,6 @@
 /**
  * quran-builder.js
  * BacaIn PWA - Al-Quran Reader & BQM Manager Custom Element (<quran-builder>)
- * Light DOM Web Component providing:
- * 1. Package Builder (quran.bqm): Script selection, layers, font size, live 1-bit e-paper canvas preview, compiler and BLE uploader
- * 2. Tilawah Cursor & Sunnah Quick-Jump: Authoritative NVS cursor sync, Sunnah preset jumps
- * 3. Bookmarks Manager: 0..8 slots in device hardware NVS
  */
 
 import {
@@ -48,6 +44,7 @@ class QuranBuilder extends BaseElement {
     this._supported = false;
     this._isConnected = false;
     this._isBuilding = false;
+    this._isUploadingBqm = false;
     this._assetsReady = false;
     this._assetsLoading = false;
     this._loadedEditionsKey = '';
@@ -64,26 +61,12 @@ class QuranBuilder extends BaseElement {
   }
 
   setStatusText(text, isError = false) {
-    const statusEl = this.querySelector('#quranStatusText') || this.querySelector('#statusText');
+    const statusEl = this.querySelector('#quranStatusText');
     if (statusEl) {
       statusEl.textContent = text;
-      if (isError) {
-        statusEl.style.color = 'var(--danger-color, #ef4444)';
-        statusEl.style.fontWeight = '500';
-      } else {
-        statusEl.style.color = 'var(--text-secondary)';
-        statusEl.style.fontWeight = 'normal';
-      }
+      statusEl.style.color = isError ? 'var(--danger-color, #ef4444)' : 'var(--text-secondary)';
+      statusEl.style.fontWeight = isError ? '500' : 'normal';
     }
-    const legacyStatus = this.querySelector('#statusText');
-    if (legacyStatus && legacyStatus !== statusEl) {
-      legacyStatus.textContent = text;
-    }
-    const progressText = this.querySelector('#quranBuildProgressText');
-    if (progressText) progressText.textContent = text;
-    const previewStatus = this.querySelector('#previewStatusText');
-    if (previewStatus && !this._isBuilding) previewStatus.textContent = text;
-
     if (isError) {
       console.error('[QuranBuilder]', text);
     }
@@ -107,6 +90,10 @@ class QuranBuilder extends BaseElement {
 
   _onUploadStatus(e) {
     if (!e || !e.detail) return;
+    this._isUploadingBqm = false;
+    this.updateConnectionStateUI();
+    const progressWrap = this.querySelector('#quranBuildProgressWrap');
+    if (progressWrap) progressWrap.style.display = 'none';
     if (e.detail.ok === false) {
       this.setStatusText(`Upload failed: ${e.detail.error}`, true);
     } else if (e.detail.ok === true && e.detail.fileName === 'quran.bqm') {
@@ -126,14 +113,12 @@ class QuranBuilder extends BaseElement {
       '#layerTafsirCheckbox',
       '#quranTranslationSelect',
       '#quranTafsirSelect',
-      '#previewSurahSelect',
-      '#previewAyahInput',
-      '#previewLayerSelect',
-      '#previewRefreshBtn'
+      '#cursorSurahSelect',
+      '#cursorAyahInput',
+      '#cursorLayerSelect'
     ].join(', ');
 
-    const controls = this.querySelectorAll(selector);
-    controls.forEach((el) => {
+    this.querySelectorAll(selector).forEach((el) => {
       el.disabled = Boolean(disabled);
     });
 
@@ -144,7 +129,7 @@ class QuranBuilder extends BaseElement {
       if (uploadBtn) uploadBtn.disabled = true;
       if (downloadBtn) downloadBtn.disabled = true;
     } else {
-      if (uploadBtn) uploadBtn.disabled = !this._isConnected || !this._assetsReady;
+      if (uploadBtn) uploadBtn.disabled = !this._isConnected || !this._assetsReady || Boolean(this._isUploadingBqm);
       if (downloadBtn) downloadBtn.disabled = !this._assetsReady;
     }
   }
@@ -159,10 +144,10 @@ class QuranBuilder extends BaseElement {
     const retryBtn = this.querySelector('#quranRetryAssetsBtn');
     if (retryBtn) retryBtn.style.display = 'none';
 
-    const progressContainer = this.querySelector('#quranBuildProgressContainer');
-    if (progressContainer) progressContainer.style.display = 'block';
+    const progressWrap = this.querySelector('#quranBuildProgressWrap');
+    if (progressWrap) progressWrap.style.display = 'block';
 
-    this.setStatusText('Loading Quran calligraphy fonts & corpora from cache/upstream...');
+    this.setStatusText('Loading Quran fonts & corpora...');
 
     try {
       await ensureQuranFont(0, (msg) => this.setStatusText(msg));
@@ -182,36 +167,28 @@ class QuranBuilder extends BaseElement {
       this._loadedEditionsKey = `${translationEdition}|${tafsirEdition}`;
 
       this._assetsReady = true;
+      if (progressWrap) progressWrap.style.display = 'none';
       this.setBuilderControlsDisabled(false);
-      this.setStatusText('Quran fonts & 6,236-ayah corpora ready (cached).');
+      this.setStatusText('Assets ready (cached).');
+      this.updateSizeEstimate();
       await this.renderAyahPreview();
     } catch (err) {
       this._assetsReady = false;
       console.error('[QuranBuilder] Failed to preload Quran assets:', err);
       this.setBuilderControlsDisabled(true);
-      this.setStatusText(`Assets unavailable (check connection or cache): ${err.message}`, true);
+      this.setStatusText(`Assets unavailable: ${err.message}`, true);
       if (retryBtn) retryBtn.style.display = 'inline-flex';
     } finally {
       this._assetsLoading = false;
     }
   }
 
-  /**
-   * Set device capability parameters on connection.
-   * @param {{ supported: boolean, screenW: number, screenH: number, isConnected: boolean }} caps
-   */
   setDeviceCapabilities(caps) {
     if (!caps) return;
     this._supported = Boolean(caps.supported);
-    if (typeof caps.screenW === 'number' && caps.screenW > 0) {
-      this._screenW = caps.screenW;
-    }
-    if (typeof caps.screenH === 'number' && caps.screenH > 0) {
-      this._screenH = caps.screenH;
-    }
-    if (caps.isConnected !== undefined) {
-      this._isConnected = Boolean(caps.isConnected);
-    }
+    if (typeof caps.screenW === 'number' && caps.screenW > 0) this._screenW = caps.screenW;
+    if (typeof caps.screenH === 'number' && caps.screenH > 0) this._screenH = caps.screenH;
+    if (caps.isConnected !== undefined) this._isConnected = Boolean(caps.isConnected);
 
     const canvas = this.querySelector('#quranPreviewCanvas');
     if (canvas) {
@@ -224,11 +201,6 @@ class QuranBuilder extends BaseElement {
     this.renderAyahPreview();
   }
 
-  /**
-   * Set screen geometry and update preview canvas.
-   * @param {number} width
-   * @param {number} height
-   */
   setDisplayGeometry(width, height) {
     if (typeof width === 'number' && width > 0) this._screenW = width;
     if (typeof height === 'number' && height > 0) this._screenH = height;
@@ -243,10 +215,6 @@ class QuranBuilder extends BaseElement {
     this.renderAyahPreview();
   }
 
-  /**
-   * Update device Quran state retrieved via 0x20.
-   * @param {{ started: boolean, surah: number, ayah: number, layer: number, bookmarks: Array }} state
-   */
   updateDeviceState(state) {
     if (!state) return;
     this._deviceState = {
@@ -267,7 +235,7 @@ class QuranBuilder extends BaseElement {
   updateGeometryBadge() {
     const badge = this.querySelector('#quranGeometryBadge');
     if (badge) {
-      badge.textContent = `${this._screenW} x ${this._screenH} px`;
+      badge.textContent = `${this._screenW} × ${this._screenH} px`;
     }
   }
 
@@ -277,15 +245,13 @@ class QuranBuilder extends BaseElement {
     const addBmBtn = this.querySelector('#quranAddBookmarkBtn');
 
     if (syncBtn) syncBtn.disabled = !this._isConnected;
-    if (uploadBtn) uploadBtn.disabled = !this._isConnected || !this._assetsReady || this._isBuilding;
+    if (uploadBtn) uploadBtn.disabled = !this._isConnected || !this._assetsReady || this._isBuilding || Boolean(this._isUploadingBqm);
     if (addBmBtn) addBmBtn.disabled = !this._isConnected;
   }
 
   renderDeviceStateUI() {
     const state = this._deviceState;
     const badge = this.querySelector('#quranTilawahBadge');
-    const infoText = this.querySelector('#quranActiveTilawahInfo');
-
     const surahInfo = SURAHS[state.surah - 1] || SURAHS[0];
     const layerName = QURAN_LAYERS[state.layer]?.name || 'Mushaf';
     const juz = getJuzForAyah(state.surah, state.ayah);
@@ -293,23 +259,13 @@ class QuranBuilder extends BaseElement {
     if (state.started) {
       if (badge) {
         badge.className = 'card-badge badge-success';
-        badge.textContent = `Active: ${state.surah}:${state.ayah}`;
+        badge.textContent = `S.${state.surah}:${state.ayah} (${surahInfo.name}) • Juz ${juz} • ${layerName}`;
       }
-      if (infoText) {
-        infoText.textContent = `Active reading: Surah ${state.surah}:${state.ayah} (${surahInfo.name}) - Layer: ${layerName} - Juz ${juz}`;
-      }
-    } else {
-      // Zero-Metric Clutter: Suppress 0% progress, show calm ready state
-      if (badge) {
-        badge.className = 'card-badge badge-muted';
-        badge.textContent = 'Ready to begin Tilawah (1:1)';
-      }
-      if (infoText) {
-        infoText.textContent = 'Device state: Ready to begin Tilawah (1:1)';
-      }
+    } else if (badge) {
+      badge.className = 'card-badge badge-muted';
+      badge.textContent = 'Ready (1:1)';
     }
 
-    // Update Section 2 inputs if not currently focused
     const curSurahSelect = this.querySelector('#cursorSurahSelect');
     const curAyahInput = this.querySelector('#cursorAyahInput');
     const curLayerSelect = this.querySelector('#cursorLayerSelect');
@@ -325,6 +281,7 @@ class QuranBuilder extends BaseElement {
       curLayerSelect.value = String(state.layer);
     }
 
+    this.renderAyahPreview();
     this.renderBookmarksList();
   }
 
@@ -335,32 +292,30 @@ class QuranBuilder extends BaseElement {
 
     const bookmarks = this._deviceState.bookmarks || [];
     if (countBadge) {
-      countBadge.textContent = `${bookmarks.length} / 8 slots`;
+      countBadge.textContent = `${bookmarks.length} / 8 Bookmarks`;
       countBadge.className = bookmarks.length > 0 ? 'card-badge badge-flash' : 'card-badge badge-muted';
     }
 
     if (bookmarks.length === 0) {
-      container.innerHTML = `<p style="font-size: 0.82rem; color: var(--text-muted); padding: 0.5rem 0;">No bookmarks stored in device NVS.</p>`;
+      container.innerHTML = `<p style="font-size: 0.78rem; color: var(--text-muted); margin: 0;">No bookmarks saved on device.</p>`;
       return;
     }
 
     let html = '';
     bookmarks.forEach((bm, idx) => {
-      const sInfo = SURAHS[bm.surah - 1] || { name: 'Unknown' };
+      const sInfo = SURAHS[bm.surah - 1] || { name: 'Surah' };
       html += `
-        <div class="book-item" style="padding: 0.5rem 0.75rem;">
+        <div class="book-item" style="padding: 0.4rem 0.65rem;">
           <div class="book-info">
-            <div class="book-icon" style="width: 28px; height: 28px;">
-              <span style="font-size: 0.75rem; font-weight: 600;">${idx + 1}</span>
-            </div>
+            <span style="font-size: 0.75rem; font-weight: 600; color: var(--text-muted); min-width: 18px;">#${idx + 1}</span>
             <div class="book-meta">
-              <span class="book-name" style="font-size: 0.82rem;">${escapeHtml(sInfo.name)} ${bm.surah}:${bm.ayah}</span>
+              <span class="book-name" style="font-size: 0.8rem;">${escapeHtml(sInfo.name)} ${bm.surah}:${bm.ayah}</span>
               <span class="book-size">Juz ${bm.juz}</span>
             </div>
           </div>
-          <div style="display: flex; align-items: center; gap: 0.4rem; flex-shrink: 0;">
-            <button class="btn-control quran-bm-jump-btn" type="button" data-index="${idx}" style="padding: 0.25rem 0.55rem; font-size: 0.75rem;" title="Jump cursor to this bookmark">Jump</button>
-            <button class="btn-control btn-danger-text quran-bm-del-btn" type="button" data-index="${idx}" style="padding: 0.25rem 0.55rem; font-size: 0.75rem;" title="Delete bookmark">Delete</button>
+          <div style="display: flex; align-items: center; gap: 0.35rem;">
+            <button class="btn-control quran-bm-jump-btn" type="button" data-index="${idx}" style="padding: 0.2rem 0.5rem; font-size: 0.74rem;">Jump</button>
+            <button class="btn-control btn-danger-text quran-bm-del-btn" type="button" data-index="${idx}" style="padding: 0.2rem 0.5rem; font-size: 0.74rem;">Delete</button>
           </div>
         </div>
       `;
@@ -375,27 +330,24 @@ class QuranBuilder extends BaseElement {
     });
 
     const presetButtonsHtml = SUNNAH_PRESETS.map((p) =>
-      `<button class="btn-control quran-preset-btn" type="button" data-surah="${p.surah}" data-ayah="${p.ayah}">${escapeHtml(p.label)}</button>`
+      `<button class="btn-control quran-preset-btn" type="button" data-surah="${p.surah}" data-ayah="${p.ayah}" style="font-size: 0.75rem; padding: 0.25rem 0.55rem;">${escapeHtml(p.label)}</button>`
     ).join('');
 
     this.innerHTML = `
       <section class="upload-section quran-section">
-        <!-- Section Title -->
         <div class="section-title">
           <div class="section-title-left">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
               <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
-              <path d="M12 6v8"></path>
-              <path d="M9 10l3-3 3 3"></path>
             </svg>
             <h2>Al-Quran Reader & BQM Manager</h2>
           </div>
-          <div id="quranGeometryBadge" class="card-badge badge-flash">200 x 200 px</div>
+          <div id="quranGeometryBadge" class="card-badge badge-flash">200 × 200 px</div>
         </div>
 
-        <!-- SECTION 1: Package Builder (quran.bqm) -->
-        <div class="card" style="margin-bottom: 1rem;">
+        <!-- CARD 1: Package Builder (quran.bqm) -->
+        <div class="card" style="margin-bottom: 0.85rem;">
           <div class="card-header">
             <div class="card-title">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -403,23 +355,21 @@ class QuranBuilder extends BaseElement {
                 <polyline points="2 17 12 22 22 17"></polyline>
                 <polyline points="2 12 12 17 22 12"></polyline>
               </svg>
-              <span>Package Builder (quran.bqm)</span>
+              <span>BQM Package Builder</span>
             </div>
-            <div id="quranSizeEstimate" class="card-badge badge-muted">Est. Size: ~2.4 MB</div>
+            <div id="quranSizeEstimate" class="card-badge badge-muted">Est. Size: ~8.7 MB</div>
           </div>
 
-          <!-- Script & Font Options Grid -->
-          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem; margin-bottom: 0.75rem;">
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0.65rem; margin-bottom: 0.65rem;">
             <div>
               <label for="quranScriptSelect" class="input-label-sm">Mushaf Script</label>
               <select id="quranScriptSelect" class="select-input" style="width: 100%;">
-                <option value="0" selected>Madinah Uthmani Hafs (KFGQPC)</option>
+                <option value="0" selected>Madinah Uthmani (KFGQPC)</option>
                 <option value="1">IndoPak 15-Line Naskh</option>
               </select>
             </div>
-
             <div>
-              <label for="quranFontSizeSelect" class="input-label-sm">Mushaf Font Size</label>
+              <label for="quranFontSizeSelect" class="input-label-sm">Font Size</label>
               <select id="quranFontSizeSelect" class="select-input" style="width: 100%;">
                 <option value="20">20px (Compact)</option>
                 <option value="24">24px (Normal)</option>
@@ -427,214 +377,152 @@ class QuranBuilder extends BaseElement {
                 <option value="32">32px (Large)</option>
               </select>
             </div>
-
             <div>
               <label for="quranRangeSelect" class="input-label-sm">Content Range</label>
               <select id="quranRangeSelect" class="select-input" style="width: 100%;">
-                <option value="full" selected>Full 30 Juz (Complete)</option>
-                <option value="juz30">Juz 30 ('Amma) Only</option>
+                <option value="full" selected>Full 30 Juz (1–114)</option>
+                <option value="juz30">Juz 30 ('Amma, 78–114)</option>
                 <option value="custom">Custom Surah Range</option>
               </select>
             </div>
           </div>
 
-          <!-- Custom Range Pickers (hidden unless custom selected) -->
-          <div id="quranCustomRangeRow" style="display: none; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 0.75rem;">
+          <div id="quranCustomRangeRow" style="display: none; grid-template-columns: 1fr 1fr; gap: 0.65rem; margin-bottom: 0.65rem;">
             <div>
-              <label for="customStartSurah" class="input-label-sm">Start Surah</label>
+              <label for="customStartSurah" class="input-label-sm">From Surah</label>
               <select id="customStartSurah" class="select-input" style="width: 100%;">${surahOptionsHtml}</select>
             </div>
             <div>
-              <label for="customEndSurah" class="input-label-sm">End Surah</label>
+              <label for="customEndSurah" class="input-label-sm">To Surah</label>
               <select id="customEndSurah" class="select-input" style="width: 100%;">${surahOptionsHtml}</select>
             </div>
           </div>
 
-          <!-- Layers Toggle & Edition Row -->
-          <div style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 0.75rem; margin-bottom: 0.75rem;">
-            <div style="font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.04em;">Content Layers</div>
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.65rem;">
-              <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.82rem; color: var(--text-primary); cursor: pointer;">
-                <input type="checkbox" id="layerMushafCheckbox" checked disabled>
-                <span>Mushaf (Word-Sprite Atlas)</span>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.6rem; align-items: center; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 0.6rem 0.75rem; margin-bottom: 0.75rem;">
+            <label style="display: flex; align-items: center; gap: 0.45rem; font-size: 0.8rem; color: var(--text-primary); cursor: pointer;">
+              <input type="checkbox" id="layerLatinCheckbox" checked>
+              <span>Latin Transliteration</span>
+            </label>
+            <div style="display: flex; align-items: center; gap: 0.4rem;">
+              <label style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; color: var(--text-primary); cursor: pointer; white-space: nowrap;">
+                <input type="checkbox" id="layerTranslationCheckbox" checked>
+                <span>Translation:</span>
               </label>
-              <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.82rem; color: var(--text-primary); cursor: pointer;">
-                <input type="checkbox" id="layerLatinCheckbox" checked>
-                <span>Latin Transliteration</span>
-              </label>
-              <div style="display: flex; flex-direction: column; gap: 0.25rem;">
-                <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.82rem; color: var(--text-primary); cursor: pointer;">
-                  <input type="checkbox" id="layerTranslationCheckbox" checked>
-                  <span>Translation</span>
-                </label>
-                <select id="quranTranslationSelect" class="select-input" style="font-size: 0.78rem; padding: 0.25rem 0.5rem;">
-                  <option value="id_kemenag" selected>Bahasa Indonesia - Kemenag</option>
-                  <option value="en_saheeh">English - Sahih International</option>
-                </select>
-              </div>
-              <div style="display: flex; flex-direction: column; gap: 0.25rem;">
-                <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.82rem; color: var(--text-primary); cursor: pointer;">
-                  <input type="checkbox" id="layerTafsirCheckbox" checked>
-                  <span>Tafsir</span>
-                </label>
-                <select id="quranTafsirSelect" class="select-input" style="font-size: 0.78rem; padding: 0.25rem 0.5rem;">
-                  <option value="id_kemenag_ringkas" selected>Tafsir Ringkas Kemenag (ID)</option>
-                  <option value="jalalayn">Tafsir Al-Jalalayn (EN)</option>
-                </select>
-              </div>
-            </div>
-          </div>
-
-          <!-- Live 1-Bit E-Paper Preview Canvas -->
-          <div style="background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 0.85rem; margin-bottom: 0.75rem;">
-            <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.65rem;">
-              <div style="display: flex; align-items: center; gap: 0.5rem;">
-                <span style="font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.04em;">Live 1-Bit E-Paper Preview</span>
-                <span id="previewStatusText" style="font-size: 0.75rem; color: var(--text-muted); font-style: italic;"></span>
-              </div>
-              <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem;">
-                <select id="previewSurahSelect" class="select-input" style="font-size: 0.78rem; padding: 0.25rem 0.5rem;">${surahOptionsHtml}</select>
-                <input type="number" id="previewAyahInput" class="select-input" style="width: 60px; font-size: 0.78rem; padding: 0.25rem 0.4rem;" min="1" max="7" value="1">
-                <select id="previewLayerSelect" class="select-input" style="font-size: 0.78rem; padding: 0.25rem 0.5rem;">
-                  <option value="0" selected>Mushaf</option>
-                  <option value="1">Latin</option>
-                  <option value="2">Translation</option>
-                  <option value="3">Tafsir</option>
-                </select>
-                <button id="previewRefreshBtn" class="btn-control" type="button" title="Refresh Preview">Refresh</button>
-              </div>
-            </div>
-            <div style="display: flex; justify-content: center; align-items: center; padding: 0.5rem; background: var(--bg-input); border-radius: var(--radius-sm); overflow: auto;">
-              <canvas id="quranPreviewCanvas" width="${this._screenW}" height="${this._screenH}" style="background: #ffffff; image-rendering: pixelated; border: 1px solid var(--border-color); border-radius: 4px; box-shadow: var(--shadow-sm); max-width: 100%; height: auto;"></canvas>
-            </div>
-          </div>
-
-          <!-- Progress bar & Action buttons -->
-          <div id="quranBuildProgressContainer" style="display: none; margin-bottom: 0.75rem;">
-            <div class="upload-progress-container" style="margin-bottom: 0.35rem;">
-              <div id="quranBuildProgressBar" class="upload-progress-fill" style="width: 0%;"></div>
-            </div>
-            <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;">
-              <div id="quranStatusText" class="status-text" style="font-size: 0.78rem; color: var(--text-secondary); font-family: var(--font-mono);">Preparing build...</div>
-              <button id="quranRetryAssetsBtn" class="btn-control" type="button" style="display: none; font-size: 0.75rem; padding: 0.2rem 0.5rem;">Retry Load Assets</button>
-            </div>
-            <div id="statusText" style="display: none;"></div>
-            <div id="quranBuildProgressText" style="display: none;"></div>
-          </div>
-
-          <div style="display: flex; flex-wrap: wrap; gap: 0.6rem; justify-content: flex-end;">
-            <button id="quranDownloadBtn" class="btn-secondary" type="button">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                <polyline points="7 10 12 15 17 10"></polyline>
-                <line x1="12" y1="15" x2="12" y2="3"></line>
-              </svg>
-              <span>Download quran.bqm</span>
-            </button>
-            <button id="quranBuildUploadBtn" class="btn-connect" type="button">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                <polyline points="17 8 12 3 7 8"></polyline>
-                <line x1="12" y1="3" x2="12" y2="15"></line>
-              </svg>
-              <span>Build & Upload quran.bqm</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- SECTION 2: Tilawah Cursor & Sunnah Quick-Jump -->
-        <div class="card" style="margin-bottom: 1rem;">
-          <div class="card-header">
-            <div class="card-title">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="10"></circle>
-                <polygon points="12 8 8 12 12 16 12 8"></polygon>
-              </svg>
-              <span>Tilawah Cursor & Sunnah Quick-Jump</span>
-            </div>
-            <div id="quranTilawahBadge" class="card-badge badge-muted">Ready to begin Tilawah (1:1)</div>
-          </div>
-
-          <!-- Active status display -->
-          <div id="quranActiveTilawahInfo" style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.75rem;">
-            Device state: Ready to begin Tilawah (1:1)
-          </div>
-
-          <!-- Cursor selection controls -->
-          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)) auto; gap: 0.6rem; align-items: flex-end; margin-bottom: 0.75rem;">
-            <div>
-              <label for="cursorSurahSelect" class="input-label-sm">Surah</label>
-              <select id="cursorSurahSelect" class="select-input" style="width: 100%;">${surahOptionsHtml}</select>
-            </div>
-            <div>
-              <label for="cursorAyahInput" class="input-label-sm">Ayah</label>
-              <input type="number" id="cursorAyahInput" class="select-input" style="width: 100%;" min="1" max="7" value="1">
-            </div>
-            <div>
-              <label for="cursorLayerSelect" class="input-label-sm">Layer</label>
-              <select id="cursorLayerSelect" class="select-input" style="width: 100%;">
-                <option value="0" selected>Mushaf</option>
-                <option value="1">Latin</option>
-                <option value="2">Translation</option>
-                <option value="3">Tafsir</option>
+              <select id="quranTranslationSelect" class="select-input" style="font-size: 0.76rem; padding: 0.2rem 0.4rem; flex: 1; min-width: 0;">
+                <option value="id_kemenag" selected>ID - Kemenag</option>
+                <option value="en_saheeh">EN - Sahih Intl</option>
               </select>
             </div>
-            <div>
-              <button id="quranSyncCursorBtn" class="btn-secondary" type="button" style="height: 36px;">
+            <div style="display: flex; align-items: center; gap: 0.4rem;">
+              <label style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; color: var(--text-primary); cursor: pointer; white-space: nowrap;">
+                <input type="checkbox" id="layerTafsirCheckbox" checked>
+                <span>Tafsir:</span>
+              </label>
+              <select id="quranTafsirSelect" class="select-input" style="font-size: 0.76rem; padding: 0.2rem 0.4rem; flex: 1; min-width: 0;">
+                <option value="id_kemenag_ringkas" selected>ID - Kemenag Ringkas</option>
+                <option value="jalalayn">EN - Al-Jalalayn</option>
+              </select>
+            </div>
+          </div>
+
+          <div id="quranBuildProgressWrap" style="display: none; margin-bottom: 0.6rem;">
+            <div class="upload-progress-container">
+              <div id="quranBuildProgressBar" class="upload-progress-fill" style="width: 0%;"></div>
+            </div>
+          </div>
+
+          <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.6rem;">
+            <div style="display: flex; align-items: center; gap: 0.5rem; min-width: 0;">
+              <span id="quranStatusText" class="status-text" style="font-size: 0.78rem; color: var(--text-secondary); font-family: var(--font-mono);">Loading assets...</span>
+              <button id="quranRetryAssetsBtn" class="btn-control" type="button" style="display: none; font-size: 0.74rem; padding: 0.2rem 0.5rem;">Retry</button>
+            </div>
+            <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+              <button id="quranDownloadBtn" class="btn-secondary" type="button">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <polyline points="23 4 23 10 17 10"></polyline>
-                  <polyline points="1 20 1 14 7 14"></polyline>
-                  <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                  <polyline points="7 10 12 15 17 10"></polyline>
+                  <line x1="12" y1="15" x2="12" y2="3"></line>
                 </svg>
-                <span>Sync Cursor to Device</span>
+                <span>Download .bqm</span>
+              </button>
+              <button id="quranBuildUploadBtn" class="btn-connect" type="button">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                  <polyline points="17 8 12 3 7 8"></polyline>
+                  <line x1="12" y1="3" x2="12" y2="15"></line>
+                </svg>
+                <span>Build & Upload</span>
               </button>
             </div>
           </div>
-
-          <!-- Sunnah Quick-Preset Buttons -->
-          <div>
-            <div style="font-size: 0.75rem; font-weight: 500; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.4rem;">Sunnah Quick Presets</div>
-            <div class="control-btn-group">
-              ${presetButtonsHtml}
-            </div>
-          </div>
         </div>
 
-        <!-- SECTION 3: Bookmarks Manager (0..8 slots) -->
+        <!-- CARD 2: Unified Preview, Tilawah Cursor & Bookmarks -->
         <div class="card">
           <div class="card-header">
             <div class="card-title">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+                <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path>
+                <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path>
               </svg>
-              <span>Bookmarks Manager</span>
+              <span>Preview, Tilawah & Bookmarks</span>
             </div>
-            <div id="quranBookmarkCountBadge" class="card-badge badge-muted">0 / 8 slots</div>
+            <div style="display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;">
+              <div id="quranTilawahBadge" class="card-badge badge-muted">Ready (1:1)</div>
+              <div id="quranBookmarkCountBadge" class="card-badge badge-muted">0 / 8 Bookmarks</div>
+            </div>
           </div>
 
-          <!-- Bookmarks List -->
-          <div id="quranBookmarksList" class="books-list" style="margin-bottom: 0.85rem;">
-            <p style="font-size: 0.82rem; color: var(--text-muted); padding: 0.5rem 0;">No bookmarks stored in device NVS.</p>
-          </div>
+          <div style="display: grid; grid-template-columns: auto 1fr; gap: 1rem; align-items: start;">
+            <!-- Left: 1-Bit E-Paper Preview Canvas -->
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 0.35rem; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 0.6rem;">
+              <canvas id="quranPreviewCanvas" width="${this._screenW}" height="${this._screenH}" style="background: #ffffff; image-rendering: pixelated; border: 1px solid var(--border-color); border-radius: 4px; max-width: 100%; height: auto;"></canvas>
+              <span style="font-size: 0.7rem; color: var(--text-muted);">1-Bit E-Paper Preview</span>
+            </div>
 
-          <!-- Add Bookmark Row -->
-          <div id="quranAddBookmarkRow" style="display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.6rem; padding-top: 0.6rem; border-top: 1px solid var(--border-color);">
-            <div style="flex: 1; min-width: 140px;">
-              <label for="bmSurahSelect" class="input-label-sm">Bookmark Surah</label>
-              <select id="bmSurahSelect" class="select-input" style="width: 100%;">${surahOptionsHtml}</select>
-            </div>
-            <div style="width: 80px;">
-              <label for="bmAyahInput" class="input-label-sm">Ayah</label>
-              <input type="number" id="bmAyahInput" class="select-input" style="width: 100%;" min="1" max="7" value="1">
-            </div>
-            <div>
-              <button id="quranAddBookmarkBtn" class="btn-secondary" type="button" style="height: 36px;">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <line x1="12" y1="5" x2="12" y2="19"></line>
-                  <line x1="5" y1="12" x2="19" y2="12"></line>
-                </svg>
-                <span>Add Bookmark</span>
-              </button>
+            <!-- Right: Unified Selector, Sunnah Presets & Bookmarks -->
+            <div style="display: flex; flex-direction: column; gap: 0.75rem; min-width: 220px;">
+              <!-- Unified Surah / Ayah / Layer Selector + Actions -->
+              <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: flex-end;">
+                <div style="flex: 1 1 150px;">
+                  <label for="cursorSurahSelect" class="input-label-sm">Surah</label>
+                  <select id="cursorSurahSelect" class="select-input" style="width: 100%;">${surahOptionsHtml}</select>
+                </div>
+                <div style="width: 68px;">
+                  <label for="cursorAyahInput" class="input-label-sm">Ayah</label>
+                  <input type="number" id="cursorAyahInput" class="select-input" style="width: 100%;" min="1" max="7" value="1">
+                </div>
+                <div style="width: 110px;">
+                  <label for="cursorLayerSelect" class="input-label-sm">Layer</label>
+                  <select id="cursorLayerSelect" class="select-input" style="width: 100%;">
+                    <option value="0" selected>Mushaf</option>
+                    <option value="1">Latin</option>
+                    <option value="2">Translation</option>
+                    <option value="3">Tafsir</option>
+                  </select>
+                </div>
+                <button id="quranSyncCursorBtn" class="btn-secondary" type="button" style="height: 36px; padding: 0 0.7rem;" title="Jump device to selected Surah, Ayah & Layer">
+                  <span>Sync Cursor</span>
+                </button>
+                <button id="quranAddBookmarkBtn" class="btn-secondary" type="button" style="height: 36px; padding: 0 0.7rem;" title="Bookmark selected Surah & Ayah on device">
+                  <span>+ Bookmark</span>
+                </button>
+              </div>
+
+              <!-- Sunnah Quick Presets -->
+              <div>
+                <div style="font-size: 0.72rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.35rem;">Sunnah Quick Jump</div>
+                <div class="control-btn-group" style="gap: 0.35rem;">
+                  ${presetButtonsHtml}
+                </div>
+              </div>
+
+              <!-- Saved Bookmarks List -->
+              <div style="border-top: 1px solid var(--border-color); padding-top: 0.6rem;">
+                <div id="quranBookmarksList" class="books-list">
+                  <p style="font-size: 0.78rem; color: var(--text-muted); margin: 0;">No bookmarks saved on device.</p>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -643,13 +531,11 @@ class QuranBuilder extends BaseElement {
   }
 
   bindEvents() {
-    // Retry load assets
     const retryBtn = this.querySelector('#quranRetryAssetsBtn');
     if (retryBtn) {
       retryBtn.addEventListener('click', () => this.preloadAssets());
     }
 
-    // Range selector change
     const rangeSelect = this.querySelector('#quranRangeSelect');
     const customRangeRow = this.querySelector('#quranCustomRangeRow');
     if (rangeSelect && customRangeRow) {
@@ -659,13 +545,16 @@ class QuranBuilder extends BaseElement {
       });
     }
 
-    // Layer checkboxes & dropdowns change
-    const layerInputs = this.querySelectorAll('#layerLatinCheckbox, #layerTranslationCheckbox, #layerTafsirCheckbox, #customStartSurah, #customEndSurah');
-    layerInputs.forEach((input) => {
-      input.addEventListener('change', () => this.updateSizeEstimate());
+    const builderInputs = this.querySelectorAll('#layerLatinCheckbox, #layerTranslationCheckbox, #layerTafsirCheckbox, #customStartSurah, #customEndSurah, #quranScriptSelect, #quranFontSizeSelect');
+    builderInputs.forEach((input) => {
+      input.addEventListener('change', () => {
+        this.updateSizeEstimate();
+        if (input.id === 'quranScriptSelect' || input.id === 'quranFontSizeSelect') {
+          this.renderAyahPreview();
+        }
+      });
     });
 
-    // Edition selectors change
     const transSelect = this.querySelector('#quranTranslationSelect');
     const tafsirSelect = this.querySelector('#quranTafsirSelect');
     const onEditionChange = () => {
@@ -675,56 +564,25 @@ class QuranBuilder extends BaseElement {
       const key = `${translationEdition}|${tafsirEdition}`;
       if (key !== this._loadedEditionsKey) {
         this.preloadAssets();
+      } else {
+        this.renderAyahPreview();
       }
     };
     if (transSelect) transSelect.addEventListener('change', onEditionChange);
     if (tafsirSelect) tafsirSelect.addEventListener('change', onEditionChange);
 
-    // Preview picker inputs
-    const prevSurahSelect = this.querySelector('#previewSurahSelect');
-    const prevAyahInput = this.querySelector('#previewAyahInput');
-    const prevLayerSelect = this.querySelector('#previewLayerSelect');
-    const prevRefreshBtn = this.querySelector('#previewRefreshBtn');
-
-    if (prevSurahSelect && prevAyahInput) {
-      prevSurahSelect.addEventListener('change', () => {
-        const sNum = parseInt(prevSurahSelect.value, 10);
-        const sInfo = SURAHS[sNum - 1] || SURAHS[0];
-        prevAyahInput.max = String(sInfo.ayahs);
-        if (parseInt(prevAyahInput.value, 10) > sInfo.ayahs) {
-          prevAyahInput.value = '1';
-        }
-        this.renderAyahPreview();
-      });
-      prevAyahInput.addEventListener('change', () => this.renderAyahPreview());
-    }
-    if (prevLayerSelect) {
-      prevLayerSelect.addEventListener('change', () => this.renderAyahPreview());
-    }
-    if (prevRefreshBtn) {
-      prevRefreshBtn.addEventListener('click', () => this.renderAyahPreview());
-    }
-
-    // Script and font size change
-    const scriptSelect = this.querySelector('#quranScriptSelect');
-    const fontSelect = this.querySelector('#quranFontSizeSelect');
-    if (scriptSelect) scriptSelect.addEventListener('change', () => this.renderAyahPreview());
-    if (fontSelect) fontSelect.addEventListener('change', () => this.renderAyahPreview());
-
-    // Build buttons
+    // Build & Download buttons
     const uploadBtn = this.querySelector('#quranBuildUploadBtn');
     const downloadBtn = this.querySelector('#quranDownloadBtn');
-    if (uploadBtn) {
-      uploadBtn.addEventListener('click', () => this.buildAndUpload(true));
-    }
-    if (downloadBtn) {
-      downloadBtn.addEventListener('click', () => this.buildAndUpload(false));
-    }
+    if (uploadBtn) uploadBtn.addEventListener('click', () => this.buildAndUpload(true));
+    if (downloadBtn) downloadBtn.addEventListener('click', () => this.buildAndUpload(false));
 
-    // Section 2: Cursor selection
+    // Unified Surah / Ayah / Layer selector drives Live Preview + Cursor Sync + Add Bookmark
     const curSurahSelect = this.querySelector('#cursorSurahSelect');
     const curAyahInput = this.querySelector('#cursorAyahInput');
+    const curLayerSelect = this.querySelector('#cursorLayerSelect');
     const syncCursorBtn = this.querySelector('#quranSyncCursorBtn');
+    const addBmBtn = this.querySelector('#quranAddBookmarkBtn');
 
     if (curSurahSelect && curAyahInput) {
       curSurahSelect.addEventListener('change', () => {
@@ -734,50 +592,20 @@ class QuranBuilder extends BaseElement {
         if (parseInt(curAyahInput.value, 10) > sInfo.ayahs) {
           curAyahInput.value = '1';
         }
+        this.renderAyahPreview();
       });
+      curAyahInput.addEventListener('change', () => this.renderAyahPreview());
+    }
+    if (curLayerSelect) {
+      curLayerSelect.addEventListener('change', () => this.renderAyahPreview());
     }
 
     if (syncCursorBtn) {
       syncCursorBtn.addEventListener('click', () => {
         const surah = parseInt(curSurahSelect?.value || '1', 10);
         const ayah = parseInt(curAyahInput?.value || '1', 10);
-        const layer = parseInt(this.querySelector('#cursorLayerSelect')?.value || '0', 10);
+        const layer = parseInt(curLayerSelect?.value || '0', 10);
         this.dispatchCursorSync(surah, ayah, layer);
-      });
-    }
-
-    // Sunnah Quick-Presets
-    const presetBtns = this.querySelectorAll('.quran-preset-btn');
-    presetBtns.forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const surah = parseInt(btn.getAttribute('data-surah'), 10);
-        const ayah = parseInt(btn.getAttribute('data-ayah'), 10);
-        const layer = parseInt(this.querySelector('#cursorLayerSelect')?.value || '0', 10);
-
-        if (curSurahSelect) curSurahSelect.value = String(surah);
-        if (curAyahInput) {
-          const sInfo = SURAHS[surah - 1] || SURAHS[0];
-          curAyahInput.max = String(sInfo.ayahs);
-          curAyahInput.value = String(ayah);
-        }
-
-        this.dispatchCursorSync(surah, ayah, layer);
-      });
-    });
-
-    // Section 3: Add Bookmark
-    const bmSurahSelect = this.querySelector('#bmSurahSelect');
-    const bmAyahInput = this.querySelector('#bmAyahInput');
-    const addBmBtn = this.querySelector('#quranAddBookmarkBtn');
-
-    if (bmSurahSelect && bmAyahInput) {
-      bmSurahSelect.addEventListener('change', () => {
-        const sNum = parseInt(bmSurahSelect.value, 10);
-        const sInfo = SURAHS[sNum - 1] || SURAHS[0];
-        bmAyahInput.max = String(sInfo.ayahs);
-        if (parseInt(bmAyahInput.value, 10) > sInfo.ayahs) {
-          bmAyahInput.value = '1';
-        }
       });
     }
 
@@ -785,14 +613,12 @@ class QuranBuilder extends BaseElement {
       addBmBtn.addEventListener('click', () => {
         const bookmarks = [...(this._deviceState.bookmarks || [])];
         if (bookmarks.length >= 8) {
-          alert('Maximum 8 bookmark slots supported by device hardware.');
+          this.setStatusText('Maximum 8 bookmark slots supported by device.', true);
           return;
         }
-
-        const surah = parseInt(bmSurahSelect?.value || '1', 10);
-        const ayah = parseInt(bmAyahInput?.value || '1', 10);
+        const surah = parseInt(curSurahSelect?.value || '1', 10);
+        const ayah = parseInt(curAyahInput?.value || '1', 10);
         const juz = getJuzForAyah(surah, ayah);
-
         bookmarks.push({ surah, ayah, juz });
         this.dispatchEvent(new CustomEvent('quran-set-bookmarks', {
           detail: { bookmarks },
@@ -801,6 +627,26 @@ class QuranBuilder extends BaseElement {
         }));
       });
     }
+
+    // Sunnah Quick Presets update preview AND sync cursor when connected
+    this.querySelectorAll('.quran-preset-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const surah = parseInt(btn.getAttribute('data-surah'), 10);
+        const ayah = parseInt(btn.getAttribute('data-ayah'), 10);
+        const layer = parseInt(curLayerSelect?.value || '0', 10);
+
+        if (curSurahSelect) curSurahSelect.value = String(surah);
+        if (curAyahInput) {
+          const sInfo = SURAHS[surah - 1] || SURAHS[0];
+          curAyahInput.max = String(sInfo.ayahs);
+          curAyahInput.value = String(ayah);
+        }
+        this.renderAyahPreview();
+        if (this._isConnected) {
+          this.dispatchCursorSync(surah, ayah, layer);
+        }
+      });
+    });
 
     // Bookmarks Jump / Delete delegation
     const bmList = this.querySelector('#quranBookmarksList');
@@ -811,8 +657,17 @@ class QuranBuilder extends BaseElement {
           const idx = parseInt(jumpBtn.getAttribute('data-index'), 10);
           const bm = this._deviceState.bookmarks[idx];
           if (bm) {
-            const layer = parseInt(this.querySelector('#cursorLayerSelect')?.value || '0', 10);
-            this.dispatchCursorSync(bm.surah, bm.ayah, layer);
+            const layer = parseInt(curLayerSelect?.value || '0', 10);
+            if (curSurahSelect) curSurahSelect.value = String(bm.surah);
+            if (curAyahInput) {
+              const sInfo = SURAHS[bm.surah - 1] || SURAHS[0];
+              curAyahInput.max = String(sInfo.ayahs);
+              curAyahInput.value = String(bm.ayah);
+            }
+            this.renderAyahPreview();
+            if (this._isConnected) {
+              this.dispatchCursorSync(bm.surah, bm.ayah, layer);
+            }
           }
           return;
         }
@@ -840,8 +695,6 @@ class QuranBuilder extends BaseElement {
       bubbles: true,
       composed: true
     }));
-
-    // Compatible alias
     this.dispatchEvent(new CustomEvent('quran-set-tilawah', {
       detail: { surah, ayah, layer },
       bubbles: true,
@@ -853,35 +706,65 @@ class QuranBuilder extends BaseElement {
     const rangeType = this.querySelector('#quranRangeSelect')?.value || 'full';
     const customStart = parseInt(this.querySelector('#customStartSurah')?.value || '1', 10);
     const customEnd = parseInt(this.querySelector('#customEndSurah')?.value || '114', 10);
+    const scriptId = parseInt(this.querySelector('#quranScriptSelect')?.value || '0', 10);
+    const fontSize = parseInt(this.querySelector('#quranFontSizeSelect')?.value || '24', 10);
     const latin = Boolean(this.querySelector('#layerLatinCheckbox')?.checked);
     const trans = Boolean(this.querySelector('#layerTranslationCheckbox')?.checked);
     const tafsir = Boolean(this.querySelector('#layerTafsirCheckbox')?.checked);
+    const translationEdition = this.querySelector('#quranTranslationSelect')?.value || 'id_kemenag';
+    const tafsirEdition = this.querySelector('#quranTafsirSelect')?.value || 'id_kemenag_ringkas';
 
-    let totalAyahs = 6236;
-    if (rangeType === 'juz30') {
-      totalAyahs = 564;
-    } else if (rangeType === 'custom') {
-      totalAyahs = 0;
-      const start = Math.min(customStart, customEnd);
-      const end = Math.max(customStart, customEnd);
-      for (let s = start; s <= end; s++) {
+    const startSurah = rangeType === 'custom' ? Math.min(customStart, customEnd) : (rangeType === 'juz30' ? 78 : 1);
+    const endSurah = rangeType === 'custom' ? Math.max(customStart, customEnd) : 114;
+
+    let totalBytes = 64 + (114 * 24) + (6236 * 24);
+
+    if (this._cachedQuranBase && Array.isArray(this._cachedQuranBase.ayahs)) {
+      const uniqueWords = new Set();
+      const trArr = this._cachedEditionsData?.translations?.[translationEdition];
+      const tafArr = this._cachedEditionsData?.tafsirs?.[tafsirEdition];
+
+      for (let i = 0; i < this._cachedQuranBase.ayahs.length; i++) {
+        const a = this._cachedQuranBase.ayahs[i];
+        if (a.surah < startSurah || a.surah > endSurah) continue;
+
+        const words = scriptId === 1 ? (a.indopakWords || a.words || []) : (a.uthmaniWords || a.words || []);
+        for (let w = 0; w < words.length; w++) {
+          uniqueWords.add(words[w]);
+        }
+        totalBytes += 4 + (words.length * 6);
+
+        if (latin && a.latin) {
+          totalBytes += a.latin.length + 12;
+        }
+        if (trans) {
+          const trStr = trArr?.[a.globalAyahIndex ?? i] || a.translationId || a.translationEn || '';
+          totalBytes += trStr.length + 16;
+        }
+        if (tafsir) {
+          const tafStr = tafArr?.[a.globalAyahIndex ?? i] || a.tafsirId || a.tafsirEn || '';
+          totalBytes += tafStr.length + 24;
+        }
+      }
+
+      const avgSpriteBytes = Math.round(148 * Math.pow(fontSize / 24, 1.55));
+      totalBytes += uniqueWords.size * avgSpriteBytes;
+    } else {
+      let totalAyahs = 0;
+      for (let s = startSurah; s <= endSurah; s++) {
         const info = SURAHS[s - 1];
         if (info) totalAyahs += info.ayahs;
       }
+      let bytesPerAyah = 490;
+      if (latin) bytesPerAyah += 120;
+      if (trans) bytesPerAyah += 165;
+      if (tafsir) bytesPerAyah += 720;
+      totalBytes += totalAyahs * bytesPerAyah;
     }
 
-    let bytesPerAyah = 180;
-    if (latin) bytesPerAyah += 40;
-    if (trans) bytesPerAyah += 100;
-    if (tafsir) bytesPerAyah += 150;
-
-    const totalBytes = 64 + totalAyahs * bytesPerAyah;
-    let formatted = '';
-    if (totalBytes < 1024 * 1024) {
-      formatted = `Est. Size: ~${Math.round(totalBytes / 1024)} KB`;
-    } else {
-      formatted = `Est. Size: ~${(totalBytes / (1024 * 1024)).toFixed(1)} MB`;
-    }
+    const formatted = totalBytes < 1024 * 1024
+      ? `Est. Size: ~${Math.round(totalBytes / 1024)} KB`
+      : `Est. Size: ~${(totalBytes / (1024 * 1024)).toFixed(1)} MB`;
 
     const badge = this.querySelector('#quranSizeEstimate');
     if (badge) badge.textContent = formatted;
@@ -892,120 +775,46 @@ class QuranBuilder extends BaseElement {
     const canvas = this.querySelector('#quranPreviewCanvas');
     if (!canvas) return;
 
-    const surah = parseInt(this.querySelector('#previewSurahSelect')?.value || '1', 10);
-    const ayah = parseInt(this.querySelector('#previewAyahInput')?.value || '1', 10);
-    const layer = parseInt(this.querySelector('#previewLayerSelect')?.value || '0', 10);
+    const surah = parseInt(this.querySelector('#cursorSurahSelect')?.value || '1', 10);
+    const ayah = parseInt(this.querySelector('#cursorAyahInput')?.value || '1', 10);
+    const layer = parseInt(this.querySelector('#cursorLayerSelect')?.value || '0', 10);
     const scriptStyle = parseInt(this.querySelector('#quranScriptSelect')?.value || '0', 10);
     const mushafFontSize = parseInt(this.querySelector('#quranFontSizeSelect')?.value || '28', 10);
     const translationEdition = this.querySelector('#quranTranslationSelect')?.value || 'id_kemenag';
     const tafsirEdition = this.querySelector('#quranTafsirSelect')?.value || 'id_kemenag_ringkas';
 
-    const previewOptions = {
-      surah,
-      ayah,
-      layer,
-      scriptStyle,
-      scriptId: scriptStyle,
-      mushafFontSize,
-      displayWidth: this._screenW,
-      displayHeight: this._screenH,
-      translationEdition,
-      tafsirEdition,
-      quranBase: this._cachedQuranBase,
-      editionsData: this._cachedEditionsData
-    };
-
     try {
-      if (typeof ensureQuranFont === 'function') {
-        if (!this._assetsReady) {
-          this.setStatusText('Loading Quran calligraphy font (bacain-quran-v1)...');
-          await ensureQuranFont(scriptStyle, (msg) => this.setStatusText(msg));
-          this.setStatusText('');
-        } else {
-          await ensureQuranFont(scriptStyle);
-        }
-      }
-
-      if (typeof renderAyahPreviewToCanvas === 'function') {
-        await renderAyahPreviewToCanvas(canvas, previewOptions);
-      } else {
-        this.drawMonochromePreview(canvas, previewOptions);
-      }
+      await ensureQuranFont(scriptStyle);
+      await renderAyahPreviewToCanvas(canvas, {
+        surah,
+        ayah,
+        layer,
+        scriptStyle,
+        scriptId: scriptStyle,
+        mushafFontSize,
+        displayWidth: this._screenW,
+        displayHeight: this._screenH,
+        translationEdition,
+        tafsirEdition,
+        quranBase: this._cachedQuranBase,
+        editionsData: this._cachedEditionsData
+      });
     } catch (err) {
-      console.warn('Preview render fallback:', err.message);
-      this.drawMonochromePreview(canvas, previewOptions, err.message);
-      this.setStatusText(`Preview note: ${err.message}`);
+      console.error('[QuranBuilder] Preview render error:', err);
+      this.setStatusText(`Preview error: ${err.message}`, true);
     }
-  }
-
-  drawMonochromePreview(canvas, options, errorMsg = null) {
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const w = this._screenW;
-    const h = this._screenH;
-    canvas.width = w;
-    canvas.height = h;
-
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, w, h);
-
-    // Inverted Header Bar (y = 0..15)
-    ctx.fillStyle = '#000000';
-    ctx.fillRect(0, 0, w, 16);
-
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 11px monospace';
-    ctx.textBaseline = 'middle';
-    const surahInfo = SURAHS[options.surah - 1] || { name: 'Al-Fatihah', ayahs: 7 };
-    const tag = QURAN_LAYERS[options.layer]?.tag || 'M';
-    const headerLeft = `${String(options.surah).padStart(2, '0')}:${String(options.ayah).padStart(3, '0')} ${surahInfo.name}`;
-    ctx.fillText(headerLeft.slice(0, Math.floor(w / 8)), 4, 8);
-
-    const headerRight = `[${tag}]`;
-    const hrWidth = ctx.measureText(headerRight).width;
-    ctx.fillText(headerRight, w - hrWidth - 4, 8);
-
-    // Body text (y = 20 .. h - 20)
-    ctx.fillStyle = '#000000';
-    ctx.font = '12px system-ui, sans-serif';
-    ctx.textBaseline = 'top';
-
-    if (errorMsg) {
-      ctx.fillText('1-Bit Preview', 8, 24);
-      ctx.font = '10px monospace';
-      ctx.fillText(errorMsg.slice(0, Math.floor(w / 7)), 8, 44);
-    } else {
-      const layerDesc = QURAN_LAYERS[options.layer]?.title || 'Mushaf';
-      ctx.fillText(`${surahInfo.name} - Ayah ${options.ayah}`, 8, 24);
-      ctx.font = '11px monospace';
-      ctx.fillText(`Layer: ${layerDesc}`, 8, 44);
-      ctx.fillText(`Script: ${options.scriptStyle === 0 ? 'Madinah Uthmani' : 'IndoPak 15-Line'}`, 8, 60);
-      ctx.fillText(`Target: ${w}x${h} px`, 8, 76);
-    }
-
-    // Footer bar (y = h - 16 .. h)
-    ctx.fillStyle = '#000000';
-    ctx.fillRect(0, h - 16, w, 1);
-    ctx.font = '10px monospace';
-    ctx.textBaseline = 'middle';
-    const juz = getJuzForAyah(options.surah, options.ayah);
-    ctx.fillText(`Juz ${juz}`, 4, h - 8);
-    const footerRight = `${w}x${h}`;
-    const frWidth = ctx.measureText(footerRight).width;
-    ctx.fillText(footerRight, w - frWidth - 4, h - 8);
   }
 
   async buildAndUpload(isUpload = true) {
     if (this._isBuilding) return;
     this._isBuilding = true;
 
-    const progressContainer = this.querySelector('#quranBuildProgressContainer');
+    const progressWrap = this.querySelector('#quranBuildProgressWrap');
     const progressBar = this.querySelector('#quranBuildProgressBar');
     const uploadBtn = this.querySelector('#quranBuildUploadBtn');
     const downloadBtn = this.querySelector('#quranDownloadBtn');
 
-    if (progressContainer) progressContainer.style.display = 'block';
+    if (progressWrap) progressWrap.style.display = 'block';
     if (progressBar) progressBar.style.width = '0%';
     if (uploadBtn) uploadBtn.disabled = true;
     if (downloadBtn) downloadBtn.disabled = true;
@@ -1016,7 +825,6 @@ class QuranBuilder extends BaseElement {
     const customStart = parseInt(this.querySelector('#customStartSurah')?.value || '1', 10);
     const customEnd = parseInt(this.querySelector('#customEndSurah')?.value || '114', 10);
 
-    const layerMushaf = true;
     const layerLatin = Boolean(this.querySelector('#layerLatinCheckbox')?.checked);
     const layerTranslation = Boolean(this.querySelector('#layerTranslationCheckbox')?.checked);
     const layerTafsir = Boolean(this.querySelector('#layerTafsirCheckbox')?.checked);
@@ -1032,7 +840,7 @@ class QuranBuilder extends BaseElement {
       startSurah: rangeType === 'custom' ? Math.min(customStart, customEnd) : (rangeType === 'juz30' ? 78 : 1),
       endSurah: rangeType === 'custom' ? Math.max(customStart, customEnd) : 114,
       layers: {
-        mushaf: layerMushaf,
+        mushaf: true,
         latin: layerLatin,
         translation: layerTranslation,
         tafsir: layerTafsir
@@ -1040,37 +848,27 @@ class QuranBuilder extends BaseElement {
       translationEdition,
       tafsirEdition,
       displayWidth: this._screenW,
-      displayHeight: this._screenH
+      displayHeight: this._screenH,
+      quranBase: this._cachedQuranBase,
+      editionsData: this._cachedEditionsData
     };
 
     try {
-      if (typeof buildBqmPackage !== 'function') {
-        throw new Error('BQM package compiler (buildBqmPackage) is not available.');
-      }
-
-      this.setStatusText('Initializing fonts & corpora in CacheStorage (bacain-quran-v1)...');
-
-      if (typeof ensureQuranFont === 'function') {
-        await ensureQuranFont(scriptStyle, (msg) => this.setStatusText(msg));
-      }
+      await ensureQuranFont(scriptStyle, (msg) => this.setStatusText(msg));
 
       if (!this._cachedQuranBase || !this._cachedEditionsData) {
-        this.setStatusText('Fetching Quran datasets from upstream CORS endpoints...');
         const datasets = await fetchQuranDatasets(buildOptions, (msg) => this.setStatusText(msg));
         this._cachedQuranBase = datasets.quranBase;
         this._cachedEditionsData = datasets.editionsData;
+        buildOptions.quranBase = this._cachedQuranBase;
+        buildOptions.editionsData = this._cachedEditionsData;
       }
 
-      buildOptions.quranBase = this._cachedQuranBase;
-      buildOptions.editionsData = this._cachedEditionsData;
-
-      this.setStatusText('Compiling Al-Quran BQM package...');
+      this.setStatusText('Compiling quran.bqm...');
 
       const bqmArrayBuffer = await buildBqmPackage(buildOptions, (progress) => {
-        if (!progress) return;
-        const total = progress.total || 100;
-        const current = progress.current ?? (progress.percent || 0);
-        const pct = Math.max(0, Math.min(100, Math.round((current / total) * 100)));
+        if (!progress || typeof progress !== 'object') return;
+        const pct = Math.max(0, Math.min(100, Math.round(progress.percent ?? progress.current ?? 0)));
         if (progressBar) progressBar.style.width = `${pct}%`;
         this.setStatusText(`${progress.stage || 'Building'}: ${pct}%`);
       });
@@ -1078,7 +876,8 @@ class QuranBuilder extends BaseElement {
       const file = new File([bqmArrayBuffer], 'quran.bqm', { type: 'application/octet-stream' });
 
       if (isUpload) {
-        this.setStatusText('Queueing quran.bqm for BLE upload...');
+        this._isUploadingBqm = true;
+        this.setStatusText(`Uploading quran.bqm (${(file.size / 1024).toFixed(0)} KB)...`);
         this.dispatchEvent(new CustomEvent('quran-upload-bqm', {
           detail: { file },
           bubbles: true,
@@ -1093,14 +892,17 @@ class QuranBuilder extends BaseElement {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(blobUrl);
-        this.setStatusText('quran.bqm downloaded successfully.');
+        if (progressWrap) progressWrap.style.display = 'none';
+        this.setStatusText(`quran.bqm downloaded (${(file.size / 1024).toFixed(0)} KB).`);
       }
     } catch (err) {
+      this._isUploadingBqm = false;
+      if (progressWrap) progressWrap.style.display = 'none';
       console.error('[QuranBuilder] Build failed:', err);
       this.setStatusText(`Build failed: ${err.message}`, true);
     } finally {
       this._isBuilding = false;
-      if (uploadBtn) uploadBtn.disabled = !this._isConnected || !this._assetsReady;
+      if (uploadBtn) uploadBtn.disabled = !this._isConnected || !this._assetsReady || Boolean(this._isUploadingBqm);
       if (downloadBtn) downloadBtn.disabled = !this._assetsReady;
     }
   }

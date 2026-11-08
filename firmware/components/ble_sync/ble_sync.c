@@ -17,6 +17,7 @@
 #include "esp_log.h"
 #include "esp_err.h"
 #include "esp_idf_version.h"
+#include "esp_vfs_fat.h"
 #include "nvs_flash.h"
 #include "nvs.h"
 
@@ -495,6 +496,20 @@ static void handle_cmd_start_upload(const ble_sync_cmd_msg_t *cmd)
 
     char fpath[256];
     snprintf(fpath, sizeof(fpath), "%s/%s", books_dir, s_upload_filename);
+
+    unlink(fpath);
+
+    uint64_t total_bytes = 0;
+    uint64_t free_bytes = 0;
+    const char *mount_path = (s_storage_target == 0 ? "/sdcard" : "/spiflash");
+    esp_vfs_fat_info(mount_path, &total_bytes, &free_bytes);
+    if (cmd->file_size > 0 && free_bytes > 0 && ((uint64_t)cmd->file_size + 16384ULL) > free_bytes) {
+        ESP_LOGE(TAG, "Upload rejected: file size %u B exceeds free space %llu B", (unsigned)cmd->file_size, (unsigned long long)free_bytes);
+        s_is_uploading = false;
+        uint8_t resp[2] = { BLE_SYNC_OP_START_UPLOAD, BLE_SYNC_STATUS_SIZE_ERR };
+        ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
+        return;
+    }
 
     s_upload_fp = fopen(fpath, "wb");
     uint8_t status = BLE_SYNC_STATUS_OK;
@@ -1406,7 +1421,7 @@ static int ble_sync_data_access_cb(uint16_t conn_handle, uint16_t attr_handle,
     s_expected_seq = seq + 1;
 
     if (payload_len > 0) {
-        BaseType_t sent = xRingbufferSend(s_data_ringbuf, payload, payload_len, pdMS_TO_TICKS(1500));
+        BaseType_t sent = xRingbufferSend(s_data_ringbuf, payload, payload_len, pdMS_TO_TICKS(250));
         if (sent != pdTRUE) {
             ESP_LOGE(TAG, "Ringbuffer full, dropped %u bytes", (unsigned)payload_len);
             if (s_upload_err_status == BLE_SYNC_STATUS_OK) s_upload_err_status = BLE_SYNC_STATUS_OVERFLOW;

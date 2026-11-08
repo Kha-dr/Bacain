@@ -65,7 +65,10 @@ static void view_quran_render_menu(bool full_refresh) {
         Paint_DrawString_EN(20, 60, "No Al-Quran data (.bqm)", &Font12, BLACK, WHITE);
         Paint_DrawString_EN(20, 84, "Connect via Sync Books", &Font12, BLACK, WHITE);
         Paint_DrawString_EN(20, 108, "Build & upload via Web", &Font12, BLACK, WHITE);
-        ui_draw_centered_string(UI_FOOTER_Y + 1, "Hold ▲/▼ Back to Menu", &Font12);
+        if (reader_ui_get_show_nav_hints()) {
+            Paint_DrawLine(0, UI_FOOTER_Y - 2, DISPLAY_WIDTH - 1, UI_FOOTER_Y - 2, BLACK, DOT_PIXEL_1X1, LINE_STYLE_SOLID);
+            ui_draw_centered_string(UI_FOOTER_Y + 1, "Hold ▲/▼ Back", &Font12);
+        }
         reader_ui_flush_canvas(full_refresh);
         return;
     }
@@ -91,21 +94,20 @@ static void view_quran_render_menu(bool full_refresh) {
     char item3[32];
     snprintf(item3, sizeof(item3), "Bookmarks (%u/8)", st ? st->bookmark_count : 0);
 
-    const char *items[5] = {
+    const char *items[4] = {
         item0,
         item1,
         "Sunnah & Juz Jump",
-        item3,
-        "Back to Main Menu"
+        item3
     };
 
     if (s_rtc_quran_menu_idx < 0) s_rtc_quran_menu_idx = 0;
-    if (s_rtc_quran_menu_idx >= 5) s_rtc_quran_menu_idx = 4;
+    if (s_rtc_quran_menu_idx >= 4) s_rtc_quran_menu_idx = 3;
 
     int max_width = DISPLAY_WIDTH - 24;
     int bottom_limit = reader_ui_get_show_nav_hints() ? (UI_FOOTER_Y - 2) : (DISPLAY_HEIGHT - 2);
     int y = 24;
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 4; i++) {
         int lines = ui_get_wrapped_line_count(items[i], &Font12, max_width, 3);
         int text_h = lines * Font12.Height;
         if (y + text_h + 2 >= bottom_limit) break;
@@ -120,7 +122,7 @@ static void view_quran_render_menu(bool full_refresh) {
 
     if (reader_ui_get_show_nav_hints()) {
         Paint_DrawLine(0, UI_FOOTER_Y - 2, DISPLAY_WIDTH - 1, UI_FOOTER_Y - 2, BLACK, DOT_PIXEL_1X1, LINE_STYLE_SOLID);
-        ui_draw_centered_string(UI_FOOTER_Y + 1, "▲/▼ Move | 2x▲/▼ Select | Hold Back", &Font12);
+        ui_draw_centered_string(UI_FOOTER_Y + 1, "2x▲/▼ Select | Hold ▲/▼ Back", &Font12);
     }
 
     reader_ui_flush_canvas(full_refresh);
@@ -167,7 +169,7 @@ static void view_quran_render_reading(bool full_refresh) {
 
     Paint_DrawLine(0, DISPLAY_HEIGHT - 16, DISPLAY_WIDTH - 1, DISPLAY_HEIGHT - 16, BLACK, DOT_PIXEL_1X1, LINE_STYLE_SOLID);
     if (reader_ui_get_show_nav_hints()) {
-        ui_draw_centered_string(DISPLAY_HEIGHT - 14, "▲/▼ Page | 2x▲ Layer | 2x▼ Mark", &Font12);
+        ui_draw_centered_string(DISPLAY_HEIGHT - 14, "2x▲ Layer | 2x▼ Mark", &Font12);
     } else {
         bqm_ayah_entry_t ayah_info;
         uint16_t global_ayah = 0;
@@ -260,7 +262,7 @@ static void view_quran_render_jump(bool full_refresh) {
 
     if (reader_ui_get_show_nav_hints()) {
         Paint_DrawLine(0, UI_FOOTER_Y - 2, DISPLAY_WIDTH - 1, UI_FOOTER_Y - 2, BLACK, DOT_PIXEL_1X1, LINE_STYLE_SOLID);
-        ui_draw_centered_string(UI_FOOTER_Y + 1, "▲/▼ Move | 2x▲/▼ Jump | Hold Back", &Font12);
+        ui_draw_centered_string(UI_FOOTER_Y + 1, "2x▲/▼ Jump | Hold ▲/▼ Back", &Font12);
     }
 
     reader_ui_flush_canvas(full_refresh);
@@ -400,9 +402,9 @@ reader_view_t view_quran_handle_event(reader_view_t view, button_event_t evt) {
 
         if (evt.type == BTN_CLICK) {
             if (evt.button == BTN_ID_BOOT) {
-                s_rtc_quran_menu_idx = (s_rtc_quran_menu_idx - 1 + 5) % 5;
+                s_rtc_quran_menu_idx = (s_rtc_quran_menu_idx - 1 + 4) % 4;
             } else if (evt.button == BTN_ID_PWR) {
-                s_rtc_quran_menu_idx = (s_rtc_quran_menu_idx + 1) % 5;
+                s_rtc_quran_menu_idx = (s_rtc_quran_menu_idx + 1) % 4;
             }
             view_quran_render_menu(false);
             return VIEW_QURAN_MENU;
@@ -422,9 +424,6 @@ reader_view_t view_quran_handle_event(reader_view_t view, button_event_t evt) {
                 s_rtc_quran_bm_idx = 0;
                 view_quran_render_bookmarks(false);
                 return VIEW_QURAN_BOOKMARKS;
-            } else if (s_rtc_quran_menu_idx == 4) {
-                view_menu_render(false);
-                return VIEW_MENU;
             }
         } else if (evt.type == BTN_LONG_PRESS) {
             view_menu_render(false);

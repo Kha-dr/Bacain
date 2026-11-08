@@ -6,11 +6,18 @@
 // ============================================================================
 // BLE Configuration & UUIDs
 // ============================================================================
-const appConfig = (typeof window !== 'undefined' && (window.CONFIG || window.BACA_CONFIG)) ? (window.CONFIG || window.BACA_CONFIG) : null;
-const SERVICE_UUID = appConfig?.ble?.service || '0000fe60-0000-1000-8000-00805f9b34fb';
-const CONTROL_UUID = appConfig?.ble?.control || '0000fe61-0000-1000-8000-00805f9b34fb';
-const DATA_UUID    = appConfig?.ble?.data    || '0000fe62-0000-1000-8000-00805f9b34fb';
-const STATUS_UUID  = appConfig?.ble?.status  || '0000fe63-0000-1000-8000-00805f9b34fb';
+const appConfig =
+  typeof window !== "undefined" && (window.CONFIG || window.BACA_CONFIG)
+    ? window.CONFIG || window.BACA_CONFIG
+    : null;
+const SERVICE_UUID =
+  appConfig?.ble?.service || "0000fe60-0000-1000-8000-00805f9b34fb";
+const CONTROL_UUID =
+  appConfig?.ble?.control || "0000fe61-0000-1000-8000-00805f9b34fb";
+const DATA_UUID =
+  appConfig?.ble?.data || "0000fe62-0000-1000-8000-00805f9b34fb";
+const STATUS_UUID =
+  appConfig?.ble?.status || "0000fe63-0000-1000-8000-00805f9b34fb";
 
 const OPCODES = appConfig?.ble?.opcodes || {
   LIST_BOOKS: 0x01,
@@ -22,7 +29,7 @@ const OPCODES = appConfig?.ble?.opcodes || {
   GET_BOOKMARKS: 0x07,
   DELETE_BOOKMARK: 0x08,
   ADD_BOOKMARK: 0x09,
-  SET_BOOK_OFFSET: 0x0A,
+  SET_BOOK_OFFSET: 0x0a,
   SET_FONT: 0x10,
   FORCE_REFRESH: 0x12,
   SET_SLEEP_TIMEOUT: 0x13,
@@ -33,12 +40,12 @@ const OPCODES = appConfig?.ble?.opcodes || {
   GET_CONFIG: 0x19,
   GET_QURAN_STATE: 0x20,
   SET_QURAN_STATE: 0x21,
-  CAP_ALQURAN: 0x01
+  CAP_ALQURAN: 0x01,
 };
 OPCODES.GET_BOOKMARKS = OPCODES.GET_BOOKMARKS || 0x07;
 OPCODES.DELETE_BOOKMARK = OPCODES.DELETE_BOOKMARK || 0x08;
 OPCODES.ADD_BOOKMARK = OPCODES.ADD_BOOKMARK || 0x09;
-OPCODES.SET_BOOK_OFFSET = OPCODES.SET_BOOK_OFFSET || 0x0A;
+OPCODES.SET_BOOK_OFFSET = OPCODES.SET_BOOK_OFFSET || 0x0a;
 OPCODES.SET_NAV_HINTS = OPCODES.SET_NAV_HINTS || 0x15;
 OPCODES.SET_ROTATION = OPCODES.SET_ROTATION || 0x16;
 OPCODES.SET_BUTTON_INVERT = OPCODES.SET_BUTTON_INVERT || 0x17;
@@ -86,104 +93,104 @@ let activeBookmarksBook = null;
 // ============================================================================
 const el = {
   // Onboarding elements
-  onboardingView: document.getElementById('onboardingView'),
-  mainContent: document.getElementById('mainContent'),
-  onboardingConnectBtn: document.getElementById('onboardingConnectBtn'),
-  skipOnboardingBtn: document.getElementById('skipOnboardingBtn'),
+  onboardingView: document.getElementById("onboardingView"),
+  mainContent: document.getElementById("mainContent"),
+  onboardingConnectBtn: document.getElementById("onboardingConnectBtn"),
+  skipOnboardingBtn: document.getElementById("skipOnboardingBtn"),
 
-  themeToggleBtn: document.getElementById('themeToggleBtn'),
-  themeIconSun: document.getElementById('themeIconSun'),
-  themeIconMoon: document.getElementById('themeIconMoon'),
+  themeToggleBtn: document.getElementById("themeToggleBtn"),
+  themeIconSun: document.getElementById("themeIconSun"),
+  themeIconMoon: document.getElementById("themeIconMoon"),
 
-  connectBtn: document.getElementById('connectBtn'),
-  connectBtnText: document.getElementById('connectBtnText'),
-  statusDot: document.getElementById('statusDot'),
-  compatBanner: document.getElementById('compatBanner'),
-  githubBtn: document.getElementById('githubBtn'),
+  connectBtn: document.getElementById("connectBtn"),
+  connectBtnText: document.getElementById("connectBtnText"),
+  statusDot: document.getElementById("statusDot"),
+  compatBanner: document.getElementById("compatBanner"),
+  githubBtn: document.getElementById("githubBtn"),
 
   // Device status cards
-  deviceStateBadge: document.getElementById('deviceStateBadge'),
-  deviceNameText: document.getElementById('deviceNameText'),
-  deviceUuidText: document.getElementById('deviceUuidText'),
-  deviceMtuText: document.getElementById('deviceMtuText'),
+  deviceStateBadge: document.getElementById("deviceStateBadge"),
+  deviceNameText: document.getElementById("deviceNameText"),
+  deviceUuidText: document.getElementById("deviceUuidText"),
+  deviceMtuText: document.getElementById("deviceMtuText"),
 
-  batteryPctText: document.getElementById('batteryPctText'),
-  batteryVoltageText: document.getElementById('batteryVoltageText'),
-  batteryStatusDesc: document.getElementById('batteryStatusDesc'),
-  chargingBadge: document.getElementById('chargingBadge'),
-  batteryMeterFill: document.getElementById('batteryMeterFill'),
+  batteryPctText: document.getElementById("batteryPctText"),
+  batteryVoltageText: document.getElementById("batteryVoltageText"),
+  batteryStatusDesc: document.getElementById("batteryStatusDesc"),
+  chargingBadge: document.getElementById("chargingBadge"),
+  batteryMeterFill: document.getElementById("batteryMeterFill"),
 
-  storageTitleText: document.getElementById('storageTitleText'),
-  storageFreeText: document.getElementById('storageFreeText'),
-  storageUsedText: document.getElementById('storageUsedText'),
-  storageTotalText: document.getElementById('storageTotalText'),
-  storageBadge: document.getElementById('storageBadge'),
-  storageMeterFill: document.getElementById('storageMeterFill'),
+  storageTitleText: document.getElementById("storageTitleText"),
+  storageFreeText: document.getElementById("storageFreeText"),
+  storageUsedText: document.getElementById("storageUsedText"),
+  storageTotalText: document.getElementById("storageTotalText"),
+  storageBadge: document.getElementById("storageBadge"),
+  storageMeterFill: document.getElementById("storageMeterFill"),
 
   // Upload
-  dropzone: document.getElementById('dropzone'),
-  fileInput: document.getElementById('fileInput'),
-  uploadActiveCard: document.getElementById('uploadActiveCard'),
-  uploadingFileName: document.getElementById('uploadingFileName'),
-  cancelUploadBtn: document.getElementById('cancelUploadBtn'),
-  uploadProgressFill: document.getElementById('uploadProgressFill'),
-  uploadPctStat: document.getElementById('uploadPctStat'),
-  uploadSpeedStat: document.getElementById('uploadSpeedStat'),
-  uploadSeqStat: document.getElementById('uploadSeqStat'),
-  uploadEtaStat: document.getElementById('uploadEtaStat'),
+  dropzone: document.getElementById("dropzone"),
+  fileInput: document.getElementById("fileInput"),
+  uploadActiveCard: document.getElementById("uploadActiveCard"),
+  uploadingFileName: document.getElementById("uploadingFileName"),
+  cancelUploadBtn: document.getElementById("cancelUploadBtn"),
+  uploadProgressFill: document.getElementById("uploadProgressFill"),
+  uploadPctStat: document.getElementById("uploadPctStat"),
+  uploadSpeedStat: document.getElementById("uploadSpeedStat"),
+  uploadSeqStat: document.getElementById("uploadSeqStat"),
+  uploadEtaStat: document.getElementById("uploadEtaStat"),
 
   // Books
-  booksCountBadge: document.getElementById('booksCountBadge'),
-  bookSearchInput: document.getElementById('bookSearchInput'),
-  refreshBooksBtn: document.getElementById('refreshBooksBtn'),
-  refreshBooksIcon: document.getElementById('refreshBooksIcon'),
-  refreshStatusBtn: document.getElementById('refreshStatusBtn'),
-  refreshStatusIcon: document.getElementById('refreshStatusIcon'),
-  booksList: document.getElementById('booksList'),
+  booksCountBadge: document.getElementById("booksCountBadge"),
+  bookSearchInput: document.getElementById("bookSearchInput"),
+  refreshBooksBtn: document.getElementById("refreshBooksBtn"),
+  refreshBooksIcon: document.getElementById("refreshBooksIcon"),
+  refreshStatusBtn: document.getElementById("refreshStatusBtn"),
+  refreshStatusIcon: document.getElementById("refreshStatusIcon"),
+  booksList: document.getElementById("booksList"),
 
   // Modals
-  settingsModal: document.getElementById('settingsModal'),
-  settingsBtn: document.getElementById('settingsBtn'),
-  closeSettingsBtn: document.getElementById('closeSettingsBtn'),
+  settingsModal: document.getElementById("settingsModal"),
+  settingsBtn: document.getElementById("settingsBtn"),
+  closeSettingsBtn: document.getElementById("closeSettingsBtn"),
 
-  controlsModal: document.getElementById('controlsModal'),
-  controlsBtn: document.getElementById('controlsBtn'),
-  closeControlsBtn: document.getElementById('closeControlsBtn'),
-  dismissControlsBtn: document.getElementById('dismissControlsBtn'),
+  controlsModal: document.getElementById("controlsModal"),
+  controlsBtn: document.getElementById("controlsBtn"),
+  closeControlsBtn: document.getElementById("closeControlsBtn"),
+  dismissControlsBtn: document.getElementById("dismissControlsBtn"),
 
-  deleteModal: document.getElementById('deleteModal'),
-  deleteModalText: document.getElementById('deleteModalText'),
-  cancelDeleteBtn: document.getElementById('cancelDeleteBtn'),
-  confirmDeleteBtn: document.getElementById('confirmDeleteBtn'),
+  deleteModal: document.getElementById("deleteModal"),
+  deleteModalText: document.getElementById("deleteModalText"),
+  cancelDeleteBtn: document.getElementById("cancelDeleteBtn"),
+  confirmDeleteBtn: document.getElementById("confirmDeleteBtn"),
 
-  bookmarksModal: document.getElementById('bookmarksModal'),
-  bookmarksModalBookName: document.getElementById('bookmarksModalBookName'),
-  bookmarksCurrentPosText: document.getElementById('bookmarksCurrentPosText'),
-  closeBookmarksModalBtn: document.getElementById('closeBookmarksModalBtn'),
-  dismissBookmarksModalBtn: document.getElementById('dismissBookmarksModalBtn'),
-  bookmarkCurrentPosBtn: document.getElementById('bookmarkCurrentPosBtn'),
-  bookmarkPositionPctInput: document.getElementById('bookmarkPositionPctInput'),
-  jumpToPositionBtn: document.getElementById('jumpToPositionBtn'),
-  addBookmarkAtPctBtn: document.getElementById('addBookmarkAtPctBtn'),
-  bookmarksList: document.getElementById('bookmarksList'),
+  bookmarksModal: document.getElementById("bookmarksModal"),
+  bookmarksModalBookName: document.getElementById("bookmarksModalBookName"),
+  bookmarksCurrentPosText: document.getElementById("bookmarksCurrentPosText"),
+  closeBookmarksModalBtn: document.getElementById("closeBookmarksModalBtn"),
+  dismissBookmarksModalBtn: document.getElementById("dismissBookmarksModalBtn"),
+  bookmarkCurrentPosBtn: document.getElementById("bookmarkCurrentPosBtn"),
+  bookmarkPositionPctInput: document.getElementById("bookmarkPositionPctInput"),
+  jumpToPositionBtn: document.getElementById("jumpToPositionBtn"),
+  addBookmarkAtPctBtn: document.getElementById("addBookmarkAtPctBtn"),
+  bookmarksList: document.getElementById("bookmarksList"),
 
   // Log
-  logHeader: document.getElementById('logHeader'),
-  logBody: document.getElementById('logBody'),
-  logToggleIcon: document.getElementById('logToggleIcon'),
-  logCountBadge: document.getElementById('logCountBadge'),
-  clearLogBtn: document.getElementById('clearLogBtn'),
+  logHeader: document.getElementById("logHeader"),
+  logBody: document.getElementById("logBody"),
+  logToggleIcon: document.getElementById("logToggleIcon"),
+  logCountBadge: document.getElementById("logCountBadge"),
+  clearLogBtn: document.getElementById("clearLogBtn"),
 
-  toastContainer: document.getElementById('toastContainer'),
+  toastContainer: document.getElementById("toastContainer"),
 
   // Settings & Hardware Controls
-  storageTargetSdBtn: document.getElementById('storageTargetSdBtn'),
-  storageTargetFlashBtn: document.getElementById('storageTargetFlashBtn'),
-  storageTargetDesc: document.getElementById('storageTargetDesc'),
-  font16Btn: document.getElementById('font16Btn'),
-  font12Btn: document.getElementById('font12Btn'),
-  forceRefreshBtn: document.getElementById('forceRefreshBtn'),
-  sleepTimeoutSelect: document.getElementById('sleepTimeoutSelect')
+  storageTargetSdBtn: document.getElementById("storageTargetSdBtn"),
+  storageTargetFlashBtn: document.getElementById("storageTargetFlashBtn"),
+  storageTargetDesc: document.getElementById("storageTargetDesc"),
+  font16Btn: document.getElementById("font16Btn"),
+  font12Btn: document.getElementById("font12Btn"),
+  forceRefreshBtn: document.getElementById("forceRefreshBtn"),
+  sleepTimeoutSelect: document.getElementById("sleepTimeoutSelect"),
 };
 
 function refreshDomElements() {
@@ -191,10 +198,14 @@ function refreshDomElements() {
     el[key] = document.getElementById(key) || el[key];
   }
   if (!el.booksList) {
-    el.booksList = document.getElementById('booksListContainer') || document.getElementById('booksList');
+    el.booksList =
+      document.getElementById("booksListContainer") ||
+      document.getElementById("booksList");
   }
   if (!el.logBody) {
-    el.logBody = document.getElementById('activityLog') || document.getElementById('logBody');
+    el.logBody =
+      document.getElementById("activityLog") ||
+      document.getElementById("logBody");
   }
 }
 
@@ -202,12 +213,12 @@ function refreshDomElements() {
 // Utilities: Formatting & Logging
 // ============================================================================
 function formatBytes(bytes) {
-  if (isNaN(bytes) || bytes === null || bytes < 0) return '0 B';
-  if (bytes === 0) return '0 B';
+  if (isNaN(bytes) || bytes === null || bytes < 0) return "0 B";
+  if (bytes === 0) return "0 B";
   const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const sizes = ["B", "KB", "MB", "GB", "TB"];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
 }
 
 function formatKb(kb) {
@@ -215,35 +226,41 @@ function formatKb(kb) {
 }
 
 let logCount = 0;
-function log(msg, type = 'info') {
-  if (type === 'error') {
+function log(msg, type = "info") {
+  if (type === "error") {
     console.error(`[BacaIn] ${msg}`);
-  } else if (type === 'warning' || type === 'warn') {
+  } else if (type === "warning" || type === "warn") {
     console.warn(`[BacaIn] ${msg}`);
   } else {
     console.log(`[BacaIn] ${msg}`);
   }
-  const modalComponent = document.getElementById('settingsModal');
-  if (modalComponent && typeof modalComponent.appendLog === 'function') {
+  const modalComponent = document.getElementById("settingsModal");
+  if (modalComponent && typeof modalComponent.appendLog === "function") {
     modalComponent.appendLog(msg, type);
     return;
   }
 
-  const logBody = el.logBody || document.getElementById('activityLog') || document.getElementById('logBody');
+  const logBody =
+    el.logBody ||
+    document.getElementById("activityLog") ||
+    document.getElementById("logBody");
   if (!logBody) return;
 
   const now = new Date();
-  const timestamp = now.toTimeString().split(' ')[0] + '.' + String(now.getMilliseconds()).padStart(3, '0');
+  const timestamp =
+    now.toTimeString().split(" ")[0] +
+    "." +
+    String(now.getMilliseconds()).padStart(3, "0");
 
-  const entry = document.createElement('div');
+  const entry = document.createElement("div");
   entry.className = `log-entry ${type}`;
 
-  const timeSpan = document.createElement('span');
-  timeSpan.className = 'log-time';
+  const timeSpan = document.createElement("span");
+  timeSpan.className = "log-time";
   timeSpan.textContent = `[${timestamp}]`;
 
-  const msgSpan = document.createElement('span');
-  msgSpan.className = 'log-msg';
+  const msgSpan = document.createElement("span");
+  msgSpan.className = "log-msg";
   msgSpan.textContent = msg;
 
   entry.appendChild(timeSpan);
@@ -251,7 +268,7 @@ function log(msg, type = 'info') {
 
   logBody.appendChild(entry);
   logCount++;
-  const badge = el.logCountBadge || document.getElementById('logCountBadge');
+  const badge = el.logCountBadge || document.getElementById("logCountBadge");
   if (badge) badge.textContent = logCount;
 
   // Auto-scroll to bottom
@@ -263,26 +280,26 @@ function log(msg, type = 'info') {
   }
 }
 
-function showToast(message, type = 'info', duration = 3500) {
-  if (type === 'error') {
+function showToast(message, type = "info", duration = 3500) {
+  if (type === "error") {
     console.error(`[BacaIn Toast] ${message}`);
-  } else if (type === 'warning' || type === 'warn') {
+  } else if (type === "warning" || type === "warn") {
     console.warn(`[BacaIn Toast] ${message}`);
   }
-  const toast = document.createElement('div');
+  const toast = document.createElement("div");
   toast.className = `toast ${type}`;
   toast.textContent = message;
 
   el.toastContainer.appendChild(toast);
 
   setTimeout(() => {
-    toast.style.opacity = '0';
-    toast.style.transform = 'translateY(10px)';
+    toast.style.opacity = "0";
+    toast.style.transform = "translateY(10px)";
     setTimeout(() => {
       if (toast.parentNode) {
         toast.parentNode.removeChild(toast);
       }
-    }, 250);
+    }, 1500);
   }, duration);
 }
 
@@ -294,34 +311,39 @@ function sleep(ms) {
 // Theme Toggle & Persistence
 // ============================================================================
 function initTheme() {
-  const savedTheme = localStorage.getItem('bacain_theme') || localStorage.getItem('ereader_pwa_theme');
-  const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-  const theme = savedTheme || (prefersDark ? 'dark' : 'light');
+  const savedTheme =
+    localStorage.getItem("bacain_theme") ||
+    localStorage.getItem("ereader_pwa_theme");
+  const prefersDark =
+    window.matchMedia &&
+    window.matchMedia("(prefers-color-scheme: dark)").matches;
+  const theme = savedTheme || (prefersDark ? "dark" : "light");
   setTheme(theme);
 
   if (el.themeToggleBtn) {
-    el.themeToggleBtn.addEventListener('click', () => {
-      const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
-      const nextTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    el.themeToggleBtn.addEventListener("click", () => {
+      const currentTheme =
+        document.documentElement.getAttribute("data-theme") || "dark";
+      const nextTheme = currentTheme === "dark" ? "light" : "dark";
       setTheme(nextTheme);
     });
   }
 }
 
 function setTheme(theme) {
-  document.documentElement.setAttribute('data-theme', theme);
+  document.documentElement.setAttribute("data-theme", theme);
   try {
-    localStorage.setItem('bacain_theme', theme);
-    localStorage.setItem('ereader_pwa_theme', theme);
+    localStorage.setItem("bacain_theme", theme);
+    localStorage.setItem("ereader_pwa_theme", theme);
   } catch (_) {}
 
   if (el.themeIconSun && el.themeIconMoon) {
-    if (theme === 'dark') {
-      el.themeIconSun.style.display = 'block';
-      el.themeIconMoon.style.display = 'none';
+    if (theme === "dark") {
+      el.themeIconSun.style.display = "block";
+      el.themeIconMoon.style.display = "none";
     } else {
-      el.themeIconSun.style.display = 'none';
-      el.themeIconMoon.style.display = 'block';
+      el.themeIconSun.style.display = "none";
+      el.themeIconMoon.style.display = "block";
     }
   }
 }
@@ -331,8 +353,8 @@ function setTheme(theme) {
 // ============================================================================
 function checkBluetoothCompatibility() {
   if (!navigator.bluetooth) {
-    el.compatBanner.style.display = 'flex';
-    log('Web Bluetooth API is not supported in this browser.', 'warning');
+    el.compatBanner.style.display = "flex";
+    log("Web Bluetooth API is not supported in this browser.", "warning");
     return false;
   }
   return true;
@@ -351,54 +373,63 @@ async function handleConnectToggle() {
 
 async function connectDevice() {
   if (!checkBluetoothCompatibility()) {
-    showToast('Web Bluetooth not supported on this browser', 'error');
+    showToast("Web Bluetooth not supported on this browser", "error");
     return;
   }
 
   try {
     isConnecting = true;
-    updateConnectionUI('connecting');
-    log('Requesting Bluetooth device filter [0000fe60]...', 'info');
+    updateConnectionUI("connecting");
+    log("Requesting Bluetooth device filter [0000fe60]...", "info");
 
     bleDevice = await navigator.bluetooth.requestDevice({
       filters: [
         { services: [SERVICE_UUID] },
-        { name: 'BacaIn' },
-        { namePrefix: 'BacaIn' },
-        { namePrefix: 'Mini-E-Reader' },
-        { namePrefix: 'Mini-E' }
+        { name: "BacaIn" },
+        { namePrefix: "BacaIn" },
+        { namePrefix: "Mini-E-Reader" },
+        { namePrefix: "Mini-E" },
       ],
-      optionalServices: [SERVICE_UUID]
+      optionalServices: [SERVICE_UUID],
     });
 
-    log(`Device selected: ${bleDevice.name || 'Unknown'} (${bleDevice.id})`, 'info');
-    bleDevice.addEventListener('gattserverdisconnected', onDisconnected);
+    log(
+      `Device selected: ${bleDevice.name || "Unknown"} (${bleDevice.id})`,
+      "info",
+    );
+    bleDevice.addEventListener("gattserverdisconnected", onDisconnected);
 
-    log('Connecting to GATT server...', 'info');
+    log("Connecting to GATT server...", "info");
     gattServer = await bleDevice.gatt.connect();
 
-    log('Discovering BacaIn Sync service...', 'info');
+    log("Discovering BacaIn Sync service...", "info");
     const service = await gattServer.getPrimaryService(SERVICE_UUID);
 
-    log('Binding GATT characteristics...', 'info');
+    log("Binding GATT characteristics...", "info");
     controlChar = await service.getCharacteristic(CONTROL_UUID);
     dataChar = await service.getCharacteristic(DATA_UUID);
     statusChar = await service.getCharacteristic(STATUS_UUID);
 
     // Subscribe to notifications
-    log('Subscribing to Control notifications (0xfe61)...', 'info');
+    log("Subscribing to Control notifications (0xfe61)...", "info");
     await controlChar.startNotifications();
-    controlChar.addEventListener('characteristicvaluechanged', onControlNotification);
+    controlChar.addEventListener(
+      "characteristicvaluechanged",
+      onControlNotification,
+    );
 
-    log('Subscribing to Status notifications (0xfe63)...', 'info');
+    log("Subscribing to Status notifications (0xfe63)...", "info");
     await statusChar.startNotifications();
-    statusChar.addEventListener('characteristicvaluechanged', onStatusNotification);
+    statusChar.addEventListener(
+      "characteristicvaluechanged",
+      onStatusNotification,
+    );
 
     isConnected = true;
     isConnecting = false;
-    updateConnectionUI('connected');
-    showToast(`Connected to ${bleDevice.name || 'BacaIn'}`, 'success');
-    log('Connection established successfully.', 'success');
+    updateConnectionUI("connected");
+    showToast(`Connected to ${bleDevice.name || "BacaIn"}`, "success");
+    log("Connection established successfully.", "success");
 
     // Synchronize actual menu configuration from device (OpCode 0x19 GET_CONFIG)
     await requestDeviceConfig();
@@ -408,24 +439,23 @@ async function connectDevice() {
 
     // Query initial book list
     await queryBooksList();
-
   } catch (error) {
     isConnecting = false;
     isConnected = false;
-    updateConnectionUI('disconnected');
+    updateConnectionUI("disconnected");
 
-    if (error.name === 'NotFoundError') {
-      log('Device selection cancelled by user.', 'info');
+    if (error.name === "NotFoundError") {
+      log("Device selection cancelled by user.", "info");
     } else {
-      log(`BLE Connection Error: ${error.message}`, 'error');
-      showToast(`Connection failed: ${error.message}`, 'error');
+      log(`BLE Connection Error: ${error.message}`, "error");
+      showToast(`Connection failed: ${error.message}`, "error");
     }
   }
 }
 
 function disconnectDevice() {
   if (bleDevice && bleDevice.gatt && bleDevice.gatt.connected) {
-    log('Disconnecting from device...', 'info');
+    log("Disconnecting from device...", "info");
     bleDevice.gatt.disconnect();
   } else {
     onDisconnected();
@@ -433,8 +463,8 @@ function disconnectDevice() {
 }
 
 function onDisconnected() {
-  log('Bluetooth device disconnected.', 'warning');
-  showToast('Disconnected from BacaIn', 'warning');
+  log("Bluetooth device disconnected.", "warning");
+  showToast("Disconnected from BacaIn", "warning");
 
   isConnected = false;
   isConnecting = false;
@@ -448,141 +478,171 @@ function onDisconnected() {
     hideUploadActiveCard();
   }
 
-  updateConnectionUI('disconnected');
+  updateConnectionUI("disconnected");
 }
 
 function switchToDashboard() {
-  const onboardingView = el.onboardingView || document.getElementById('onboardingView');
-  const mainContent = el.mainContent || document.getElementById('mainContent');
-  if (onboardingView) onboardingView.style.display = 'none';
-  if (mainContent) mainContent.style.display = 'flex';
+  const onboardingView =
+    el.onboardingView || document.getElementById("onboardingView");
+  const mainContent = el.mainContent || document.getElementById("mainContent");
+  if (onboardingView) onboardingView.style.display = "none";
+  if (mainContent) mainContent.style.display = "flex";
 }
 
 function updateConnectionUI(state) {
-  const statusDashboard = document.getElementById('statusDashboard');
-  const bookLibrary = document.getElementById('bookLibrary');
-  const onboardingConnectBtn = el.onboardingConnectBtn || document.getElementById('onboardingConnectBtn');
-  const settingsModal = document.getElementById('deviceSettingsModal') || document.getElementById('settingsModal');
+  const statusDashboard = document.getElementById("statusDashboard");
+  const bookLibrary = document.getElementById("bookLibrary");
+  const onboardingConnectBtn =
+    el.onboardingConnectBtn || document.getElementById("onboardingConnectBtn");
+  const settingsModal =
+    document.getElementById("deviceSettingsModal") ||
+    document.getElementById("settingsModal");
 
-  if (state !== 'connected') {
-    if (settingsModal && typeof settingsModal.setSdCardAvailable === 'function') {
+  if (state !== "connected") {
+    if (
+      settingsModal &&
+      typeof settingsModal.setSdCardAvailable === "function"
+    ) {
       settingsModal.setSdCardAvailable(false);
     }
   }
 
-  if (state === 'connected') {
+  if (state === "connected") {
     switchToDashboard();
     if (onboardingConnectBtn) {
       onboardingConnectBtn.disabled = false;
-      const span = onboardingConnectBtn.querySelector('span');
-      if (span) span.textContent = 'Connected';
+      const span = onboardingConnectBtn.querySelector("span");
+      if (span) span.textContent = "Connected";
     }
-    if (el.statusDot) el.statusDot.className = 'status-dot connected';
+    if (el.statusDot) el.statusDot.className = "status-dot connected";
     if (el.connectBtn) {
-      el.connectBtn.className = 'btn-connect connected';
-      if (el.connectBtnText) el.connectBtnText.textContent = 'Disconnect';
+      el.connectBtn.className = "btn-connect connected";
+      if (el.connectBtnText) el.connectBtnText.textContent = "Disconnect";
     }
     if (el.deviceStateBadge) {
-      el.deviceStateBadge.className = 'card-badge badge-success';
-      el.deviceStateBadge.textContent = 'Connected';
+      el.deviceStateBadge.className = "card-badge badge-success";
+      el.deviceStateBadge.textContent = "Connected";
     }
-    if (el.deviceNameText) el.deviceNameText.textContent = bleDevice?.name || 'BacaIn';
+    if (el.deviceNameText)
+      el.deviceNameText.textContent = bleDevice?.name || "BacaIn";
     if (el.refreshBooksBtn) el.refreshBooksBtn.disabled = false;
     if (el.refreshStatusBtn) el.refreshStatusBtn.disabled = false;
 
-    if (statusDashboard && typeof statusDashboard.updateDeviceStatus === 'function') {
+    if (
+      statusDashboard &&
+      typeof statusDashboard.updateDeviceStatus === "function"
+    ) {
       statusDashboard.updateDeviceStatus({
         state: true,
-        name: bleDevice?.name || 'BacaIn'
+        name: bleDevice?.name || "BacaIn",
       });
     }
-    if (bookLibrary && typeof bookLibrary.setDeviceConnected === 'function') {
+    if (bookLibrary && typeof bookLibrary.setDeviceConnected === "function") {
       bookLibrary.setDeviceConnected(true);
     }
-    const qb = document.getElementById('quranBuilder');
+    const qb = document.getElementById("quranBuilder");
     if (qb) {
-      if (typeof qb.setDeviceCapabilities === 'function') {
+      if (typeof qb.setDeviceCapabilities === "function") {
         qb.setDeviceCapabilities({
           supported: true,
-          isConnected: true
+          isConnected: true,
         });
       }
       requestQuranState();
     }
-  } else if (state === 'connecting') {
+  } else if (state === "connecting") {
     if (onboardingConnectBtn) {
       onboardingConnectBtn.disabled = true;
-      const span = onboardingConnectBtn.querySelector('span');
-      if (span) span.textContent = 'Connecting...';
+      const span = onboardingConnectBtn.querySelector("span");
+      if (span) span.textContent = "Connecting...";
     }
-    if (el.statusDot) el.statusDot.className = 'status-dot connecting';
+    if (el.statusDot) el.statusDot.className = "status-dot connecting";
     if (el.connectBtn) {
-      el.connectBtn.className = 'btn-connect';
-      if (el.connectBtnText) el.connectBtnText.textContent = 'Connecting...';
+      el.connectBtn.className = "btn-connect";
+      if (el.connectBtnText) el.connectBtnText.textContent = "Connecting...";
     }
     if (el.deviceStateBadge) {
-      el.deviceStateBadge.className = 'card-badge badge-muted';
-      el.deviceStateBadge.textContent = 'Connecting';
+      el.deviceStateBadge.className = "card-badge badge-muted";
+      el.deviceStateBadge.textContent = "Connecting";
     }
     if (el.refreshBooksBtn) el.refreshBooksBtn.disabled = true;
     if (el.refreshStatusBtn) el.refreshStatusBtn.disabled = true;
 
-    if (statusDashboard && typeof statusDashboard.updateDeviceStatus === 'function') {
-      statusDashboard.updateDeviceStatus({ state: 'Connecting' });
+    if (
+      statusDashboard &&
+      typeof statusDashboard.updateDeviceStatus === "function"
+    ) {
+      statusDashboard.updateDeviceStatus({ state: "Connecting" });
     }
   } else {
     if (onboardingConnectBtn) {
       onboardingConnectBtn.disabled = false;
-      const span = onboardingConnectBtn.querySelector('span');
-      if (span) span.textContent = 'Connect Device';
+      const span = onboardingConnectBtn.querySelector("span");
+      if (span) span.textContent = "Connect Device";
     }
-    if (el.statusDot) el.statusDot.className = 'status-dot disconnected';
+    if (el.statusDot) el.statusDot.className = "status-dot disconnected";
     if (el.connectBtn) {
-      el.connectBtn.className = 'btn-connect';
-      if (el.connectBtnText) el.connectBtnText.textContent = 'Connect Device';
+      el.connectBtn.className = "btn-connect";
+      if (el.connectBtnText) el.connectBtnText.textContent = "Connect Device";
     }
     if (el.deviceStateBadge) {
-      el.deviceStateBadge.className = 'card-badge badge-muted';
-      el.deviceStateBadge.textContent = 'Disconnected';
+      el.deviceStateBadge.className = "card-badge badge-muted";
+      el.deviceStateBadge.textContent = "Disconnected";
     }
     if (el.refreshBooksBtn) el.refreshBooksBtn.disabled = true;
     if (el.refreshStatusBtn) el.refreshStatusBtn.disabled = true;
 
     // Reset status indicators to placeholder
-    if (el.batteryPctText) el.batteryPctText.textContent = '—%';
-    if (el.batteryVoltageText) el.batteryVoltageText.textContent = '— V';
-    if (el.batteryStatusDesc) el.batteryStatusDesc.textContent = 'Not connected';
+    if (el.batteryPctText) el.batteryPctText.textContent = "—%";
+    if (el.batteryVoltageText) el.batteryVoltageText.textContent = "— V";
+    if (el.batteryStatusDesc)
+      el.batteryStatusDesc.textContent = "Not connected";
     if (el.chargingBadge) {
-      el.chargingBadge.className = 'card-badge badge-muted';
-      el.chargingBadge.textContent = '—';
+      el.chargingBadge.className = "card-badge badge-muted";
+      el.chargingBadge.textContent = "—";
     }
-    if (el.batteryMeterFill) el.batteryMeterFill.style.width = '0%';
+    if (el.batteryMeterFill) el.batteryMeterFill.style.width = "0%";
 
-    if (el.storageFreeText) el.storageFreeText.textContent = '—';
-    if (el.storageUsedText) el.storageUsedText.textContent = 'Used: —';
-    if (el.storageTotalText) el.storageTotalText.textContent = 'Total: —';
+    if (el.storageFreeText) el.storageFreeText.textContent = "—";
+    if (el.storageUsedText) el.storageUsedText.textContent = "Used: —";
+    if (el.storageTotalText) el.storageTotalText.textContent = "Total: —";
     if (el.storageBadge) {
-      el.storageBadge.className = 'card-badge badge-muted';
-      el.storageBadge.textContent = currentStorageTarget === 0 ? 'MicroSD' : 'Internal Flash';
+      el.storageBadge.className = "card-badge badge-muted";
+      el.storageBadge.textContent =
+        currentStorageTarget === 0 ? "MicroSD" : "Internal Flash";
     }
-    if (el.storageMeterFill) el.storageMeterFill.style.width = '0%';
+    if (el.storageMeterFill) el.storageMeterFill.style.width = "0%";
 
     if (statusDashboard) {
-      if (typeof statusDashboard.updateDeviceStatus === 'function') {
+      if (typeof statusDashboard.updateDeviceStatus === "function") {
         statusDashboard.updateDeviceStatus({ state: false });
       }
-      if (typeof statusDashboard.updateBattery === 'function') {
-        statusDashboard.updateBattery({ pct: 0, isCharging: false, mv: 0, desc: 'Awaiting connection' });
+      if (typeof statusDashboard.updateBattery === "function") {
+        statusDashboard.updateBattery({
+          pct: 0,
+          isCharging: false,
+          mv: 0,
+          desc: "Awaiting connection",
+        });
       }
-      if (typeof statusDashboard.updateFlashStorage === 'function') {
-        statusDashboard.updateFlashStorage({ freeKb: 0, totalKb: 0, isActive: currentStorageTarget === 1 });
+      if (typeof statusDashboard.updateFlashStorage === "function") {
+        statusDashboard.updateFlashStorage({
+          freeKb: 0,
+          totalKb: 0,
+          isActive: currentStorageTarget === 1,
+        });
       }
-      if (typeof statusDashboard.updateSdStorage === 'function') {
-        statusDashboard.updateSdStorage({ freeKb: 0, totalKb: 0, isMounted: false, isActive: currentStorageTarget === 0 });
+      if (typeof statusDashboard.updateSdStorage === "function") {
+        statusDashboard.updateSdStorage({
+          freeKb: 0,
+          totalKb: 0,
+          isMounted: false,
+          isActive: currentStorageTarget === 0,
+        });
       }
     }
 
-    if (bookLibrary && typeof bookLibrary.setDeviceConnected === 'function') {
+    if (bookLibrary && typeof bookLibrary.setDeviceConnected === "function") {
       bookLibrary.setDeviceConnected(false);
     }
 
@@ -598,14 +658,14 @@ function updateConnectionUI(state) {
 async function readDeviceStatus() {
   if (!statusChar) return;
   try {
-    if (el.refreshStatusIcon) el.refreshStatusIcon.classList.add('spin');
+    if (el.refreshStatusIcon) el.refreshStatusIcon.classList.add("spin");
     const val = await statusChar.readValue();
     parseStatusValue(val);
   } catch (err) {
-    log(`Failed to read status: ${err.message}`, 'error');
+    log(`Failed to read status: ${err.message}`, "error");
   } finally {
     if (el.refreshStatusIcon) {
-      setTimeout(() => el.refreshStatusIcon.classList.remove('spin'), 500);
+      setTimeout(() => el.refreshStatusIcon.classList.remove("spin"), 500);
     }
   }
 }
@@ -616,7 +676,10 @@ function onStatusNotification(event) {
 
 function parseStatusValue(dataView) {
   if (!dataView || dataView.byteLength < 12) {
-    log(`Received invalid status packet (length ${dataView?.byteLength || 0})`, 'warning');
+    log(
+      `Received invalid status packet (length ${dataView?.byteLength || 0})`,
+      "warning",
+    );
     return;
   }
 
@@ -634,28 +697,31 @@ function parseStatusValue(dataView) {
 
   // Update Battery UI
   if (el.batteryPctText) el.batteryPctText.textContent = `${batteryPct}%`;
-  if (el.batteryVoltageText) el.batteryVoltageText.textContent = `${(batteryMv / 1000).toFixed(2)} V`;
+  if (el.batteryVoltageText)
+    el.batteryVoltageText.textContent = `${(batteryMv / 1000).toFixed(2)} V`;
   if (el.batteryMeterFill) {
     el.batteryMeterFill.style.width = `${Math.min(100, Math.max(0, batteryPct))}%`;
 
     if (batteryPct > 50) {
-      el.batteryMeterFill.style.backgroundColor = 'var(--success-color)';
+      el.batteryMeterFill.style.backgroundColor = "var(--success-color)";
     } else if (batteryPct > 20) {
-      el.batteryMeterFill.style.backgroundColor = 'var(--warning-color)';
+      el.batteryMeterFill.style.backgroundColor = "var(--warning-color)";
     } else {
-      el.batteryMeterFill.style.backgroundColor = 'var(--danger-color)';
+      el.batteryMeterFill.style.backgroundColor = "var(--danger-color)";
     }
   }
 
   if (el.chargingBadge) {
     if (isCharging) {
-      el.chargingBadge.className = 'card-badge badge-charging';
-      el.chargingBadge.innerHTML = '⚡ Charging';
-      if (el.batteryStatusDesc) el.batteryStatusDesc.textContent = 'Charging via USB';
+      el.chargingBadge.className = "card-badge badge-charging";
+      el.chargingBadge.innerHTML = "⚡ Charging";
+      if (el.batteryStatusDesc)
+        el.batteryStatusDesc.textContent = "Charging via USB";
     } else {
-      el.chargingBadge.className = 'card-badge badge-muted';
-      el.chargingBadge.textContent = 'On Battery';
-      if (el.batteryStatusDesc) el.batteryStatusDesc.textContent = 'Operating on battery';
+      el.chargingBadge.className = "card-badge badge-muted";
+      el.chargingBadge.textContent = "On Battery";
+      if (el.batteryStatusDesc)
+        el.batteryStatusDesc.textContent = "Operating on battery";
     }
   }
 
@@ -663,11 +729,14 @@ function parseStatusValue(dataView) {
   const usedKb = totalKb > freeKb ? totalKb - freeKb : 0;
   const usedPct = totalKb > 0 ? ((usedKb / totalKb) * 100).toFixed(1) : 0;
 
-  if (el.storageFreeText) el.storageFreeText.textContent = `${formatKb(freeKb)} free`;
-  if (el.storageUsedText) el.storageUsedText.textContent = `Used: ${formatKb(usedKb)} (${usedPct}%)`;
-  if (el.storageTotalText) el.storageTotalText.textContent = `Total: ${formatKb(totalKb)}`;
+  if (el.storageFreeText)
+    el.storageFreeText.textContent = `${formatKb(freeKb)} free`;
+  if (el.storageUsedText)
+    el.storageUsedText.textContent = `Used: ${formatKb(usedKb)} (${usedPct}%)`;
+  if (el.storageTotalText)
+    el.storageTotalText.textContent = `Total: ${formatKb(totalKb)}`;
   if (el.storageBadge) {
-    el.storageBadge.className = 'card-badge badge-muted';
+    el.storageBadge.className = "card-badge badge-muted";
     el.storageBadge.textContent = `${usedPct}% used`;
   }
   if (el.storageMeterFill) {
@@ -675,62 +744,73 @@ function parseStatusValue(dataView) {
   }
 
   // Perbarui status dashboard untuk Flash dan MicroSD
-  const statusDashboard = document.getElementById('statusDashboard');
+  const statusDashboard = document.getElementById("statusDashboard");
   if (statusDashboard) {
-    if (typeof statusDashboard.updateBattery === 'function') {
+    if (typeof statusDashboard.updateBattery === "function") {
       statusDashboard.updateBattery({
         pct: batteryPct,
         isCharging,
         mv: batteryMv,
-        desc: isCharging ? 'Charging via USB' : 'Operating on battery'
+        desc: isCharging ? "Charging via USB" : "Operating on battery",
       });
     }
 
     if (currentStorageTarget === 1) {
-      if (typeof statusDashboard.updateFlashStorage === 'function') {
+      if (typeof statusDashboard.updateFlashStorage === "function") {
         statusDashboard.updateFlashStorage({
           freeKb,
           totalKb,
-          isActive: true
+          isActive: true,
         });
       }
-      if (typeof statusDashboard.updateSdStorage === 'function') {
+      if (typeof statusDashboard.updateSdStorage === "function") {
         statusDashboard.updateSdStorage({
-          isActive: false
+          isActive: false,
         });
       }
     } else {
-      if (typeof statusDashboard.updateSdStorage === 'function') {
+      if (typeof statusDashboard.updateSdStorage === "function") {
         statusDashboard.updateSdStorage({
           freeKb,
           totalKb,
           isMounted: totalKb > 0,
-          isActive: true
+          isActive: true,
         });
       }
-      if (typeof statusDashboard.updateFlashStorage === 'function') {
+      if (typeof statusDashboard.updateFlashStorage === "function") {
         statusDashboard.updateFlashStorage({
-          isActive: false
+          isActive: false,
         });
       }
     }
   }
 
-  const settingsModal = document.getElementById('deviceSettingsModal') || document.getElementById('settingsModal');
+  const settingsModal =
+    document.getElementById("deviceSettingsModal") ||
+    document.getElementById("settingsModal");
   if (currentStorageTarget === 0) {
     if (totalKb > 0) {
-      if (settingsModal && typeof settingsModal.setSdCardAvailable === 'function') {
+      if (
+        settingsModal &&
+        typeof settingsModal.setSdCardAvailable === "function"
+      ) {
         settingsModal.setSdCardAvailable(true);
       }
     } else if (totalKb === 0) {
-      if (settingsModal && typeof settingsModal.setSdCardAvailable === 'function') {
+      if (
+        settingsModal &&
+        typeof settingsModal.setSdCardAvailable === "function"
+      ) {
         settingsModal.setSdCardAvailable(false);
       }
       updateStorageTargetUI(1);
     }
   }
 
-  log(`Status Update: Battery ${batteryPct}% (${(batteryMv/1000).toFixed(2)}V), Storage Free: ${formatKb(freeKb)} / ${formatKb(totalKb)} (${usedPct}% used)`, 'info');
+  log(
+    `Status Update: Battery ${batteryPct}% (${(batteryMv / 1000).toFixed(2)}V), Storage Free: ${formatKb(freeKb)} / ${formatKb(totalKb)} (${usedPct}% used)`,
+    "info",
+  );
 }
 
 // ============================================================================
@@ -765,12 +845,12 @@ function onControlNotification(event) {
   // Opcode 0x20: GET_QURAN_STATE stream/notification handler
   if (opcode === OPCODES.GET_QURAN_STATE) {
     const quranState = parseQuranStatePayload(val);
-    const qb = document.getElementById('quranBuilder');
+    const qb = document.getElementById("quranBuilder");
     if (qb) {
-      if (typeof qb.updateDeviceState === 'function') {
+      if (typeof qb.updateDeviceState === "function") {
         qb.updateDeviceState(quranState);
       }
-      if (typeof qb.updateQuranState === 'function') {
+      if (typeof qb.updateQuranState === "function") {
         qb.updateQuranState(quranState);
       }
     }
@@ -782,7 +862,11 @@ function waitForControlResponse(opcode, timeoutMs = 8000) {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       controlCallbacks.delete(opcode);
-      reject(new Error(`Timeout waiting for BLE opcode 0x${opcode.toString(16)} response`));
+      reject(
+        new Error(
+          `Timeout waiting for BLE opcode 0x${opcode.toString(16)} response`,
+        ),
+      );
     }, timeoutMs);
 
     controlCallbacks.set(opcode, (val) => {
@@ -798,12 +882,12 @@ function waitForControlResponse(opcode, timeoutMs = 8000) {
 // ============================================================================
 async function queryBooksList() {
   if (!controlChar) {
-    showToast('Not connected to BacaIn', 'warning');
+    showToast("Not connected to BacaIn", "warning");
     return;
   }
 
   try {
-    el.refreshBooksIcon.classList.add('spin');
+    el.refreshBooksIcon.classList.add("spin");
     isListingBooks = true;
     pendingBookList = [];
 
@@ -811,18 +895,17 @@ async function queryBooksList() {
     clearTimeout(listBooksTimeout);
     listBooksTimeout = setTimeout(() => {
       if (isListingBooks) {
-        log('Book listing stream finalized by timeout.', 'info');
+        log("Book listing stream finalized by timeout.", "info");
         finalizeBookList();
       }
     }, 4000);
 
-    log('Querying books on active storage (OpCode 0x01)...', 'info');
+    log("Querying books on active storage (OpCode 0x01)...", "info");
     const req = new Uint8Array([OPCODES.LIST_BOOKS]);
     await controlChar.writeValueWithResponse(req);
-
   } catch (err) {
-    log(`Failed to request book list: ${err.message}`, 'error');
-    showToast(`Error requesting books: ${err.message}`, 'error');
+    log(`Failed to request book list: ${err.message}`, "error");
+    showToast(`Error requesting books: ${err.message}`, "error");
     finalizeBookList();
   }
 }
@@ -830,7 +913,7 @@ async function queryBooksList() {
 function handleListBooksPacket(val) {
   // Packet layout: [0x01, status, is_last, uint32_le file_size, filename_bytes...]
   if (val.byteLength < 7) {
-    log(`Malformed book list packet (length ${val.byteLength})`, 'warning');
+    log(`Malformed book list packet (length ${val.byteLength})`, "warning");
     return;
   }
 
@@ -839,7 +922,7 @@ function handleListBooksPacket(val) {
   const fileSize = val.getUint32(3, true);
 
   // Extract null-terminated filename string
-  let filename = '';
+  let filename = "";
   const nameBytes = [];
   for (let i = 7; i < val.byteLength; i++) {
     const b = val.getUint8(i);
@@ -849,7 +932,9 @@ function handleListBooksPacket(val) {
 
   if (nameBytes.length > 0) {
     try {
-      filename = new TextDecoder('utf-8').decode(new Uint8Array(nameBytes)).trim();
+      filename = new TextDecoder("utf-8")
+        .decode(new Uint8Array(nameBytes))
+        .trim();
     } catch {
       filename = String.fromCharCode.apply(null, nameBytes).trim();
     }
@@ -862,7 +947,8 @@ function handleListBooksPacket(val) {
     byteOffset = val.getUint32(nullIdx + 1, true);
     bookmarkCount = val.getUint8(nullIdx + 5);
   }
-  const progress = fileSize > 0 ? Math.min(100, Math.floor((byteOffset * 100) / fileSize)) : 0;
+  const progress =
+    fileSize > 0 ? Math.min(100, Math.floor((byteOffset * 100) / fileSize)) : 0;
 
   if (status === 0 && filename.length > 0) {
     if (byteOffset > 0) {
@@ -877,7 +963,7 @@ function handleListBooksPacket(val) {
       size: fileSize,
       byteOffset,
       bookmarkCount,
-      progress
+      progress,
     });
   }
 
@@ -889,19 +975,21 @@ function handleListBooksPacket(val) {
 
 function finalizeBookList() {
   isListingBooks = false;
-  el.refreshBooksIcon.classList.remove('spin');
+  el.refreshBooksIcon.classList.remove("spin");
 
   // Sort books alphabetically
   remoteBooks = pendingBookList.sort((a, b) => a.name.localeCompare(b.name));
-  log(`Found ${remoteBooks.length} book(s) on storage.`, 'success');
+  log(`Found ${remoteBooks.length} book(s) on storage.`, "success");
   renderBooksList();
 }
 
 function getBookReadingProgress(filename, bookObj) {
-  if (bookObj && typeof bookObj.byteOffset === 'number') {
+  if (bookObj && typeof bookObj.byteOffset === "number") {
     if (bookObj.byteOffset === 0) return 0;
     const total = Number(bookObj.size) || 0;
-    return total > 0 ? Math.min(100, Math.floor((bookObj.byteOffset * 100) / total)) : 0;
+    return total > 0
+      ? Math.min(100, Math.floor((bookObj.byteOffset * 100) / total))
+      : 0;
   }
   try {
     const saved = localStorage.getItem(`bacain_progress_${filename}`);
@@ -915,29 +1003,42 @@ function getBookReadingProgress(filename, bookObj) {
 
 function setBookReadingProgress(filename, progressPct) {
   try {
-    localStorage.setItem(`bacain_progress_${filename}`, String(Math.round(progressPct)));
+    localStorage.setItem(
+      `bacain_progress_${filename}`,
+      String(Math.round(progressPct)),
+    );
   } catch (_) {}
 }
 
 function renderBooksList() {
-  const searchTerm = el.bookSearchInput ? el.bookSearchInput.value.trim().toLowerCase() : '';
-  const filtered = remoteBooks.filter(b => b.name.toLowerCase().includes(searchTerm));
+  const searchTerm = el.bookSearchInput
+    ? el.bookSearchInput.value.trim().toLowerCase()
+    : "";
+  const filtered = remoteBooks.filter((b) =>
+    b.name.toLowerCase().includes(searchTerm),
+  );
 
-  const bookLibrary = document.getElementById('bookLibrary');
-  if (bookLibrary && typeof bookLibrary.renderBooks === 'function') {
+  const bookLibrary = document.getElementById("bookLibrary");
+  if (bookLibrary && typeof bookLibrary.renderBooks === "function") {
     bookLibrary.setDeviceConnected(isConnected);
-    const booksWithProgress = remoteBooks.map(b => ({
+    const booksWithProgress = remoteBooks.map((b) => ({
       ...b,
-      progress: b.progress !== undefined ? b.progress : getBookReadingProgress(b.name, b)
+      progress:
+        b.progress !== undefined
+          ? b.progress
+          : getBookReadingProgress(b.name, b),
     }));
-    bookLibrary.renderBooks(booksWithProgress, currentStorageTarget === 0 ? '/sdcard/books/' : '/spiflash/books/');
+    bookLibrary.renderBooks(
+      booksWithProgress,
+      currentStorageTarget === 0 ? "/sdcard/books/" : "/spiflash/books/",
+    );
   }
 
   if (el.booksCountBadge) {
-    el.booksCountBadge.textContent = `${remoteBooks.length} ${remoteBooks.length === 1 ? 'book' : 'books'}`;
+    el.booksCountBadge.textContent = `${remoteBooks.length} ${remoteBooks.length === 1 ? "book" : "books"}`;
   }
   if (!el.booksList) return;
-  el.booksList.innerHTML = '';
+  el.booksList.innerHTML = "";
 
   if (!isConnected) {
     el.booksList.innerHTML = `
@@ -958,81 +1059,84 @@ function renderBooksList() {
           <circle cx="12" cy="12" r="10"></circle>
           <line x1="8" y1="12" x2="16" y2="12"></line>
         </svg>
-        <p>${searchTerm ? 'No matching books found' : 'No books found on active storage. Drop a .txt file above to upload!'}</p>
+        <p>${searchTerm ? "No matching books found" : "No books found on active storage. Drop a .txt file above to upload!"}</p>
       </div>`;
     return;
   }
 
-  filtered.forEach(book => {
-    const progress = book.progress !== undefined ? book.progress : getBookReadingProgress(book.name, book);
+  filtered.forEach((book) => {
+    const progress =
+      book.progress !== undefined
+        ? book.progress
+        : getBookReadingProgress(book.name, book);
     const byteOffset = Number(book.byteOffset) || 0;
     const bookmarkCount = Number(book.bookmarkCount) || 0;
     const hasStarted = progress > 0 || byteOffset > 0;
 
-    const item = document.createElement('div');
-    item.className = 'book-item';
+    const item = document.createElement("div");
+    item.className = "book-item";
 
-    const info = document.createElement('div');
-    info.className = 'book-info';
+    const info = document.createElement("div");
+    info.className = "book-info";
 
-    const icon = document.createElement('div');
-    icon.className = 'book-icon';
+    const icon = document.createElement("div");
+    icon.className = "book-icon";
     icon.innerHTML = `
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
         <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
       </svg>`;
 
-    const meta = document.createElement('div');
-    meta.className = 'book-meta';
+    const meta = document.createElement("div");
+    meta.className = "book-meta";
 
-    const name = document.createElement('div');
-    name.className = 'book-name book-title';
+    const name = document.createElement("div");
+    name.className = "book-name book-title";
     name.textContent = book.name;
     name.title = book.name;
 
-    const details = document.createElement('div');
-    details.className = 'book-details';
-    details.style.display = 'flex';
-    details.style.alignItems = 'center';
-    details.style.gap = '0.75rem';
-    details.style.marginTop = '0.2rem';
-    details.style.flexWrap = 'wrap';
+    const details = document.createElement("div");
+    details.className = "book-details";
+    details.style.display = "flex";
+    details.style.alignItems = "center";
+    details.style.gap = "0.75rem";
+    details.style.marginTop = "0.2rem";
+    details.style.flexWrap = "wrap";
 
-    const size = document.createElement('span');
-    size.className = 'book-size';
+    const size = document.createElement("span");
+    size.className = "book-size";
     size.textContent = formatBytes(book.size);
     details.appendChild(size);
 
     if (hasStarted) {
-      const separator = document.createElement('span');
-      separator.style.color = 'var(--text-muted)';
-      separator.style.fontSize = '0.75rem';
-      separator.textContent = '•';
+      const separator = document.createElement("span");
+      separator.style.color = "var(--text-muted)";
+      separator.style.fontSize = "0.75rem";
+      separator.textContent = "•";
 
-      const progressEl = document.createElement('span');
-      progressEl.className = 'book-progress';
-      progressEl.style.fontSize = '0.78rem';
-      progressEl.style.color = 'var(--accent-color)';
-      progressEl.style.fontFamily = 'var(--font-mono)';
-      progressEl.textContent = progress > 0 ? `${progress}% read` : '< 1% read';
+      const progressEl = document.createElement("span");
+      progressEl.className = "book-progress";
+      progressEl.style.fontSize = "0.78rem";
+      progressEl.style.color = "var(--accent-color)";
+      progressEl.style.fontFamily = "var(--font-mono)";
+      progressEl.textContent = progress > 0 ? `${progress}% read` : "< 1% read";
 
       details.appendChild(separator);
       details.appendChild(progressEl);
     }
 
     if (bookmarkCount > 0) {
-      const bmSep = document.createElement('span');
-      bmSep.style.color = 'var(--text-muted)';
-      bmSep.style.fontSize = '0.75rem';
-      bmSep.textContent = '•';
+      const bmSep = document.createElement("span");
+      bmSep.style.color = "var(--text-muted)";
+      bmSep.style.fontSize = "0.75rem";
+      bmSep.textContent = "•";
 
-      const bmEl = document.createElement('span');
-      bmEl.className = 'book-bookmarks-count';
-      bmEl.style.fontSize = '0.78rem';
-      bmEl.style.color = 'var(--text-secondary)';
-      bmEl.style.fontFamily = 'var(--font-mono)';
-      bmEl.textContent = `${bookmarkCount} ${bookmarkCount === 1 ? 'bookmark' : 'bookmarks'}`;
+      const bmEl = document.createElement("span");
+      bmEl.className = "book-bookmarks-count";
+      bmEl.style.fontSize = "0.78rem";
+      bmEl.style.color = "var(--text-secondary)";
+      bmEl.style.fontFamily = "var(--font-mono)";
+      bmEl.textContent = `${bookmarkCount} ${bookmarkCount === 1 ? "bookmark" : "bookmarks"}`;
 
       details.appendChild(bmSep);
       details.appendChild(bmEl);
@@ -1043,32 +1147,35 @@ function renderBooksList() {
     info.appendChild(icon);
     info.appendChild(meta);
 
-    const actions = document.createElement('div');
-    actions.className = 'book-actions';
-    actions.style.display = 'flex';
-    actions.style.alignItems = 'center';
-    actions.style.gap = '0.35rem';
-    actions.style.flexShrink = '0';
+    const actions = document.createElement("div");
+    actions.className = "book-actions";
+    actions.style.display = "flex";
+    actions.style.alignItems = "center";
+    actions.style.gap = "0.35rem";
+    actions.style.flexShrink = "0";
 
-    const bookmarksBtn = document.createElement('button');
-    bookmarksBtn.className = 'btn-bookmarks-book btn-icon';
-    bookmarksBtn.style.width = '32px';
-    bookmarksBtn.style.height = '32px';
+    const bookmarksBtn = document.createElement("button");
+    bookmarksBtn.className = "btn-bookmarks-book btn-icon";
+    bookmarksBtn.style.width = "32px";
+    bookmarksBtn.style.height = "32px";
     bookmarksBtn.title = `Bookmarks & Position for ${book.name}`;
-    bookmarksBtn.setAttribute('aria-label', `Bookmarks & Position for ${book.name}`);
+    bookmarksBtn.setAttribute(
+      "aria-label",
+      `Bookmarks & Position for ${book.name}`,
+    );
     bookmarksBtn.innerHTML = `
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;">
         <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
       </svg>`;
-    bookmarksBtn.addEventListener('click', (e) => {
+    bookmarksBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       openBookmarksModal(book.name, book.size);
     });
 
-    const deleteBtn = document.createElement('button');
-    deleteBtn.className = 'btn-delete-book';
+    const deleteBtn = document.createElement("button");
+    deleteBtn.className = "btn-delete-book";
     deleteBtn.title = `Delete ${book.name}`;
-    deleteBtn.setAttribute('aria-label', `Delete ${book.name}`);
+    deleteBtn.setAttribute("aria-label", `Delete ${book.name}`);
     deleteBtn.innerHTML = `
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <polyline points="3 6 5 6 21 6"></polyline>
@@ -1077,7 +1184,7 @@ function renderBooksList() {
         <line x1="14" y1="11" x2="14" y2="17"></line>
       </svg>`;
 
-    deleteBtn.addEventListener('click', (e) => {
+    deleteBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       openDeleteModal(book);
     });
@@ -1092,36 +1199,36 @@ function renderBooksList() {
 
 // Settings Modal Dialog Helpers
 function openSettingsModal() {
-  const modalComponent = document.getElementById('settingsModal');
-  if (modalComponent && typeof modalComponent.open === 'function') {
+  const modalComponent = document.getElementById("settingsModal");
+  if (modalComponent && typeof modalComponent.open === "function") {
     modalComponent.open();
   } else if (el.settingsModal) {
-    el.settingsModal.classList.add('active');
-    el.settingsModal.setAttribute('aria-hidden', 'false');
+    el.settingsModal.classList.add("active");
+    el.settingsModal.setAttribute("aria-hidden", "false");
   }
 }
 
 function closeSettingsModal() {
-  const modalComponent = document.getElementById('settingsModal');
-  if (modalComponent && typeof modalComponent.close === 'function') {
+  const modalComponent = document.getElementById("settingsModal");
+  if (modalComponent && typeof modalComponent.close === "function") {
     modalComponent.close();
   } else if (el.settingsModal) {
-    el.settingsModal.classList.remove('active');
-    el.settingsModal.setAttribute('aria-hidden', 'true');
+    el.settingsModal.classList.remove("active");
+    el.settingsModal.setAttribute("aria-hidden", "true");
   }
 }
 
 function openControlsModal() {
   if (el.controlsModal) {
-    el.controlsModal.classList.add('active');
-    el.controlsModal.setAttribute('aria-hidden', 'false');
+    el.controlsModal.classList.add("active");
+    el.controlsModal.setAttribute("aria-hidden", "false");
   }
 }
 
 function closeControlsModal() {
   if (el.controlsModal) {
-    el.controlsModal.classList.remove('active');
-    el.controlsModal.setAttribute('aria-hidden', 'true');
+    el.controlsModal.classList.remove("active");
+    el.controlsModal.setAttribute("aria-hidden", "true");
   }
 }
 
@@ -1129,20 +1236,21 @@ function closeControlsModal() {
 function openDeleteModal(book) {
   bookPendingDelete = book;
   if (el.deleteModalText) {
-    const storageName = currentStorageTarget === 0 ? 'MicroSD card' : 'Internal Flash';
+    const storageName =
+      currentStorageTarget === 0 ? "MicroSD card" : "Internal Flash";
     el.deleteModalText.textContent = `Are you sure you want to delete "${book.name}" (${formatBytes(book.size)}) from ${storageName}? This cannot be undone.`;
   }
   if (el.deleteModal) {
-    el.deleteModal.classList.add('active');
-    el.deleteModal.setAttribute('aria-hidden', 'false');
+    el.deleteModal.classList.add("active");
+    el.deleteModal.setAttribute("aria-hidden", "false");
   }
 }
 
 function closeDeleteModal() {
   bookPendingDelete = null;
   if (el.deleteModal) {
-    el.deleteModal.classList.remove('active');
-    el.deleteModal.setAttribute('aria-hidden', 'true');
+    el.deleteModal.classList.remove("active");
+    el.deleteModal.setAttribute("aria-hidden", "true");
   }
 }
 
@@ -1156,7 +1264,7 @@ async function confirmDeleteBook() {
   closeDeleteModal();
 
   try {
-    log(`Deleting book "${book.name}" (OpCode 0x04)...`, 'info');
+    log(`Deleting book "${book.name}" (OpCode 0x04)...`, "info");
 
     // Build packet: [0x04, filename_bytes..., 0x00]
     const enc = new TextEncoder();
@@ -1171,8 +1279,8 @@ async function confirmDeleteBook() {
     const { status } = await respPromise;
 
     if (status === 0) {
-      log(`Deleted "${book.name}" successfully.`, 'success');
-      showToast(`Deleted "${book.name}"`, 'success');
+      log(`Deleted "${book.name}" successfully.`, "success");
+      showToast(`Deleted "${book.name}"`, "success");
       try {
         localStorage.removeItem(`bacain_progress_${book.name}`);
       } catch (_) {}
@@ -1182,10 +1290,9 @@ async function confirmDeleteBook() {
     } else {
       throw new Error(`Device reported error code: ${status}`);
     }
-
   } catch (err) {
-    log(`Delete failed: ${err.message}`, 'error');
-    showToast(`Delete failed: ${err.message}`, 'error');
+    log(`Delete failed: ${err.message}`, "error");
+    showToast(`Delete failed: ${err.message}`, "error");
   }
 }
 
@@ -1194,7 +1301,7 @@ async function confirmDeleteBook() {
 // ============================================================================
 async function queryBookBookmarks(filename) {
   if (!controlChar) {
-    throw new Error('Not connected to BacaIn');
+    throw new Error("Not connected to BacaIn");
   }
 
   const enc = new TextEncoder();
@@ -1209,7 +1316,9 @@ async function queryBookBookmarks(filename) {
   const { status, dataView: val } = await respPromise;
 
   if (status !== 0 || !val || val.byteLength < 11) {
-    throw new Error(`Device failed to return bookmarks for "${filename}" (status ${status})`);
+    throw new Error(
+      `Device failed to return bookmarks for "${filename}" (status ${status})`,
+    );
   }
 
   const byteOffset = val.getUint32(2, true);
@@ -1217,7 +1326,11 @@ async function queryBookBookmarks(filename) {
   const bookmarkCount = val.getUint8(10);
   const bookmarks = [];
 
-  for (let i = 0; i < bookmarkCount && (11 + (i + 1) * 4) <= val.byteLength; i++) {
+  for (
+    let i = 0;
+    i < bookmarkCount && 11 + (i + 1) * 4 <= val.byteLength;
+    i++
+  ) {
     bookmarks.push(val.getUint32(11 + i * 4, true));
   }
 
@@ -1238,9 +1351,13 @@ function buildOffsetAndFilenamePacket(opcode, byteOffset, filename) {
 
 async function addBookBookmark(filename, byteOffset) {
   if (!controlChar) {
-    throw new Error('Not connected to BacaIn');
+    throw new Error("Not connected to BacaIn");
   }
-  const packet = buildOffsetAndFilenamePacket(OPCODES.ADD_BOOKMARK, byteOffset, filename);
+  const packet = buildOffsetAndFilenamePacket(
+    OPCODES.ADD_BOOKMARK,
+    byteOffset,
+    filename,
+  );
   const respPromise = waitForControlResponse(OPCODES.ADD_BOOKMARK, 4000);
   await controlChar.writeValueWithResponse(packet);
   const { status } = await respPromise;
@@ -1252,9 +1369,13 @@ async function addBookBookmark(filename, byteOffset) {
 
 async function deleteBookBookmark(filename, byteOffset) {
   if (!controlChar) {
-    throw new Error('Not connected to BacaIn');
+    throw new Error("Not connected to BacaIn");
   }
-  const packet = buildOffsetAndFilenamePacket(OPCODES.DELETE_BOOKMARK, byteOffset, filename);
+  const packet = buildOffsetAndFilenamePacket(
+    OPCODES.DELETE_BOOKMARK,
+    byteOffset,
+    filename,
+  );
   const respPromise = waitForControlResponse(OPCODES.DELETE_BOOKMARK, 4000);
   await controlChar.writeValueWithResponse(packet);
   const { status } = await respPromise;
@@ -1266,9 +1387,13 @@ async function deleteBookBookmark(filename, byteOffset) {
 
 async function setBookReadingOffset(filename, byteOffset) {
   if (!controlChar) {
-    throw new Error('Not connected to BacaIn');
+    throw new Error("Not connected to BacaIn");
   }
-  const packet = buildOffsetAndFilenamePacket(OPCODES.SET_BOOK_OFFSET, byteOffset, filename);
+  const packet = buildOffsetAndFilenamePacket(
+    OPCODES.SET_BOOK_OFFSET,
+    byteOffset,
+    filename,
+  );
   const respPromise = waitForControlResponse(OPCODES.SET_BOOK_OFFSET, 4000);
   await controlChar.writeValueWithResponse(packet);
   const { status } = await respPromise;
@@ -1278,10 +1403,16 @@ async function setBookReadingOffset(filename, byteOffset) {
   return status;
 }
 
-function syncLocalBookMetadata(filename, byteOffset, totalBytes, bookmarkCount) {
-  const book = remoteBooks.find(b => b.name === filename);
+function syncLocalBookMetadata(
+  filename,
+  byteOffset,
+  totalBytes,
+  bookmarkCount,
+) {
+  const book = remoteBooks.find((b) => b.name === filename);
   const size = totalBytes || (book ? book.size : 0);
-  const progress = size > 0 ? Math.min(100, Math.floor((byteOffset * 100) / size)) : 0;
+  const progress =
+    size > 0 ? Math.min(100, Math.floor((byteOffset * 100) / size)) : 0;
   if (book) {
     book.byteOffset = byteOffset;
     book.bookmarkCount = bookmarkCount;
@@ -1302,7 +1433,10 @@ function renderBookmarksModalState(filename, state) {
   const totalBytes = Number(state.totalBytes) || 0;
   const byteOffset = Number(state.byteOffset) || 0;
   const bookmarks = Array.isArray(state.bookmarks) ? state.bookmarks : [];
-  const pct = totalBytes > 0 ? Math.min(100, Math.floor((byteOffset * 100) / totalBytes)) : 0;
+  const pct =
+    totalBytes > 0
+      ? Math.min(100, Math.floor((byteOffset * 100) / totalBytes))
+      : 0;
 
   if (el.bookmarksModalBookName) {
     el.bookmarksModalBookName.textContent = filename;
@@ -1319,7 +1453,7 @@ function renderBookmarksModalState(filename, state) {
   }
 
   if (!el.bookmarksList) return;
-  el.bookmarksList.innerHTML = '';
+  el.bookmarksList.innerHTML = "";
 
   if (bookmarks.length === 0) {
     el.bookmarksList.innerHTML = `<p style="font-size: 0.85rem; color: var(--text-muted); text-align: center; padding: 1rem 0;">No bookmarks saved for this book</p>`;
@@ -1327,53 +1461,56 @@ function renderBookmarksModalState(filename, state) {
   }
 
   bookmarks.forEach((bmOffset, idx) => {
-    const bmPct = totalBytes > 0 ? Math.min(100, Math.floor((bmOffset * 100) / totalBytes)) : 0;
-    const row = document.createElement('div');
-    row.className = 'controls-item';
-    row.style.display = 'flex';
-    row.style.alignItems = 'center';
-    row.style.justifyContent = 'space-between';
-    row.style.gap = '0.5rem';
+    const bmPct =
+      totalBytes > 0
+        ? Math.min(100, Math.floor((bmOffset * 100) / totalBytes))
+        : 0;
+    const row = document.createElement("div");
+    row.className = "controls-item";
+    row.style.display = "flex";
+    row.style.alignItems = "center";
+    row.style.justifyContent = "space-between";
+    row.style.gap = "0.5rem";
 
-    const label = document.createElement('div');
-    label.style.fontFamily = 'var(--font-mono)';
-    label.style.fontSize = '0.82rem';
+    const label = document.createElement("div");
+    label.style.fontFamily = "var(--font-mono)";
+    label.style.fontSize = "0.82rem";
     label.textContent = `#${idx + 1} • ${bmPct}% (${bmOffset.toLocaleString()} B)`;
 
-    const btnGroup = document.createElement('div');
-    btnGroup.style.display = 'flex';
-    btnGroup.style.alignItems = 'center';
-    btnGroup.style.gap = '0.35rem';
+    const btnGroup = document.createElement("div");
+    btnGroup.style.display = "flex";
+    btnGroup.style.alignItems = "center";
+    btnGroup.style.gap = "0.35rem";
 
-    const jumpBtn = document.createElement('button');
-    jumpBtn.className = 'btn-secondary btn-jump-bookmark';
-    jumpBtn.style.fontSize = '0.76rem';
-    jumpBtn.style.padding = '0.28rem 0.55rem';
-    jumpBtn.textContent = 'Jump';
-    jumpBtn.addEventListener('click', async () => {
+    const jumpBtn = document.createElement("button");
+    jumpBtn.className = "btn-secondary btn-jump-bookmark";
+    jumpBtn.style.fontSize = "0.76rem";
+    jumpBtn.style.padding = "0.28rem 0.55rem";
+    jumpBtn.textContent = "Jump";
+    jumpBtn.addEventListener("click", async () => {
       try {
         await setBookReadingOffset(filename, bmOffset);
-        showToast(`Jumped "${filename}" to ${bmPct}%`, 'success');
+        showToast(`Jumped "${filename}" to ${bmPct}%`, "success");
         await refreshActiveBookmarksModal();
       } catch (err) {
-        log(`Failed to jump to bookmark: ${err.message}`, 'error');
-        showToast(`Jump failed: ${err.message}`, 'error');
+        log(`Failed to jump to bookmark: ${err.message}`, "error");
+        showToast(`Jump failed: ${err.message}`, "error");
       }
     });
 
-    const delBtn = document.createElement('button');
-    delBtn.className = 'btn-danger btn-delete-bookmark';
-    delBtn.style.fontSize = '0.76rem';
-    delBtn.style.padding = '0.28rem 0.55rem';
-    delBtn.textContent = 'Delete';
-    delBtn.addEventListener('click', async () => {
+    const delBtn = document.createElement("button");
+    delBtn.className = "btn-danger btn-delete-bookmark";
+    delBtn.style.fontSize = "0.76rem";
+    delBtn.style.padding = "0.28rem 0.55rem";
+    delBtn.textContent = "Delete";
+    delBtn.addEventListener("click", async () => {
       try {
         await deleteBookBookmark(filename, bmOffset);
-        showToast(`Removed bookmark #${idx + 1}`, 'info');
+        showToast(`Removed bookmark #${idx + 1}`, "info");
         await refreshActiveBookmarksModal();
       } catch (err) {
-        log(`Failed to delete bookmark: ${err.message}`, 'error');
-        showToast(`Delete bookmark failed: ${err.message}`, 'error');
+        log(`Failed to delete bookmark: ${err.message}`, "error");
+        showToast(`Delete bookmark failed: ${err.message}`, "error");
       }
     });
 
@@ -1391,13 +1528,18 @@ async function refreshActiveBookmarksModal() {
   const state = await queryBookBookmarks(name);
   activeBookmarksBook.byteOffset = state.byteOffset;
   activeBookmarksBook.size = state.totalBytes || size;
-  syncLocalBookMetadata(name, state.byteOffset, state.totalBytes || size, state.bookmarkCount);
+  syncLocalBookMetadata(
+    name,
+    state.byteOffset,
+    state.totalBytes || size,
+    state.bookmarkCount,
+  );
   renderBookmarksModalState(name, state);
 }
 
 async function openBookmarksModal(filename, fileSize = 0) {
   if (!isConnected || !controlChar) {
-    showToast('Connect to BacaIn to manage bookmarks', 'warning');
+    showToast("Connect to BacaIn to manage bookmarks", "warning");
     return;
   }
 
@@ -1406,29 +1548,29 @@ async function openBookmarksModal(filename, fileSize = 0) {
     el.bookmarksModalBookName.textContent = filename;
   }
   if (el.bookmarksCurrentPosText) {
-    el.bookmarksCurrentPosText.textContent = 'Loading device state...';
+    el.bookmarksCurrentPosText.textContent = "Loading device state...";
   }
   if (el.bookmarksList) {
     el.bookmarksList.innerHTML = `<p style="font-size: 0.85rem; color: var(--text-muted); text-align: center; padding: 1rem 0;">Loading bookmarks...</p>`;
   }
   if (el.bookmarksModal) {
-    el.bookmarksModal.classList.add('active');
-    el.bookmarksModal.setAttribute('aria-hidden', 'false');
+    el.bookmarksModal.classList.add("active");
+    el.bookmarksModal.setAttribute("aria-hidden", "false");
   }
 
   try {
     await refreshActiveBookmarksModal();
   } catch (err) {
-    log(`Error loading bookmarks for "${filename}": ${err.message}`, 'error');
-    showToast(`Failed to load bookmarks: ${err.message}`, 'error');
+    log(`Error loading bookmarks for "${filename}": ${err.message}`, "error");
+    showToast(`Failed to load bookmarks: ${err.message}`, "error");
   }
 }
 
 function closeBookmarksModal() {
   activeBookmarksBook = null;
   if (el.bookmarksModal) {
-    el.bookmarksModal.classList.remove('active');
-    el.bookmarksModal.setAttribute('aria-hidden', 'true');
+    el.bookmarksModal.classList.remove("active");
+    el.bookmarksModal.setAttribute("aria-hidden", "true");
   }
 }
 
@@ -1439,15 +1581,29 @@ function handleFilesSelected(files) {
   if (!files || files.length === 0) return;
 
   if (!isConnected) {
-    showToast('Please connect to your BacaIn before uploading files', 'warning');
+    showToast(
+      "Please connect to your BacaIn before uploading files",
+      "warning",
+    );
     return;
   }
 
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
+    const alreadyQueued = uploadQueue.some(
+      (item) =>
+        item === file ||
+        (item.name === file.name &&
+          item.size === file.size &&
+          item.lastModified === file.lastModified),
+    );
+    if (alreadyQueued) continue;
     const lower = file.name.toLowerCase();
-    if (!lower.endsWith('.txt') && !lower.endsWith('.bqm')) {
-      showToast(`Warning: "${file.name}" is not a .txt file, attempting plain text upload`, 'warning');
+    if (!lower.endsWith(".txt") && !lower.endsWith(".bqm")) {
+      showToast(
+        `Warning: "${file.name}" is not a .txt file, attempting plain text upload`,
+        "warning",
+      );
     }
     uploadQueue.push(file);
   }
@@ -1471,19 +1627,28 @@ async function processUploadQueue() {
 function describeUploadErrorStatus(status, rxBytes, expectedBytes) {
   switch (status) {
     case 0x02:
-    case 0x07: return 'Target storage not mounted or unavailable (0x07)';
-    case 0x03: return 'BLE chunk sequence mismatch / dropped packet (0x03)';
-    case 0x04: return 'Device ringbuffer overflow / storage write backpressure (0x04)';
-    case 0x05: return 'Flash/SD write failed or storage full (0x05)';
-    case 0x06: return `File size mismatch: device received ${rxBytes ?? '?'} of ${expectedBytes} bytes (0x06)`;
-    case 0x09: return 'Invalid quran.bqm header or display geometry mismatch (0x09)';
-    default:   return `Device error status 0x${Number(status).toString(16).padStart(2, '0')}`;
+    case 0x07:
+      return "Target storage not mounted or unavailable (0x07)";
+    case 0x03:
+      return "BLE chunk sequence mismatch / dropped packet (0x03)";
+    case 0x04:
+      return "Device ringbuffer overflow / storage write backpressure (0x04)";
+    case 0x05:
+      return "Flash/SD write failed or storage full (0x05)";
+    case 0x06:
+      if (!rxBytes)
+        return "File size exceeds available device storage or size mismatch (0x06)";
+      return `File size mismatch: device received ${rxBytes} of ${expectedBytes} bytes (0x06)`;
+    case 0x09:
+      return "Invalid quran.bqm header or display geometry mismatch (0x09)";
+    default:
+      return `Device error status 0x${Number(status).toString(16).padStart(2, "0")}`;
   }
 }
 
 async function executeFileUpload(file) {
   if (!controlChar || !dataChar) {
-    showToast('Upload failed: Bluetooth connection lost', 'error');
+    showToast("Upload failed: Bluetooth connection lost", "error");
     return;
   }
 
@@ -1493,7 +1658,7 @@ async function executeFileUpload(file) {
   const fileName = file.name;
   const fileSize = file.size;
 
-  log(`Starting upload: "${fileName}" (${formatBytes(fileSize)})`, 'info');
+  log(`Starting upload: "${fileName}" (${formatBytes(fileSize)})`, "info");
   showUploadActiveCard(fileName);
 
   try {
@@ -1512,16 +1677,28 @@ async function executeFileUpload(file) {
     startPacket.set(nameBytes, 5);
     startPacket[5 + nameBytes.length] = 0; // null terminator
 
-    log(`Sending START_UPLOAD for "${fileName}" (size: ${fileSize} bytes)...`, 'info');
-    const startRespPromise = waitForControlResponse(OPCODES.START_UPLOAD, 8000);
+    log(
+      `Sending START_UPLOAD for "${fileName}" (size: ${fileSize} bytes)...`,
+      "info",
+    );
+    const startRespPromise = waitForControlResponse(
+      OPCODES.START_UPLOAD,
+      10000,
+    );
+    startRespPromise.catch(() => {});
     await controlChar.writeValueWithResponse(startPacket);
     const startResp = await startRespPromise;
 
     if (startResp.status !== 0) {
-      throw new Error(`Device rejected upload start: ${describeUploadErrorStatus(startResp.status, 0, fileSize)}`);
+      throw new Error(
+        `Device rejected upload start: ${describeUploadErrorStatus(startResp.status, 0, fileSize)}`,
+      );
     }
 
-    log(`Device accepted upload. Beginning chunk transfer (Chunk size: ${CHUNK_SIZE} B)...`, 'info');
+    log(
+      `Device accepted upload. Beginning chunk transfer (Chunk size: ${CHUNK_SIZE} B)...`,
+      "info",
+    );
 
     // Step 2: Stream Data Chunks
     const totalChunks = Math.ceil(fileBytes.length / CHUNK_SIZE);
@@ -1531,20 +1708,24 @@ async function executeFileUpload(file) {
 
     for (let offset = 0; offset < fileBytes.length; offset += CHUNK_SIZE) {
       if (cancelUploadRequested) {
-        throw new Error('Upload cancelled by user');
+        throw new Error("Upload cancelled by user");
       }
 
       if (!isConnected || !dataChar) {
-        throw new Error('Connection lost during transmission');
+        throw new Error("Connection lost during transmission");
       }
 
-      const chunk = fileBytes.subarray(offset, Math.min(offset + CHUNK_SIZE, fileBytes.length));
+      const chunk = fileBytes.subarray(
+        offset,
+        Math.min(offset + CHUNK_SIZE, fileBytes.length),
+      );
       const packet = new Uint8Array(2 + chunk.length);
       const pktView = new DataView(packet.buffer);
-      pktView.setUint16(0, seqId & 0xFFFF, true);
+      pktView.setUint16(0, seqId & 0xffff, true);
       packet.set(chunk, 2);
 
-      const isSyncChunk = ((seqId & 7) === 7) || (offset + CHUNK_SIZE >= fileBytes.length);
+      const isSyncChunk =
+        (seqId & 7) === 7 || offset + CHUNK_SIZE >= fileBytes.length;
       if (isSyncChunk && dataChar.writeValueWithResponse) {
         await dataChar.writeValueWithResponse(packet);
       } else if (dataChar.writeValueWithoutResponse) {
@@ -1554,7 +1735,7 @@ async function executeFileUpload(file) {
       }
 
       bytesSent += chunk.length;
-      seqId = (seqId + 1) & 0xFFFF;
+      seqId = (seqId + 1) & 0xffff;
 
       // Update UI Progress Stats
       updateUploadStats(bytesSent, fileSize, seqId, totalChunks, startTime);
@@ -1566,35 +1747,55 @@ async function executeFileUpload(file) {
     }
 
     // Step 3: Send FINISH_UPLOAD (0x03)
-    log('All chunks sent. Sending FINISH_UPLOAD (0x03)...', 'info');
+    log("All chunks sent. Sending FINISH_UPLOAD (0x03)...", "info");
     const finishPacket = new Uint8Array([OPCODES.FINISH_UPLOAD]);
-    const finishRespPromise = waitForControlResponse(OPCODES.FINISH_UPLOAD, 15000);
+    const finishRespPromise = waitForControlResponse(
+      OPCODES.FINISH_UPLOAD,
+      30000,
+    );
+    finishRespPromise.catch(() => {});
     await controlChar.writeValueWithResponse(finishPacket);
     const finishResp = await finishRespPromise;
 
     if (finishResp.status !== 0) {
-      const rxBytes = (finishResp.dataView && finishResp.dataView.byteLength >= 6) ? finishResp.dataView.getUint32(2, true) : null;
-      throw new Error(`Device failed to finish upload: ${describeUploadErrorStatus(finishResp.status, rxBytes, fileSize)}`);
+      const rxBytes =
+        finishResp.dataView && finishResp.dataView.byteLength >= 6
+          ? finishResp.dataView.getUint32(2, true)
+          : null;
+      throw new Error(
+        `Device failed to finish upload: ${describeUploadErrorStatus(finishResp.status, rxBytes, fileSize)}`,
+      );
     }
 
     const elapsedTotal = ((performance.now() - startTime) / 1000).toFixed(1);
     const avgSpeed = (fileSize / 1024 / (elapsedTotal || 1)).toFixed(1);
-    log(`Upload complete: "${fileName}" in ${elapsedTotal}s (avg ${avgSpeed} KB/s)`, 'success');
-    showToast(`Uploaded "${fileName}" successfully!`, 'success');
-    document.dispatchEvent(new CustomEvent('quran-upload-status', { detail: { ok: true, fileName, fileSize } }));
-    if (fileName.toLowerCase() === 'quran.bqm') {
+    log(
+      `Upload complete: "${fileName}" in ${elapsedTotal}s (avg ${avgSpeed} KB/s)`,
+      "success",
+    );
+    showToast(`Uploaded "${fileName}" successfully!`, "success");
+    document.dispatchEvent(
+      new CustomEvent("quran-upload-status", {
+        detail: { ok: true, fileName, fileSize },
+      }),
+    );
+    if (fileName.toLowerCase() === "quran.bqm") {
       await requestQuranState();
     }
 
     // Refresh book list & storage stats
     await queryBooksList();
     await readDeviceStatus();
-
   } catch (err) {
-    console.error('[BacaIn Upload Failed]', fileName, err);
-    log(`Upload Error ("${fileName}"): ${err.message}`, 'error');
-    showToast(`Upload failed: ${err.message}`, 'error', 6000);
-    document.dispatchEvent(new CustomEvent('quran-upload-status', { detail: { ok: false, fileName, error: err.message } }));
+    uploadQueue.length = 0;
+    console.error("[BacaIn Upload Failed]", fileName, err);
+    log(`Upload Error ("${fileName}"): ${err.message}`, "error");
+    showToast(`Upload failed: ${err.message}`, "error", 6000);
+    document.dispatchEvent(
+      new CustomEvent("quran-upload-status", {
+        detail: { ok: false, fileName, error: err.message },
+      }),
+    );
     if (controlChar && isConnected) {
       try {
         const abortPacket = new Uint8Array([OPCODES.ABORT_UPLOAD]);
@@ -1609,50 +1810,59 @@ async function executeFileUpload(file) {
 
 function showUploadActiveCard(fileName) {
   if (el.uploadingFileName) el.uploadingFileName.textContent = fileName;
-  if (el.uploadProgressFill) el.uploadProgressFill.style.width = '0%';
-  if (el.uploadPctStat) el.uploadPctStat.textContent = '0.0%';
-  if (el.uploadSpeedStat) el.uploadSpeedStat.textContent = '0.0 KB/s';
-  if (el.uploadSeqStat) el.uploadSeqStat.textContent = '#0 / 0';
-  if (el.uploadEtaStat) el.uploadEtaStat.textContent = 'Calculating...';
-  if (el.uploadActiveCard) el.uploadActiveCard.classList.add('visible');
+  if (el.uploadProgressFill) el.uploadProgressFill.style.width = "0%";
+  if (el.uploadPctStat) el.uploadPctStat.textContent = "0.0%";
+  if (el.uploadSpeedStat) el.uploadSpeedStat.textContent = "0.0 KB/s";
+  if (el.uploadSeqStat) el.uploadSeqStat.textContent = "#0 / 0";
+  if (el.uploadEtaStat) el.uploadEtaStat.textContent = "Calculating...";
+  if (el.uploadActiveCard) el.uploadActiveCard.classList.add("visible");
 
-  const bookUploader = document.getElementById('bookUploader');
-  if (bookUploader && typeof bookUploader.showProgress === 'function') {
+  const bookUploader = document.getElementById("bookUploader");
+  if (bookUploader && typeof bookUploader.showProgress === "function") {
     bookUploader.showProgress(fileName);
   }
 }
 
 function hideUploadActiveCard() {
-  if (el.uploadActiveCard) el.uploadActiveCard.classList.remove('visible');
-  if (el.fileInput) el.fileInput.value = '';
+  if (el.uploadActiveCard) el.uploadActiveCard.classList.remove("visible");
+  if (el.fileInput) el.fileInput.value = "";
 
-  const bookUploader = document.getElementById('bookUploader');
-  if (bookUploader && typeof bookUploader.reset === 'function') {
+  const bookUploader = document.getElementById("bookUploader");
+  if (bookUploader && typeof bookUploader.reset === "function") {
     bookUploader.reset();
   }
 }
 
-function updateUploadStats(bytesSent, totalBytes, seqId, totalChunks, startTime) {
+function updateUploadStats(
+  bytesSent,
+  totalBytes,
+  seqId,
+  totalChunks,
+  startTime,
+) {
   const pct = totalBytes > 0 ? ((bytesSent / totalBytes) * 100).toFixed(1) : 0;
   const elapsedSec = (performance.now() - startTime) / 1000;
-  const speedKBps = elapsedSec > 0 ? (bytesSent / 1024 / elapsedSec) : 0;
+  const speedKBps = elapsedSec > 0 ? bytesSent / 1024 / elapsedSec : 0;
   const remainingBytes = totalBytes - bytesSent;
-  const etaSec = speedKBps > 0 ? Math.ceil((remainingBytes / 1024) / speedKBps) : 0;
+  const etaSec =
+    speedKBps > 0 ? Math.ceil(remainingBytes / 1024 / speedKBps) : 0;
 
   if (el.uploadProgressFill) el.uploadProgressFill.style.width = `${pct}%`;
   if (el.uploadPctStat) el.uploadPctStat.textContent = `${pct}%`;
-  if (el.uploadSpeedStat) el.uploadSpeedStat.textContent = `${speedKBps.toFixed(1)} KB/s`;
-  if (el.uploadSeqStat) el.uploadSeqStat.textContent = `#${seqId} / ${totalChunks}`;
+  if (el.uploadSpeedStat)
+    el.uploadSpeedStat.textContent = `${speedKBps.toFixed(1)} KB/s`;
+  if (el.uploadSeqStat)
+    el.uploadSeqStat.textContent = `#${seqId} / ${totalChunks}`;
   if (el.uploadEtaStat) el.uploadEtaStat.textContent = `${etaSec}s`;
 
-  const bookUploader = document.getElementById('bookUploader');
-  if (bookUploader && typeof bookUploader.setProgress === 'function') {
+  const bookUploader = document.getElementById("bookUploader");
+  if (bookUploader && typeof bookUploader.setProgress === "function") {
     bookUploader.setProgress({
       pct: Number(pct),
       speedKbps: speedKBps,
       currentSeq: seqId,
       totalSeq: totalChunks,
-      etaSec
+      etaSec,
     });
   }
 }
@@ -1661,14 +1871,19 @@ function updateUploadStats(bytesSent, totalBytes, seqId, totalChunks, startTime)
 // Service Worker Registration
 // ============================================================================
 function registerServiceWorker() {
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('./sw.js')
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      if ("caches" in window) {
+        caches.delete("mini-ereader-pwa-v1").catch(() => {});
+      }
+      navigator.serviceWorker
+        .register("./sw.js", { updateViaCache: "none" })
         .then((reg) => {
-          log(`Service Worker registered with scope: ${reg.scope}`, 'info');
+          reg.update().catch(() => {});
+          log(`Service Worker registered with scope: ${reg.scope}`, "info");
         })
         .catch((err) => {
-          log(`Service Worker registration failed: ${err.message}`, 'warning');
+          log(`Service Worker registration failed: ${err.message}`, "warning");
         });
     });
   }
@@ -1683,36 +1898,38 @@ let currentFontSize = 1; // 0: Font16, 1: Font12
 function updateStorageTargetUI(target) {
   currentStorageTarget = target;
   if (el.storageTargetSdBtn && el.storageTargetFlashBtn) {
-    el.storageTargetSdBtn.classList.toggle('active', target === 0);
-    el.storageTargetFlashBtn.classList.toggle('active', target === 1);
+    el.storageTargetSdBtn.classList.toggle("active", target === 0);
+    el.storageTargetFlashBtn.classList.toggle("active", target === 1);
   }
   if (el.storageTitleText) {
-    el.storageTitleText.textContent = target === 0 ? 'MicroSD Storage' : 'Internal Flash';
+    el.storageTitleText.textContent =
+      target === 0 ? "MicroSD Storage" : "Internal Flash";
   }
   if (el.storageTargetDesc) {
-    el.storageTargetDesc.textContent = target === 0
-      ? 'Books and reading progress are synced to MicroSD card (/sdcard).'
-      : 'Books and reading progress are synced to Internal Flash (/spiflash).';
+    el.storageTargetDesc.textContent =
+      target === 0
+        ? "Books and reading progress are synced to MicroSD card (/sdcard)."
+        : "Books and reading progress are synced to Internal Flash (/spiflash).";
   }
   if (el.storageBadge && !isConnected) {
-    el.storageBadge.textContent = target === 0 ? 'MicroSD' : 'Internal Flash';
-    el.storageBadge.className = 'card-badge badge-muted';
+    el.storageBadge.textContent = target === 0 ? "MicroSD" : "Internal Flash";
+    el.storageBadge.className = "card-badge badge-muted";
   }
 
   // Update StatusDashboard Web Component
-  const statusDashboard = document.getElementById('statusDashboard');
+  const statusDashboard = document.getElementById("statusDashboard");
   if (statusDashboard) {
-    if (typeof statusDashboard.updateFlashStorage === 'function') {
+    if (typeof statusDashboard.updateFlashStorage === "function") {
       statusDashboard.updateFlashStorage({ isActive: target === 1 });
     }
-    if (typeof statusDashboard.updateSdStorage === 'function') {
+    if (typeof statusDashboard.updateSdStorage === "function") {
       statusDashboard.updateSdStorage({ isActive: target === 0 });
     }
   }
 
   // Update BookLibrary Web Component
-  const bookLibrary = document.getElementById('bookLibrary');
-  if (bookLibrary && typeof bookLibrary.setStorageTargetBadge === 'function') {
+  const bookLibrary = document.getElementById("bookLibrary");
+  if (bookLibrary && typeof bookLibrary.setStorageTargetBadge === "function") {
     bookLibrary.setStorageTargetBadge(target);
   }
 }
@@ -1720,48 +1937,62 @@ function updateStorageTargetUI(target) {
 async function setStorageTarget(target) {
   updateStorageTargetUI(target);
   if (!isConnected || !controlChar) {
-    showToast('Connect device first to switch storage', 'warning');
+    showToast("Connect device first to switch storage", "warning");
     return;
   }
   try {
-    const targetName = target === 0 ? 'MicroSD Storage' : 'Internal Flash';
-    log(`Setting storage target to ${targetName} (OpCode 0x06)...`, 'info');
+    const targetName = target === 0 ? "MicroSD Storage" : "Internal Flash";
+    log(`Setting storage target to ${targetName} (OpCode 0x06)...`, "info");
     const packet = new Uint8Array([OPCODES.SET_STORAGE_TARGET, target]);
-    const waitPromise = waitForControlResponse(OPCODES.SET_STORAGE_TARGET, 3500);
+    const waitPromise = waitForControlResponse(
+      OPCODES.SET_STORAGE_TARGET,
+      3500,
+    );
     await controlChar.writeValueWithResponse(packet);
     const resp = await waitPromise;
     let status = resp && resp.byteLength > 1 ? resp.getUint8(1) : 0;
-    if (resp && typeof resp.status === 'number') {
+    if (resp && typeof resp.status === "number") {
       status = resp.status;
     }
 
-    const settingsModal = document.getElementById('deviceSettingsModal') || document.getElementById('settingsModal');
-    const statusDashboard = document.getElementById('statusDashboard');
+    const settingsModal =
+      document.getElementById("deviceSettingsModal") ||
+      document.getElementById("settingsModal");
+    const statusDashboard = document.getElementById("statusDashboard");
 
     if (status !== 0) {
-      showToast('MicroSD card not available or not mounted', 'warning');
+      showToast("MicroSD card not available or not mounted", "warning");
       updateStorageTargetUI(1);
-      if (settingsModal && typeof settingsModal.setSdCardAvailable === 'function') {
+      if (
+        settingsModal &&
+        typeof settingsModal.setSdCardAvailable === "function"
+      ) {
         settingsModal.setSdCardAvailable(false);
       }
-      if (statusDashboard && typeof statusDashboard.updateSdStorage === 'function') {
+      if (
+        statusDashboard &&
+        typeof statusDashboard.updateSdStorage === "function"
+      ) {
         statusDashboard.updateSdStorage({ isMounted: false, totalKb: 0 });
       }
       return;
     }
 
     if (target === 0) {
-      if (settingsModal && typeof settingsModal.setSdCardAvailable === 'function') {
+      if (
+        settingsModal &&
+        typeof settingsModal.setSdCardAvailable === "function"
+      ) {
         settingsModal.setSdCardAvailable(true);
       }
     }
 
-    showToast(`Active storage: ${targetName}`, 'success');
+    showToast(`Active storage: ${targetName}`, "success");
     await readDeviceStatus();
     await queryBooksList();
   } catch (err) {
-    log(`Failed to set storage target: ${err.message}`, 'error');
-    showToast('Failed to switch storage target', 'error');
+    log(`Failed to set storage target: ${err.message}`, "error");
+    showToast("Failed to switch storage target", "error");
   }
 }
 const sendSetStorageTarget = setStorageTarget;
@@ -1769,91 +2000,111 @@ const sendSetStorageTarget = setStorageTarget;
 function updateFontUI(fontId) {
   currentFontSize = fontId;
   if (el.font16Btn && el.font12Btn) {
-    el.font16Btn.classList.toggle('active', fontId === 0);
-    el.font12Btn.classList.toggle('active', fontId === 1);
+    el.font16Btn.classList.toggle("active", fontId === 0);
+    el.font12Btn.classList.toggle("active", fontId === 1);
   }
-  const modal = document.getElementById('settingsModal') || document.getElementById('deviceSettingsModal');
-  if (modal && typeof modal.setFont === 'function') {
+  const modal =
+    document.getElementById("settingsModal") ||
+    document.getElementById("deviceSettingsModal");
+  if (modal && typeof modal.setFont === "function") {
     modal.setFont(fontId);
   }
 }
 
 async function setFont(fontId) {
   if (!isConnected || !controlChar) {
-    showToast('Connect device first', 'warning');
+    showToast("Connect device first", "warning");
     return;
   }
   try {
-    log(`Setting display typography to Font${fontId === 0 ? '16' : '12'} (OpCode 0x10)...`, 'info');
+    log(
+      `Setting display typography to Font${fontId === 0 ? "16" : "12"} (OpCode 0x10)...`,
+      "info",
+    );
     const packet = new Uint8Array([OPCODES.SET_FONT, fontId]);
     await controlChar.writeValueWithResponse(packet);
     updateFontUI(fontId);
-    showToast(`Font set to Font${fontId === 0 ? '16' : '12'}`, 'success');
+    showToast(`Font set to Font${fontId === 0 ? "16" : "12"}`, "success");
   } catch (err) {
-    log(`Failed to set font: ${err.message}`, 'error');
-    showToast('Failed to change typography', 'error');
+    log(`Failed to set font: ${err.message}`, "error");
+    showToast("Failed to change typography", "error");
   }
 }
 const sendSetFont = setFont;
 
 async function forceRefresh() {
   if (!isConnected || !controlChar) {
-    showToast('Connect device first', 'warning');
+    showToast("Connect device first", "warning");
     return;
   }
   try {
-    log('Sending screen clean / full refresh request (OpCode 0x12)...', 'info');
+    log("Sending screen clean / full refresh request (OpCode 0x12)...", "info");
     const packet = new Uint8Array([OPCODES.FORCE_REFRESH]);
     await controlChar.writeValueWithResponse(packet);
-    showToast('Display cleaned (ghosting cleared)', 'success');
+    showToast("Display cleaned (ghosting cleared)", "success");
   } catch (err) {
-    log(`Failed to refresh screen: ${err.message}`, 'error');
-    showToast('Refresh request failed', 'error');
+    log(`Failed to refresh screen: ${err.message}`, "error");
+    showToast("Refresh request failed", "error");
   }
 }
 const sendForceRefresh = forceRefresh;
 
 async function setSleepTimeout(seconds) {
   if (!isConnected || !controlChar) {
-    showToast('Connect device first', 'warning');
+    showToast("Connect device first", "warning");
     return;
   }
   try {
-    log(`Setting inactivity sleep timeout to ${seconds}s (OpCode 0x13)...`, 'info');
-    const packet = new Uint8Array([OPCODES.SET_SLEEP_TIMEOUT, seconds & 0xff, (seconds >> 8) & 0xff]);
+    log(
+      `Setting inactivity sleep timeout to ${seconds}s (OpCode 0x13)...`,
+      "info",
+    );
+    const packet = new Uint8Array([
+      OPCODES.SET_SLEEP_TIMEOUT,
+      seconds & 0xff,
+      (seconds >> 8) & 0xff,
+    ]);
     if (controlChar.writeValueWithResponse) {
       await controlChar.writeValueWithResponse(packet);
     } else {
       await controlChar.writeValue(packet);
     }
     try {
-      localStorage.setItem('bacain_sleep_timeout', String(seconds));
+      localStorage.setItem("bacain_sleep_timeout", String(seconds));
     } catch (_) {}
-    showToast(`Inactivity timeout: ${seconds === 0 ? 'Disabled' : seconds + 's'}`, 'success');
+    showToast(
+      `Inactivity timeout: ${seconds === 0 ? "Disabled" : seconds + "s"}`,
+      "success",
+    );
   } catch (err) {
-    log(`Failed to set sleep timeout: ${err.message}`, 'error');
-    showToast('Failed to update timeout', 'error');
+    log(`Failed to set sleep timeout: ${err.message}`, "error");
+    showToast("Failed to update timeout", "error");
   }
 }
 const sendSetSleepTimeout = setSleepTimeout;
 
 async function setNavHints(show) {
   if (!isConnected || !controlChar) {
-    showToast('Connect device first', 'warning');
+    showToast("Connect device first", "warning");
     return;
   }
   try {
-    log(`Setting navigation hints to ${show ? 'show' : 'hide'} (OpCode 0x15)...`, 'info');
+    log(
+      `Setting navigation hints to ${show ? "show" : "hide"} (OpCode 0x15)...`,
+      "info",
+    );
     const packet = new Uint8Array([OPCODES.SET_NAV_HINTS, show ? 1 : 0]);
     await controlChar.writeValueWithResponse(packet);
-    const modal = document.getElementById('deviceSettingsModal') || document.getElementById('settingsModal');
-    if (modal && typeof modal.setNavHints === 'function') {
+    const modal =
+      document.getElementById("deviceSettingsModal") ||
+      document.getElementById("settingsModal");
+    if (modal && typeof modal.setNavHints === "function") {
       modal.setNavHints(show);
     }
-    showToast('Navigation hints ' + (show ? 'shown' : 'hidden'), 'success');
+    showToast("Navigation hints " + (show ? "shown" : "hidden"), "success");
   } catch (err) {
-    log(`Failed to set navigation hints: ${err.message}`, 'error');
-    showToast('Failed to update navigation hints', 'error');
+    log(`Failed to set navigation hints: ${err.message}`, "error");
+    showToast("Failed to update navigation hints", "error");
   }
 }
 const sendSetNavHints = setNavHints;
@@ -1861,27 +2112,29 @@ const sendSetNavHints = setNavHints;
 async function sendSetOrientation(rotation) {
   const rot = parseInt(rotation, 10);
   try {
-    localStorage.setItem('bacain_orientation', String(rot));
+    localStorage.setItem("bacain_orientation", String(rot));
   } catch (_) {}
 
-  const modal = document.getElementById('settingsModal') || document.getElementById('deviceSettingsModal');
-  if (modal && typeof modal.setOrientation === 'function') {
+  const modal =
+    document.getElementById("settingsModal") ||
+    document.getElementById("deviceSettingsModal");
+  if (modal && typeof modal.setOrientation === "function") {
     modal.setOrientation(rot);
   }
 
   if (isConnected && controlChar) {
     try {
-      log(`Setting screen orientation to ${rot} (OpCode 0x16)...`, 'info');
+      log(`Setting screen orientation to ${rot} (OpCode 0x16)...`, "info");
       const packet = new Uint8Array([OPCODES.SET_ROTATION, rot]);
       if (controlChar.writeValueWithResponse) {
         await controlChar.writeValueWithResponse(packet);
       } else {
         await controlChar.writeValue(packet);
       }
-      showToast('Screen orientation updated', 'success');
+      showToast("Screen orientation updated", "success");
     } catch (err) {
-      log(`Failed to set orientation: ${err.message}`, 'error');
-      showToast('Failed to update orientation', 'error');
+      log(`Failed to set orientation: ${err.message}`, "error");
+      showToast("Failed to update orientation", "error");
     }
   }
 }
@@ -1890,27 +2143,32 @@ const setOrientation = sendSetOrientation;
 async function sendSetButtonInvert(inverted) {
   const inv = Boolean(inverted);
   try {
-    localStorage.setItem('bacain_btn_invert', inv ? '1' : '0');
+    localStorage.setItem("bacain_btn_invert", inv ? "1" : "0");
   } catch (_) {}
 
-  const modal = document.getElementById('settingsModal') || document.getElementById('deviceSettingsModal');
-  if (modal && typeof modal.setButtonInvert === 'function') {
+  const modal =
+    document.getElementById("settingsModal") ||
+    document.getElementById("deviceSettingsModal");
+  if (modal && typeof modal.setButtonInvert === "function") {
     modal.setButtonInvert(inv);
   }
 
   if (isConnected && controlChar) {
     try {
-      log(`Setting button inversion to ${inv ? 1 : 0} (OpCode 0x17)...`, 'info');
+      log(
+        `Setting button inversion to ${inv ? 1 : 0} (OpCode 0x17)...`,
+        "info",
+      );
       const packet = new Uint8Array([OPCODES.SET_BUTTON_INVERT, inv ? 1 : 0]);
       if (controlChar.writeValueWithResponse) {
         await controlChar.writeValueWithResponse(packet);
       } else {
         await controlChar.writeValue(packet);
       }
-      showToast('Button navigation updated', 'success');
+      showToast("Button navigation updated", "success");
     } catch (err) {
-      log(`Failed to set button inversion: ${err.message}`, 'error');
-      showToast('Failed to update button navigation', 'error');
+      log(`Failed to set button inversion: ${err.message}`, "error");
+      showToast("Failed to update button navigation", "error");
     }
   }
 }
@@ -1920,19 +2178,23 @@ async function sendSetStatusLed(value) {
   const enabled = Boolean(value);
 
   if (!isConnected || !controlChar) {
-    showToast('Connect device first', 'warning');
-    const modal = document.getElementById('settingsModal') || document.getElementById('deviceSettingsModal');
-    if (modal && typeof modal.setStatusLed === 'function') {
+    showToast("Connect device first", "warning");
+    const modal =
+      document.getElementById("settingsModal") ||
+      document.getElementById("deviceSettingsModal");
+    if (modal && typeof modal.setStatusLed === "function") {
       try {
-        const saved = localStorage.getItem('bacain_status_led');
-        modal.setStatusLed(saved !== null ? (saved === '1' || saved === 'true') : true);
+        const saved = localStorage.getItem("bacain_status_led");
+        modal.setStatusLed(
+          saved !== null ? saved === "1" || saved === "true" : true,
+        );
       } catch (_) {}
     }
     return;
   }
 
   try {
-    log(`Setting status LED to ${enabled ? 1 : 0} (OpCode 0x18)...`, 'info');
+    log(`Setting status LED to ${enabled ? 1 : 0} (OpCode 0x18)...`, "info");
     const respPromise = waitForControlResponse(OPCODES.SET_STATUS_LED, 5000);
     const packet = new Uint8Array([OPCODES.SET_STATUS_LED, enabled ? 1 : 0]);
     if (controlChar.writeValueWithResponse) {
@@ -1944,31 +2206,35 @@ async function sendSetStatusLed(value) {
 
     if (status === 0x00) {
       try {
-        localStorage.setItem('bacain_status_led', enabled ? '1' : '0');
+        localStorage.setItem("bacain_status_led", enabled ? "1" : "0");
       } catch (_) {}
-      const modal = document.getElementById('settingsModal') || document.getElementById('deviceSettingsModal');
-      if (modal && typeof modal.setStatusLed === 'function') {
+      const modal =
+        document.getElementById("settingsModal") ||
+        document.getElementById("deviceSettingsModal");
+      if (modal && typeof modal.setStatusLed === "function") {
         modal.setStatusLed(enabled);
       }
-      showToast('Status LED updated', 'success');
-      log(`Status LED set to ${enabled ? 1 : 0} successfully.`, 'success');
+      showToast("Status LED updated", "success");
+      log(`Status LED set to ${enabled ? 1 : 0} successfully.`, "success");
     } else if (status === 0x08) {
-      alert('Status LED is not supported on this device.');
-      const modal = document.getElementById('settingsModal') || document.getElementById('deviceSettingsModal');
-      if (modal && typeof modal.setStatusLed === 'function') {
+      alert("Status LED is not supported on this device.");
+      const modal =
+        document.getElementById("settingsModal") ||
+        document.getElementById("deviceSettingsModal");
+      if (modal && typeof modal.setStatusLed === "function") {
         modal.setStatusLed(false);
       }
       try {
-        localStorage.setItem('bacain_status_led', '0');
+        localStorage.setItem("bacain_status_led", "0");
       } catch (_) {}
-      log('Status LED is not supported on this device.', 'warning');
+      log("Status LED is not supported on this device.", "warning");
     } else {
-      log(`Device returned error status ${status} for status LED`, 'error');
-      showToast('Failed to update status LED', 'error');
+      log(`Device returned error status ${status} for status LED`, "error");
+      showToast("Failed to update status LED", "error");
     }
   } catch (err) {
-    log(`Failed to set status LED: ${err.message}`, 'error');
-    showToast('Failed to update status LED', 'error');
+    log(`Failed to set status LED: ${err.message}`, "error");
+    showToast("Failed to update status LED", "error");
   }
 }
 const setStatusLed = sendSetStatusLed;
@@ -1977,7 +2243,10 @@ function applyDeviceConfigPayload(val) {
   if (!val || val.byteLength < 2) return false;
   const status = val.getUint8(1);
   if (status !== 0x00) {
-    log(`Device configuration request returned status: 0x${status.toString(16)}`, 'warning');
+    log(
+      `Device configuration request returned status: 0x${status.toString(16)}`,
+      "warning",
+    );
     return false;
   }
 
@@ -2002,14 +2271,16 @@ function applyDeviceConfigPayload(val) {
     sleepTimeout = dataView.getUint16(8, true);
   }
 
-  const modal = document.getElementById('settingsModal') || document.getElementById('deviceSettingsModal');
-  if (modal && typeof modal.updateConfig === 'function') {
+  const modal =
+    document.getElementById("settingsModal") ||
+    document.getElementById("deviceSettingsModal");
+  if (modal && typeof modal.updateConfig === "function") {
     const configObj = {
       font: pwa_font_id,
       navHints: nav_hints != 0,
       orientation: rotation,
       buttonInvert: btn_invert != 0,
-      statusLed: status_led != 0
+      statusLed: status_led != 0,
     };
     if (storage_target !== undefined) {
       configObj.storageTarget = storage_target;
@@ -2021,23 +2292,26 @@ function applyDeviceConfigPayload(val) {
   }
 
   try {
-    localStorage.setItem('bacain_font', String(pwa_font_id));
-    localStorage.setItem('bacain_orientation', String(rotation));
-    localStorage.setItem('bacain_btn_invert', String(btn_invert));
-    localStorage.setItem('bacain_status_led', String(status_led));
+    localStorage.setItem("bacain_font", String(pwa_font_id));
+    localStorage.setItem("bacain_orientation", String(rotation));
+    localStorage.setItem("bacain_btn_invert", String(btn_invert));
+    localStorage.setItem("bacain_status_led", String(status_led));
     if (sleepTimeout !== undefined) {
-      localStorage.setItem('bacain_sleep_timeout', String(sleepTimeout));
+      localStorage.setItem("bacain_sleep_timeout", String(sleepTimeout));
     }
   } catch (err) {
-    log(`Failed to cache synchronized configuration: ${err.message}`, 'warning');
+    log(
+      `Failed to cache synchronized configuration: ${err.message}`,
+      "warning",
+    );
   }
 
   // Al-Quran capability (bit 0) and screen geometry (bytes 11..14)
   const caps = val.byteLength >= 11 ? val.getUint8(10) : 0;
   const rawW = val.byteLength >= 13 ? val.getUint16(11, true) : 200;
   const rawH = val.byteLength >= 15 ? val.getUint16(13, true) : 200;
-  const screenW = (rotation % 2 === 1) ? rawH : rawW;
-  const screenH = (rotation % 2 === 1) ? rawW : rawH;
+  const screenW = rotation % 2 === 1 ? rawH : rawW;
+  const screenH = rotation % 2 === 1 ? rawW : rawH;
   const alquranSupported = (caps & OPCODES.CAP_ALQURAN) !== 0;
 
   if (alquranSupported) {
@@ -2046,21 +2320,22 @@ function applyDeviceConfigPayload(val) {
     unmountQuranBuilder();
   }
 
-  log('Device config synchronized on connection.', 'success');
+  log("Device config synchronized on connection.", "success");
   return true;
 }
 
 async function mountQuranBuilder(screenW = 200, screenH = 200) {
   try {
-    let qb = document.getElementById('quranBuilder');
+    let qb = document.getElementById("quranBuilder");
     if (!qb) {
-      await import('./components/quran-builder.js');
-      qb = document.getElementById('quranBuilder');
+      await import("./components/quran-builder.js");
+      qb = document.getElementById("quranBuilder");
       if (!qb) {
-        qb = document.createElement('quran-builder');
-        qb.id = 'quranBuilder';
-        const bookUploader = document.getElementById('bookUploader');
-        const mainContent = el.mainContent || document.getElementById('mainContent');
+        qb = document.createElement("quran-builder");
+        qb.id = "quranBuilder";
+        const bookUploader = document.getElementById("bookUploader");
+        const mainContent =
+          el.mainContent || document.getElementById("mainContent");
         if (bookUploader && bookUploader.parentNode === mainContent) {
           bookUploader.after(qb);
         } else if (mainContent) {
@@ -2069,15 +2344,15 @@ async function mountQuranBuilder(screenW = 200, screenH = 200) {
       }
     }
     if (qb) {
-      if (typeof qb.setDeviceCapabilities === 'function') {
+      if (typeof qb.setDeviceCapabilities === "function") {
         qb.setDeviceCapabilities({
           supported: true,
           screenW,
           screenH,
-          isConnected
+          isConnected,
         });
       }
-      if (typeof qb.setDisplayGeometry === 'function') {
+      if (typeof qb.setDisplayGeometry === "function") {
         qb.setDisplayGeometry(screenW, screenH);
       }
       if (isConnected) {
@@ -2085,12 +2360,12 @@ async function mountQuranBuilder(screenW = 200, screenH = 200) {
       }
     }
   } catch (err) {
-    log(`Failed to mount Quran component: ${err.message}`, 'error');
+    log(`Failed to mount Quran component: ${err.message}`, "error");
   }
 }
 
 function unmountQuranBuilder() {
-  const qb = document.getElementById('quranBuilder');
+  const qb = document.getElementById("quranBuilder");
   if (qb) {
     qb.remove();
   }
@@ -2103,7 +2378,7 @@ function parseQuranStatePayload(val) {
       surah: 1,
       ayah: 1,
       layer: 0,
-      bookmarks: []
+      bookmarks: [],
     };
   }
 
@@ -2131,7 +2406,7 @@ function parseQuranStatePayload(val) {
     surah,
     ayah,
     layer,
-    bookmarks
+    bookmarks,
   };
 }
 
@@ -2139,7 +2414,7 @@ async function requestQuranState() {
   if (!isConnected || !controlChar) return null;
 
   try {
-    log('Querying Al-Quran state from device (OpCode 0x20)...', 'info');
+    log("Querying Al-Quran state from device (OpCode 0x20)...", "info");
     const respPromise = waitForControlResponse(OPCODES.GET_QURAN_STATE, 5000);
     const packet = new Uint8Array([OPCODES.GET_QURAN_STATE]);
     if (controlChar.writeValueWithResponse) {
@@ -2150,30 +2425,33 @@ async function requestQuranState() {
 
     const { status, dataView: val } = await respPromise;
     if (status !== 0x00 || !val) {
-      log(`Al-Quran state request returned status: 0x${(status || 0).toString(16)}`, 'warning');
+      log(
+        `Al-Quran state request returned status: 0x${(status || 0).toString(16)}`,
+        "warning",
+      );
       return null;
     }
 
     const quranState = parseQuranStatePayload(val);
-    const qb = document.getElementById('quranBuilder');
+    const qb = document.getElementById("quranBuilder");
     if (qb) {
-      if (typeof qb.updateDeviceState === 'function') {
+      if (typeof qb.updateDeviceState === "function") {
         qb.updateDeviceState(quranState);
       }
-      if (typeof qb.updateQuranState === 'function') {
+      if (typeof qb.updateQuranState === "function") {
         qb.updateQuranState(quranState);
       }
     }
     return quranState;
   } catch (err) {
-    log(`Failed to retrieve Al-Quran state: ${err.message}`, 'error');
+    log(`Failed to retrieve Al-Quran state: ${err.message}`, "error");
     return null;
   }
 }
 
 async function setQuranCursor(surah, ayah, layer = 0) {
   if (!isConnected || !controlChar) {
-    showToast('Connect device first', 'warning');
+    showToast("Connect device first", "warning");
     return;
   }
 
@@ -2182,15 +2460,18 @@ async function setQuranCursor(surah, ayah, layer = 0) {
     const a = Math.max(1, parseInt(ayah, 10) || 1);
     const l = Math.max(0, Math.min(3, parseInt(layer, 10) || 0));
 
-    log(`Setting Al-Quran cursor to ${s}:${a} layer ${l} (OpCode 0x21 sub 0x01)...`, 'info');
+    log(
+      `Setting Al-Quran cursor to ${s}:${a} layer ${l} (OpCode 0x21 sub 0x01)...`,
+      "info",
+    );
     const respPromise = waitForControlResponse(OPCODES.SET_QURAN_STATE, 5000);
     const packet = new Uint8Array([
       OPCODES.SET_QURAN_STATE,
       0x01,
       s,
-      a & 0xFF,
-      (a >> 8) & 0xFF,
-      l
+      a & 0xff,
+      (a >> 8) & 0xff,
+      l,
     ]);
 
     if (controlChar.writeValueWithResponse) {
@@ -2201,30 +2482,36 @@ async function setQuranCursor(surah, ayah, layer = 0) {
 
     const { status } = await respPromise;
     if (status === 0x00) {
-      showToast(`Quran position synced to ${s}:${a}`, 'success');
-      log(`Al-Quran cursor updated to ${s}:${a} successfully.`, 'success');
+      showToast(`Quran position synced to ${s}:${a}`, "success");
+      log(`Al-Quran cursor updated to ${s}:${a} successfully.`, "success");
     } else {
-      log(`Device returned status 0x${status.toString(16)} setting cursor`, 'warning');
-      showToast('Failed to sync cursor to device', 'error');
+      log(
+        `Device returned status 0x${status.toString(16)} setting cursor`,
+        "warning",
+      );
+      showToast("Failed to sync cursor to device", "error");
     }
 
     await requestQuranState();
   } catch (err) {
-    log(`Failed to set Al-Quran cursor: ${err.message}`, 'error');
-    showToast('Failed to sync cursor', 'error');
+    log(`Failed to set Al-Quran cursor: ${err.message}`, "error");
+    showToast("Failed to sync cursor", "error");
   }
 }
 
 async function setQuranBookmarks(bookmarks) {
   if (!isConnected || !controlChar) {
-    showToast('Connect device first', 'warning');
+    showToast("Connect device first", "warning");
     return;
   }
 
   try {
     const list = Array.isArray(bookmarks) ? bookmarks.slice(0, 8) : [];
     const count = list.length;
-    log(`Updating Al-Quran bookmarks (${count} entries) (OpCode 0x21 sub 0x02)...`, 'info');
+    log(
+      `Updating Al-Quran bookmarks (${count} entries) (OpCode 0x21 sub 0x02)...`,
+      "info",
+    );
 
     const packet = new Uint8Array(3 + count * 4);
     packet[0] = OPCODES.SET_QURAN_STATE;
@@ -2234,10 +2521,10 @@ async function setQuranBookmarks(bookmarks) {
     for (let i = 0; i < count; i++) {
       const bm = list[i];
       const offset = 3 + i * 4;
-      packet[offset] = bm.surah & 0xFF;
-      packet[offset + 1] = bm.ayah & 0xFF;
-      packet[offset + 2] = (bm.ayah >> 8) & 0xFF;
-      packet[offset + 3] = bm.juz & 0xFF;
+      packet[offset] = bm.surah & 0xff;
+      packet[offset + 1] = bm.ayah & 0xff;
+      packet[offset + 2] = (bm.ayah >> 8) & 0xff;
+      packet[offset + 3] = bm.juz & 0xff;
     }
 
     const respPromise = waitForControlResponse(OPCODES.SET_QURAN_STATE, 5000);
@@ -2249,17 +2536,23 @@ async function setQuranBookmarks(bookmarks) {
 
     const { status } = await respPromise;
     if (status === 0x00) {
-      showToast('Bookmarks updated on device', 'success');
-      log('Al-Quran bookmarks committed to device NVS successfully.', 'success');
+      showToast("Bookmarks updated on device", "success");
+      log(
+        "Al-Quran bookmarks committed to device NVS successfully.",
+        "success",
+      );
     } else {
-      log(`Device returned status 0x${status.toString(16)} setting bookmarks`, 'warning');
-      showToast('Failed to update bookmarks', 'error');
+      log(
+        `Device returned status 0x${status.toString(16)} setting bookmarks`,
+        "warning",
+      );
+      showToast("Failed to update bookmarks", "error");
     }
 
     await requestQuranState();
   } catch (err) {
-    log(`Failed to update bookmarks: ${err.message}`, 'error');
-    showToast('Failed to update bookmarks', 'error');
+    log(`Failed to update bookmarks: ${err.message}`, "error");
+    showToast("Failed to update bookmarks", "error");
   }
 }
 
@@ -2267,7 +2560,7 @@ async function requestDeviceConfig() {
   if (!isConnected || !controlChar) return;
 
   try {
-    log('Requesting device configuration (OpCode 0x19)...', 'info');
+    log("Requesting device configuration (OpCode 0x19)...", "info");
     const respPromise = waitForControlResponse(OPCODES.GET_CONFIG, 5000);
     const packet = new Uint8Array([OPCODES.GET_CONFIG]);
     if (controlChar.writeValueWithResponse) {
@@ -2280,11 +2573,17 @@ async function requestDeviceConfig() {
     if (status === 0x00 && val) {
       applyDeviceConfigPayload(val);
     } else {
-      log(`Device configuration request returned status: 0x${status.toString(16)}`, 'warning');
+      log(
+        `Device configuration request returned status: 0x${status.toString(16)}`,
+        "warning",
+      );
       await syncSavedSettings();
     }
   } catch (err) {
-    log(`Failed to synchronize device configuration: ${err.message}`, 'warning');
+    log(
+      `Failed to synchronize device configuration: ${err.message}`,
+      "warning",
+    );
     await syncSavedSettings();
   }
 }
@@ -2293,11 +2592,14 @@ async function syncSavedSettings() {
   if (!isConnected || !controlChar) return;
 
   try {
-    const savedRot = localStorage.getItem('bacain_orientation');
+    const savedRot = localStorage.getItem("bacain_orientation");
     if (savedRot !== null) {
       const rot = parseInt(savedRot, 10);
       if (!isNaN(rot) && rot >= 0 && rot <= 3) {
-        log(`Syncing saved orientation (${rot}) to device (OpCode 0x16)...`, 'info');
+        log(
+          `Syncing saved orientation (${rot}) to device (OpCode 0x16)...`,
+          "info",
+        );
         const packet = new Uint8Array([OPCODES.SET_ROTATION, rot]);
         if (controlChar.writeValueWithResponse) {
           await controlChar.writeValueWithResponse(packet);
@@ -2307,14 +2609,17 @@ async function syncSavedSettings() {
       }
     }
   } catch (err) {
-    log(`Failed to sync orientation: ${err.message}`, 'warning');
+    log(`Failed to sync orientation: ${err.message}`, "warning");
   }
 
   try {
-    const savedBtnInv = localStorage.getItem('bacain_btn_invert');
+    const savedBtnInv = localStorage.getItem("bacain_btn_invert");
     if (savedBtnInv !== null) {
-      const inv = (savedBtnInv === '1' || savedBtnInv === 'true') ? 1 : 0;
-      log(`Syncing saved button inversion (${inv}) to device (OpCode 0x17)...`, 'info');
+      const inv = savedBtnInv === "1" || savedBtnInv === "true" ? 1 : 0;
+      log(
+        `Syncing saved button inversion (${inv}) to device (OpCode 0x17)...`,
+        "info",
+      );
       const packet = new Uint8Array([OPCODES.SET_BUTTON_INVERT, inv]);
       if (controlChar.writeValueWithResponse) {
         await controlChar.writeValueWithResponse(packet);
@@ -2323,16 +2628,23 @@ async function syncSavedSettings() {
       }
     }
   } catch (err) {
-    log(`Failed to sync button inversion: ${err.message}`, 'warning');
+    log(`Failed to sync button inversion: ${err.message}`, "warning");
   }
 
   try {
-    const savedSleep = localStorage.getItem('bacain_sleep_timeout');
+    const savedSleep = localStorage.getItem("bacain_sleep_timeout");
     if (savedSleep !== null) {
       const timeout = parseInt(savedSleep, 10);
       if (!isNaN(timeout) && timeout >= 0) {
-        log(`Syncing saved sleep timeout (${timeout}s) to device (OpCode 0x13)...`, 'info');
-        const packet = new Uint8Array([OPCODES.SET_SLEEP_TIMEOUT, timeout & 0xff, (timeout >> 8) & 0xff]);
+        log(
+          `Syncing saved sleep timeout (${timeout}s) to device (OpCode 0x13)...`,
+          "info",
+        );
+        const packet = new Uint8Array([
+          OPCODES.SET_SLEEP_TIMEOUT,
+          timeout & 0xff,
+          (timeout >> 8) & 0xff,
+        ]);
         if (controlChar.writeValueWithResponse) {
           await controlChar.writeValueWithResponse(packet);
         } else {
@@ -2341,7 +2653,7 @@ async function syncSavedSettings() {
       }
     }
   } catch (err) {
-    log(`Failed to sync sleep timeout: ${err.message}`, 'warning');
+    log(`Failed to sync sleep timeout: ${err.message}`, "warning");
   }
 }
 
@@ -2351,49 +2663,52 @@ async function syncSavedSettings() {
 function initEventListeners() {
   // BLE Connection Button (Header & Onboarding)
   if (el.connectBtn) {
-    el.connectBtn.addEventListener('click', handleConnectToggle);
+    el.connectBtn.addEventListener("click", handleConnectToggle);
   }
   if (el.onboardingConnectBtn) {
-    el.onboardingConnectBtn.addEventListener('click', handleConnectToggle);
+    el.onboardingConnectBtn.addEventListener("click", handleConnectToggle);
   }
   if (el.skipOnboardingBtn) {
-    el.skipOnboardingBtn.addEventListener('click', switchToDashboard);
+    el.skipOnboardingBtn.addEventListener("click", switchToDashboard);
   }
 
   // Status & Books Refresh Buttons
   if (el.refreshStatusBtn) {
-    el.refreshStatusBtn.addEventListener('click', readDeviceStatus);
+    el.refreshStatusBtn.addEventListener("click", readDeviceStatus);
   }
   if (el.refreshBooksBtn) {
-    el.refreshBooksBtn.addEventListener('click', queryBooksList);
+    el.refreshBooksBtn.addEventListener("click", queryBooksList);
   }
 
   // Search filter input
   if (el.bookSearchInput) {
-    el.bookSearchInput.addEventListener('input', renderBooksList);
+    el.bookSearchInput.addEventListener("input", renderBooksList);
   }
 
   // File Dropzone & Input
-  if (el.dropzone && el.fileInput) {
-    el.dropzone.addEventListener('click', () => el.fileInput.click());
-    el.fileInput.addEventListener('change', (e) => handleFilesSelected(e.target.files));
+  const hasBookUploader = Boolean(document.getElementById("bookUploader"));
+  if (!hasBookUploader && el.dropzone && el.fileInput) {
+    el.dropzone.addEventListener("click", () => el.fileInput.click());
+    el.fileInput.addEventListener("change", (e) =>
+      handleFilesSelected(e.target.files),
+    );
 
-    el.dropzone.addEventListener('dragover', (e) => {
+    el.dropzone.addEventListener("dragover", (e) => {
       e.preventDefault();
       e.stopPropagation();
-      el.dropzone.classList.add('dragover');
+      el.dropzone.classList.add("dragover");
     });
 
-    el.dropzone.addEventListener('dragleave', (e) => {
+    el.dropzone.addEventListener("dragleave", (e) => {
       e.preventDefault();
       e.stopPropagation();
-      el.dropzone.classList.remove('dragover');
+      el.dropzone.classList.remove("dragover");
     });
 
-    el.dropzone.addEventListener('drop', (e) => {
+    el.dropzone.addEventListener("drop", (e) => {
       e.preventDefault();
       e.stopPropagation();
-      el.dropzone.classList.remove('dragover');
+      el.dropzone.classList.remove("dragover");
       if (e.dataTransfer && e.dataTransfer.files) {
         handleFilesSelected(e.dataTransfer.files);
       }
@@ -2402,24 +2717,24 @@ function initEventListeners() {
 
   // Cancel Upload
   if (el.cancelUploadBtn) {
-    el.cancelUploadBtn.addEventListener('click', () => {
+    el.cancelUploadBtn.addEventListener("click", () => {
       if (isUploading) {
         cancelUploadRequested = true;
-        log('User requested upload cancellation.', 'warning');
-        showToast('Cancelling upload...', 'warning');
+        log("User requested upload cancellation.", "warning");
+        showToast("Cancelling upload...", "warning");
       }
     });
   }
 
   // Settings Modal Dialog
   if (el.settingsBtn) {
-    el.settingsBtn.addEventListener('click', openSettingsModal);
+    el.settingsBtn.addEventListener("click", openSettingsModal);
   }
   if (el.closeSettingsBtn) {
-    el.closeSettingsBtn.addEventListener('click', closeSettingsModal);
+    el.closeSettingsBtn.addEventListener("click", closeSettingsModal);
   }
   if (el.settingsModal) {
-    el.settingsModal.addEventListener('click', (e) => {
+    el.settingsModal.addEventListener("click", (e) => {
       if (e.target === el.settingsModal) {
         closeSettingsModal();
       }
@@ -2428,22 +2743,22 @@ function initEventListeners() {
 
   // Controls Guide Modal Dialog
   if (el.controlsBtn) {
-    el.controlsBtn.addEventListener('click', openControlsModal);
+    el.controlsBtn.addEventListener("click", openControlsModal);
   }
-  document.addEventListener('click', (e) => {
-    if (e.target.closest('#controlsBtn')) {
+  document.addEventListener("click", (e) => {
+    if (e.target.closest("#controlsBtn")) {
       e.preventDefault();
       openControlsModal();
     }
   });
   if (el.closeControlsBtn) {
-    el.closeControlsBtn.addEventListener('click', closeControlsModal);
+    el.closeControlsBtn.addEventListener("click", closeControlsModal);
   }
   if (el.dismissControlsBtn) {
-    el.dismissControlsBtn.addEventListener('click', closeControlsModal);
+    el.dismissControlsBtn.addEventListener("click", closeControlsModal);
   }
   if (el.controlsModal) {
-    el.controlsModal.addEventListener('click', (e) => {
+    el.controlsModal.addEventListener("click", (e) => {
       if (e.target === el.controlsModal) {
         closeControlsModal();
       }
@@ -2452,86 +2767,99 @@ function initEventListeners() {
 
   // Delete Modal
   if (el.cancelDeleteBtn) {
-    el.cancelDeleteBtn.addEventListener('click', closeDeleteModal);
+    el.cancelDeleteBtn.addEventListener("click", closeDeleteModal);
   }
   if (el.confirmDeleteBtn) {
-    el.confirmDeleteBtn.addEventListener('click', confirmDeleteBook);
+    el.confirmDeleteBtn.addEventListener("click", confirmDeleteBook);
   }
   if (el.deleteModal) {
-    el.deleteModal.addEventListener('click', (e) => {
+    el.deleteModal.addEventListener("click", (e) => {
       if (e.target === el.deleteModal) closeDeleteModal();
     });
   }
 
   // Bookmarks Modal
   if (el.closeBookmarksModalBtn) {
-    el.closeBookmarksModalBtn.addEventListener('click', closeBookmarksModal);
+    el.closeBookmarksModalBtn.addEventListener("click", closeBookmarksModal);
   }
   if (el.dismissBookmarksModalBtn) {
-    el.dismissBookmarksModalBtn.addEventListener('click', closeBookmarksModal);
+    el.dismissBookmarksModalBtn.addEventListener("click", closeBookmarksModal);
   }
   if (el.bookmarksModal) {
-    el.bookmarksModal.addEventListener('click', (e) => {
+    el.bookmarksModal.addEventListener("click", (e) => {
       if (e.target === el.bookmarksModal) closeBookmarksModal();
     });
   }
   if (el.bookmarkCurrentPosBtn) {
-    el.bookmarkCurrentPosBtn.addEventListener('click', async () => {
+    el.bookmarkCurrentPosBtn.addEventListener("click", async () => {
       if (!activeBookmarksBook) return;
       try {
-        await addBookBookmark(activeBookmarksBook.name, activeBookmarksBook.byteOffset || 0);
-        showToast('Bookmarked current reading position', 'success');
+        await addBookBookmark(
+          activeBookmarksBook.name,
+          activeBookmarksBook.byteOffset || 0,
+        );
+        showToast("Bookmarked current reading position", "success");
         await refreshActiveBookmarksModal();
       } catch (err) {
-        log(`Add bookmark failed: ${err.message}`, 'error');
-        showToast(`Add bookmark failed: ${err.message}`, 'error');
+        log(`Add bookmark failed: ${err.message}`, "error");
+        showToast(`Add bookmark failed: ${err.message}`, "error");
       }
     });
   }
   if (el.jumpToPositionBtn) {
-    el.jumpToPositionBtn.addEventListener('click', async () => {
+    el.jumpToPositionBtn.addEventListener("click", async () => {
       if (!activeBookmarksBook) return;
-      const pct = Math.max(0, Math.min(100, Number(el.bookmarkPositionPctInput?.value) || 0));
-      const targetOffset = Math.floor(((activeBookmarksBook.size || 0) * pct) / 100);
+      const pct = Math.max(
+        0,
+        Math.min(100, Number(el.bookmarkPositionPctInput?.value) || 0),
+      );
+      const targetOffset = Math.floor(
+        ((activeBookmarksBook.size || 0) * pct) / 100,
+      );
       try {
         await setBookReadingOffset(activeBookmarksBook.name, targetOffset);
-        showToast(`Set reading position to ${pct}%`, 'success');
+        showToast(`Set reading position to ${pct}%`, "success");
         await refreshActiveBookmarksModal();
       } catch (err) {
-        log(`Set reading position failed: ${err.message}`, 'error');
-        showToast(`Failed to set position: ${err.message}`, 'error');
+        log(`Set reading position failed: ${err.message}`, "error");
+        showToast(`Failed to set position: ${err.message}`, "error");
       }
     });
   }
   if (el.addBookmarkAtPctBtn) {
-    el.addBookmarkAtPctBtn.addEventListener('click', async () => {
+    el.addBookmarkAtPctBtn.addEventListener("click", async () => {
       if (!activeBookmarksBook) return;
-      const pct = Math.max(0, Math.min(100, Number(el.bookmarkPositionPctInput?.value) || 0));
-      const targetOffset = Math.floor(((activeBookmarksBook.size || 0) * pct) / 100);
+      const pct = Math.max(
+        0,
+        Math.min(100, Number(el.bookmarkPositionPctInput?.value) || 0),
+      );
+      const targetOffset = Math.floor(
+        ((activeBookmarksBook.size || 0) * pct) / 100,
+      );
       try {
         await addBookBookmark(activeBookmarksBook.name, targetOffset);
-        showToast(`Added bookmark at ${pct}%`, 'success');
+        showToast(`Added bookmark at ${pct}%`, "success");
         await refreshActiveBookmarksModal();
       } catch (err) {
-        log(`Add bookmark failed: ${err.message}`, 'error');
-        showToast(`Add bookmark failed: ${err.message}`, 'error');
+        log(`Add bookmark failed: ${err.message}`, "error");
+        showToast(`Add bookmark failed: ${err.message}`, "error");
       }
     });
   }
 
   // Keyboard shortcut (Escape to close modals)
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
-      if (el.settingsModal && el.settingsModal.classList.contains('active')) {
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      if (el.settingsModal && el.settingsModal.classList.contains("active")) {
         closeSettingsModal();
       }
-      if (el.deleteModal && el.deleteModal.classList.contains('active')) {
+      if (el.deleteModal && el.deleteModal.classList.contains("active")) {
         closeDeleteModal();
       }
-      if (el.controlsModal && el.controlsModal.classList.contains('active')) {
+      if (el.controlsModal && el.controlsModal.classList.contains("active")) {
         closeControlsModal();
       }
-      if (el.bookmarksModal && el.bookmarksModal.classList.contains('active')) {
+      if (el.bookmarksModal && el.bookmarksModal.classList.contains("active")) {
         closeBookmarksModal();
       }
     }
@@ -2539,134 +2867,144 @@ function initEventListeners() {
 
   // Log drawer
   if (el.logHeader) {
-    el.logHeader.addEventListener('click', (e) => {
+    el.logHeader.addEventListener("click", (e) => {
       if (e.target === el.clearLogBtn) return;
-      el.logBody.classList.toggle('collapsed');
-      el.logToggleIcon.textContent = el.logBody.classList.contains('collapsed') ? '\u25B6' : '\u25BC';
+      el.logBody.classList.toggle("collapsed");
+      el.logToggleIcon.textContent = el.logBody.classList.contains("collapsed")
+        ? "\u25B6"
+        : "\u25BC";
     });
   }
 
   if (el.clearLogBtn) {
-    el.clearLogBtn.addEventListener('click', (e) => {
+    el.clearLogBtn.addEventListener("click", (e) => {
       e.stopPropagation();
-      el.logBody.innerHTML = '';
+      el.logBody.innerHTML = "";
       logCount = 0;
-      el.logCountBadge.textContent = '0';
+      el.logCountBadge.textContent = "0";
     });
   }
 
   // Settings Modal Hardware Control Listeners
   if (el.font16Btn) {
-    el.font16Btn.addEventListener('click', () => setFont(0));
+    el.font16Btn.addEventListener("click", () => setFont(0));
   }
   if (el.font12Btn) {
-    el.font12Btn.addEventListener('click', () => setFont(1));
+    el.font12Btn.addEventListener("click", () => setFont(1));
   }
   if (el.forceRefreshBtn) {
-    el.forceRefreshBtn.addEventListener('click', () => forceRefresh());
+    el.forceRefreshBtn.addEventListener("click", () => forceRefresh());
   }
   if (el.sleepTimeoutSelect) {
-    el.sleepTimeoutSelect.addEventListener('change', (e) => setSleepTimeout(parseInt(e.target.value, 10)));
+    el.sleepTimeoutSelect.addEventListener("change", (e) =>
+      setSleepTimeout(parseInt(e.target.value, 10)),
+    );
   }
 
   // Web Components Event Listeners
-  document.addEventListener('storage-target-change', (e) => {
+  document.addEventListener("storage-target-change", (e) => {
     if (e.detail && e.detail.target !== undefined) {
       setStorageTarget(e.detail.target);
     }
   });
 
-  document.addEventListener('refresh-books', async () => {
+  document.addEventListener("refresh-books", async () => {
     await readDeviceStatus();
     await queryBooksList();
   });
 
-  document.addEventListener('delete-book', (e) => {
+  document.addEventListener("delete-book", (e) => {
     if (e.detail) {
-      openDeleteModal(e.detail.book || { name: e.detail.name, size: e.detail.size, path: e.detail.path });
+      openDeleteModal(
+        e.detail.book || {
+          name: e.detail.name,
+          size: e.detail.size,
+          path: e.detail.path,
+        },
+      );
     }
   });
 
-  document.addEventListener('manage-bookmarks', (e) => {
+  document.addEventListener("manage-bookmarks", (e) => {
     if (e.detail && e.detail.name) {
       openBookmarksModal(e.detail.name, e.detail.size || 0);
     }
   });
 
-  document.addEventListener('file-select', (e) => {
+  document.addEventListener("file-select", (e) => {
     if (e.detail && e.detail.files) {
       handleFilesSelected(e.detail.files);
     }
   });
 
-  document.addEventListener('cancel-upload', () => {
+  document.addEventListener("cancel-upload", () => {
     if (isUploading) {
       cancelUploadRequested = true;
-      log('User requested upload cancellation.', 'warning');
-      showToast('Cancelling upload...', 'warning');
+      log("User requested upload cancellation.", "warning");
+      showToast("Cancelling upload...", "warning");
     }
   });
 
-  document.addEventListener('font-change', (e) => {
+  document.addEventListener("font-change", (e) => {
     if (e.detail && e.detail.font !== undefined) {
       setFont(e.detail.font);
     }
   });
 
-  document.addEventListener('force-refresh', () => {
+  document.addEventListener("force-refresh", () => {
     forceRefresh();
   });
 
-  document.addEventListener('nav-hints-change', (e) => {
+  document.addEventListener("nav-hints-change", (e) => {
     if (e.detail) {
       setNavHints(e.detail.show);
     }
   });
 
-  document.addEventListener('orientation-change', (e) => {
+  document.addEventListener("orientation-change", (e) => {
     if (e.detail && e.detail.rotation !== undefined) {
       sendSetOrientation(e.detail.rotation);
     }
   });
 
-  document.addEventListener('button-invert-change', (e) => {
+  document.addEventListener("button-invert-change", (e) => {
     if (e.detail && e.detail.inverted !== undefined) {
       sendSetButtonInvert(e.detail.inverted);
     }
   });
 
-  document.addEventListener('setting-changed', (e) => {
-    if (e.detail && e.detail.key === 'status_led') {
+  document.addEventListener("setting-changed", (e) => {
+    if (e.detail && e.detail.key === "status_led") {
       sendSetStatusLed(e.detail.value);
     }
   });
 
-  document.addEventListener('sleep-timeout-change', (e) => {
+  document.addEventListener("sleep-timeout-change", (e) => {
     if (e.detail && e.detail.timeout !== undefined) {
       setSleepTimeout(e.detail.timeout);
     }
   });
 
   // Al-Quran Custom Event Listeners
-  document.addEventListener('quran-set-cursor', (e) => {
+  document.addEventListener("quran-set-cursor", (e) => {
     if (e.detail) {
       setQuranCursor(e.detail.surah, e.detail.ayah, e.detail.layer);
     }
   });
 
-  document.addEventListener('quran-set-tilawah', (e) => {
+  document.addEventListener("quran-set-tilawah", (e) => {
     if (e.detail) {
       setQuranCursor(e.detail.surah, e.detail.ayah, e.detail.layer);
     }
   });
 
-  document.addEventListener('quran-set-bookmarks', (e) => {
+  document.addEventListener("quran-set-bookmarks", (e) => {
     if (e.detail && e.detail.bookmarks) {
       setQuranBookmarks(e.detail.bookmarks);
     }
   });
 
-  document.addEventListener('quran-upload-bqm', (e) => {
+  document.addEventListener("quran-upload-bqm", (e) => {
     if (e.detail) {
       const file = e.detail.file || e.detail;
       if (file) {
@@ -2675,7 +3013,7 @@ function initEventListeners() {
     }
   });
 
-  document.addEventListener('quran-request-state', () => {
+  document.addEventListener("quran-request-state", () => {
     requestQuranState();
   });
 }
@@ -2687,7 +3025,7 @@ function init() {
   refreshDomElements();
   const repoUrl = appConfig?.repo || appConfig?.GITHUB_REPO;
   if (repoUrl) {
-    const githubBtn = el.githubBtn || document.getElementById('githubBtn');
+    const githubBtn = el.githubBtn || document.getElementById("githubBtn");
     if (githubBtn) {
       githubBtn.href = repoUrl;
     }
@@ -2698,29 +3036,31 @@ function init() {
   updateStorageTargetUI(1);
 
   // Initialize orientation, button invert, and font from localStorage on modal
-  const modal = document.getElementById('settingsModal') || document.getElementById('deviceSettingsModal');
+  const modal =
+    document.getElementById("settingsModal") ||
+    document.getElementById("deviceSettingsModal");
   if (modal) {
     try {
-      const savedRot = localStorage.getItem('bacain_orientation');
-      if (savedRot !== null && typeof modal.setOrientation === 'function') {
+      const savedRot = localStorage.getItem("bacain_orientation");
+      if (savedRot !== null && typeof modal.setOrientation === "function") {
         modal.setOrientation(parseInt(savedRot, 10));
       }
-      const savedBtnInv = localStorage.getItem('bacain_btn_invert');
-      if (savedBtnInv !== null && typeof modal.setButtonInvert === 'function') {
-        modal.setButtonInvert(savedBtnInv === '1' || savedBtnInv === 'true');
+      const savedBtnInv = localStorage.getItem("bacain_btn_invert");
+      if (savedBtnInv !== null && typeof modal.setButtonInvert === "function") {
+        modal.setButtonInvert(savedBtnInv === "1" || savedBtnInv === "true");
       }
-      const savedStatusLed = localStorage.getItem('bacain_status_led');
-      if (savedStatusLed !== null && typeof modal.setStatusLed === 'function') {
-        modal.setStatusLed(savedStatusLed === '1' || savedStatusLed === 'true');
+      const savedStatusLed = localStorage.getItem("bacain_status_led");
+      if (savedStatusLed !== null && typeof modal.setStatusLed === "function") {
+        modal.setStatusLed(savedStatusLed === "1" || savedStatusLed === "true");
       }
-      const savedSleep = localStorage.getItem('bacain_sleep_timeout');
-      if (savedSleep !== null && typeof modal.setSleepTimeout === 'function') {
+      const savedSleep = localStorage.getItem("bacain_sleep_timeout");
+      if (savedSleep !== null && typeof modal.setSleepTimeout === "function") {
         const timeout = parseInt(savedSleep, 10);
         if (!isNaN(timeout)) {
           modal.setSleepTimeout(timeout);
         }
       }
-      const savedFont = localStorage.getItem('bacain_font');
+      const savedFont = localStorage.getItem("bacain_font");
       if (savedFont !== null) {
         const fontId = parseInt(savedFont, 10);
         if (!isNaN(fontId)) {
@@ -2731,17 +3071,20 @@ function init() {
         updateFontUI(currentFontSize);
       }
     } catch (err) {
-      log(`Failed to restore settings from localStorage: ${err.message}`, 'warning');
+      log(
+        `Failed to restore settings from localStorage: ${err.message}`,
+        "warning",
+      );
     }
   } else {
     updateFontUI(currentFontSize);
   }
 
   registerServiceWorker();
-  log('BacaIn Web Bluetooth PWA initialized.', 'info');
+  log("BacaIn Web Bluetooth PWA initialized.", "info");
 }
 
-if (typeof window !== 'undefined') {
+if (typeof window !== "undefined") {
   window.sendSetOrientation = sendSetOrientation;
   window.sendSetButtonInvert = sendSetButtonInvert;
   window.sendSetStatusLed = sendSetStatusLed;
@@ -2761,4 +3104,4 @@ if (typeof window !== 'undefined') {
   window.unmountQuranBuilder = unmountQuranBuilder;
 }
 
-document.addEventListener('DOMContentLoaded', init);
+document.addEventListener("DOMContentLoaded", init);

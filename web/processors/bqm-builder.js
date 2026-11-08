@@ -596,12 +596,18 @@ export function wrapTextToLines(text, maxCols) {
 // ---------------------------------------------------------------------------
 // 1-Bit Word Sprite Rasterizer (Canvas 2D)
 // ---------------------------------------------------------------------------
+let _sharedRasterCanvas = null;
+
 function getCanvasContext() {
+  if (_sharedRasterCanvas) return _sharedRasterCanvas;
   if (typeof OffscreenCanvas !== 'undefined') {
     try {
       const oc = new OffscreenCanvas(300, 100);
       const ctx = oc.getContext('2d', { willReadFrequently: true });
-      if (ctx) return { canvas: oc, ctx };
+      if (ctx) {
+        _sharedRasterCanvas = { canvas: oc, ctx };
+        return _sharedRasterCanvas;
+      }
     } catch (err) {
       console.warn('OffscreenCanvas init warning:', err.message);
     }
@@ -612,7 +618,10 @@ function getCanvasContext() {
       c.width = 300;
       c.height = 100;
       const ctx = c.getContext('2d', { willReadFrequently: true });
-      if (ctx) return { canvas: c, ctx };
+      if (ctx) {
+        _sharedRasterCanvas = { canvas: c, ctx };
+        return _sharedRasterCanvas;
+      }
     } catch (err) {
       console.warn('Document canvas init warning:', err.message);
     }
@@ -635,8 +644,11 @@ export function rasterizeWordTo1Bit(wordStr, ayahFontSize = 24, scriptId = 0, sc
   const canvasW = Math.min(screenW - 16, Math.max(32, measuredW + 16));
   const canvasH = Math.max(36, ayahFontSize + 16);
 
-  canvas.width = canvasW;
-  canvas.height = canvasH;
+  if (canvas.width < canvasW || canvas.height < canvasH) {
+    canvas.width = Math.max(canvas.width, canvasW);
+    canvas.height = Math.max(canvas.height, canvasH);
+  }
+
 
   ctx.fillStyle = '#FFFFFF';
   ctx.fillRect(0, 0, canvasW, canvasH);
@@ -732,7 +744,7 @@ export async function renderAyahPreviewToCanvas(canvas, options = {}) {
     }
   }
 
-  const ctx = canvas.getContext('2d');
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
   if (!ctx) {
     throw new Error('Canvas 2D rendering context unavailable');
   }
