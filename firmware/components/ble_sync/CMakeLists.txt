@@ -15,4 +15,6 @@ idf_component_register(
         log
         nvs_flash
         status_led
+        board_config
+        mushaf_reader
 )

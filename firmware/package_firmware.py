@@ -7,8 +7,10 @@ Merges ESP32-S3 binaries into a single factory binary.
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
+import shlex
 import shutil
 import struct
 import subprocess
@@ -44,13 +46,13 @@ def parse_args(argv: list | None = None) -> argparse.Namespace:
     parser.add_argument(
         "-o",
         "--output",
-        default="bacain_factory.bin",
-        help="Name of the factory binary file (default: 'bacain_factory.bin')",
+        default=None,
+        help="Name of the factory binary file (default: resolved from boards.json or 'bacain.bin')",
     )
     parser.add_argument(
         "--chip",
-        default="esp32s3",
-        help="ESP chip type (default: 'esp32s3')",
+        default=None,
+        help="ESP chip type (default: resolved from boards.json or 'esp32s3')",
     )
     parser.add_argument(
         "--flash-size",
@@ -62,7 +64,46 @@ def parse_args(argv: list | None = None) -> argparse.Namespace:
         default=None,
         help="Board ID or name from boards/boards.json",
     )
+    parser.add_argument(
+        "--build",
+        action="store_true",
+        help="Compile the project using idf.py before merging binaries",
+    )
+    parser.add_argument(
+        "--clean",
+        action="store_true",
+        help="Perform a clean rebuild (delete build_dir and set-target before building)",
+    )
     return parser.parse_args(argv)
+
+
+def load_boards_catalog() -> list[dict]:
+    boards_json = Path(__file__).parent / "boards" / "boards.json"
+    if boards_json.is_file():
+        try:
+            catalog = json.loads(boards_json.read_text(encoding="utf-8"))
+            return catalog.get("boards", [])
+        except Exception:
+            return []
+    return []
+
+
+def find_board_entry(
+    board_query: str | None,
+    output_name: str | None = None,
+) -> dict | None:
+    boards = load_boards_catalog()
+    if board_query:
+        for b in boards:
+            if board_query in (b.get("id"), b.get("name")):
+                return b
+    if output_name:
+        for b in boards:
+            if output_name in (b.get("output_bin"), b.get("binary")):
+                return b
+    if len(boards) == 1 and not board_query and not output_name:
+        return boards[0]
+    return None
 
 
 def resolve_board_flash_size(
@@ -73,19 +114,9 @@ def resolve_board_flash_size(
     if explicit_flash_size:
         return explicit_flash_size
 
-    boards_json = Path(__file__).parent / "boards" / "boards.json"
-    if boards_json.is_file():
-        catalog = json.loads(boards_json.read_text(encoding="utf-8"))
-        boards = catalog.get("boards", [])
-        for b in boards:
-            if board_query and board_query in (b.get("id"), b.get("name")):
-                if b.get("flash_size"):
-                    return b["flash_size"]
-            if output_name and output_name in (b.get("output_bin"), b.get("binary")):
-                if b.get("flash_size"):
-                    return b["flash_size"]
-        if len(boards) == 1 and boards[0].get("flash_size"):
-            return boards[0]["flash_size"]
+    entry = find_board_entry(board_query, output_name)
+    if entry and entry.get("flash_size"):
+        return entry["flash_size"]
 
     return "8MB"
 
@@ -189,16 +220,72 @@ def resolve_flash_segments(build_dir: Path) -> list[str]:
 def main(argv: list | None = None) -> int:
     args = parse_args(argv)
 
+    board_query = (
+        args.board
+        or os.environ.get("BOARD")
+        or os.environ.get("BOARD_NAME")
+        or "waveshare_154"
+    )
+    board_entry = find_board_entry(board_query)
+    board_id = (board_entry.get("id") if board_entry else None) or board_query
+
+    chip = (
+        args.chip
+        or (board_entry.get("chip") if board_entry else None)
+        or "esp32s3"
+    )
+
+    output_name = (
+        args.output
+        or os.environ.get("FACTORY_BIN")
+        or (board_entry.get("output_bin") if board_entry else None)
+        or "bacain.bin"
+    )
+
+    extra_idf_args = (
+        os.environ.get("EXTRA_IDF_ARGS")
+        or (board_entry.get("extra_idf_args") if board_entry else None)
+        or f"-DBOARD_PROFILE={board_id}"
+    )
+
     build_dir = Path(args.build_dir)
     if not build_dir.is_dir() and (Path(__file__).parent / args.build_dir).is_dir():
         build_dir = Path(__file__).parent / args.build_dir
     build_dir = build_dir.resolve()
 
-    if not build_dir.is_dir():
+    if not args.build and not build_dir.is_dir():
         sys.stderr.write(f"Error: Directory build '{build_dir}' not found.\n")
         return 1
 
-    flash_size = resolve_board_flash_size(args.board, args.output, args.flash_size)
+    if args.build:
+        extra_args_list = shlex.split(extra_idf_args) if extra_idf_args else []
+        board_id_file = build_dir / ".board_id"
+
+        if args.clean:
+            print(f"[package_firmware] Cleaning build directory: {build_dir}")
+            shutil.rmtree(build_dir, ignore_errors=True)
+            build_dir.mkdir(parents=True, exist_ok=True)
+            cmd_target = ["idf.py", "-B", str(build_dir)] + extra_args_list + ["set-target", chip]
+            print(f"[package_firmware] Running: {' '.join(cmd_target)}")
+            subprocess.run(cmd_target, check=True)
+        else:
+            cached_board = None
+            if board_id_file.is_file():
+                cached_board = board_id_file.read_text(encoding="utf-8").strip()
+            if cached_board != board_id:
+                print(f"[package_firmware] Board changed ({cached_board} -> {board_id}), clearing CMakeCache.txt")
+                cache_file = build_dir / "CMakeCache.txt"
+                if cache_file.is_file():
+                    cache_file.unlink()
+
+        cmd_build = ["idf.py", "-B", str(build_dir)] + extra_args_list + ["build"]
+        print(f"[package_firmware] Running: {' '.join(cmd_build)}")
+        subprocess.run(cmd_build, check=True)
+
+        build_dir.mkdir(parents=True, exist_ok=True)
+        board_id_file.write_text(board_id, encoding="utf-8")
+
+    flash_size = resolve_board_flash_size(board_query, output_name, args.flash_size)
     flash_size_bytes = parse_flash_size_bytes(flash_size)
 
     segments = resolve_flash_segments(build_dir)
@@ -207,9 +294,9 @@ def main(argv: list | None = None) -> int:
             adjust_partition_table_for_flash_size(Path(segments[i + 1]), flash_size_bytes)
             break
 
-    factory_bin = build_dir / args.output
+    factory_bin = build_dir / output_name
     cmd = get_esptool_cmd() + [
-        "--chip", args.chip,
+        "--chip", chip,
         "merge_bin",
         "-o", str(factory_bin),
         "--flash_mode", "keep",

@@ -13,6 +13,13 @@ menu "Board & Hardware Configuration"
             bool "Custom / Manual Configuration"
     endchoice
 
+    config BOARD_MUSHAF_ENABLE
+        bool "Enable Mushaf reader (.bqm engine)"
+        default n
+        help
+            Compiles the Mushaf menu, .bqm reader, and independent NVS/RTC
+            Tilawah state. Enabled via sdkconfig.mushaf overlay only.
+
     config BOARD_DISPLAY_WIDTH
         int "Display width in pixels"
         default 200

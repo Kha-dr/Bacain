@@ -17,6 +17,7 @@
 #include "esp_log.h"
 #include "esp_err.h"
 #include "esp_idf_version.h"
+#include "esp_vfs_fat.h"
 #include "nvs_flash.h"
 #include "nvs.h"
 
@@ -54,6 +55,12 @@ extern bool reader_ui_get_show_nav_hints(void);
 extern void reader_ui_set_rotation(uint8_t rotation);
 extern void button_set_inverted(bool inverted);
 #include "status_led.h"
+#include "board_config.h"
+#if CONFIG_BOARD_MUSHAF_ENABLE || BOARD_MUSHAF_ENABLE
+#include "mushaf_reader.h"
+#endif
+
+_Static_assert(sizeof(ble_sync_config_response_t) == 15, "ble_sync_config_response_t must be 15 bytes");
 
 static const char *TAG = "ble_sync";
 
@@ -109,6 +116,7 @@ static bool             s_sleep_timeout_loaded = false;
 static FILE    *s_upload_fp = NULL;
 static bool     s_is_uploading = false;
 static bool     s_upload_error = false;
+static uint8_t  s_upload_err_status = BLE_SYNC_STATUS_OK;
 static uint32_t s_bytes_received = 0;
 static uint32_t s_expected_file_size = 0;
 static uint16_t s_expected_seq = 0;
@@ -479,6 +487,7 @@ static void handle_cmd_start_upload(const ble_sync_cmd_msg_t *cmd)
 
     sanitize_filename(cmd->filename, s_upload_filename, sizeof(s_upload_filename));
     s_expected_file_size = cmd->file_size;
+    s_upload_err_status = BLE_SYNC_STATUS_OK;
     s_bytes_received = 0;
     s_expected_seq = 0;
     s_upload_error = false;
@@ -487,6 +496,20 @@ static void handle_cmd_start_upload(const ble_sync_cmd_msg_t *cmd)
 
     char fpath[256];
     snprintf(fpath, sizeof(fpath), "%s/%s", books_dir, s_upload_filename);
+
+    unlink(fpath);
+
+    uint64_t total_bytes = 0;
+    uint64_t free_bytes = 0;
+    const char *mount_path = (s_storage_target == 0 ? "/sdcard" : "/spiflash");
+    esp_vfs_fat_info(mount_path, &total_bytes, &free_bytes);
+    if (cmd->file_size > 0 && free_bytes > 0 && ((uint64_t)cmd->file_size + 16384ULL) > free_bytes) {
+        ESP_LOGE(TAG, "Upload rejected: file size %u B exceeds free space %llu B", (unsigned)cmd->file_size, (unsigned long long)free_bytes);
+        s_is_uploading = false;
+        uint8_t resp[2] = { BLE_SYNC_OP_START_UPLOAD, BLE_SYNC_STATUS_SIZE_ERR };
+        ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
+        return;
+    }
 
     s_upload_fp = fopen(fpath, "wb");
     uint8_t status = BLE_SYNC_STATUS_OK;
@@ -518,6 +541,7 @@ static void handle_cmd_finish_upload(void)
         while ((item = (uint8_t *)xRingbufferReceiveUpTo(s_data_ringbuf, &item_sz, 0, 4096)) != NULL) {
             if (fwrite(item, 1, item_sz, s_upload_fp) != item_sz) {
                 ESP_LOGE(TAG, "fwrite failed while draining ringbuffer");
+                if (s_upload_err_status == BLE_SYNC_STATUS_OK) s_upload_err_status = BLE_SYNC_STATUS_WRITE_ERR;
                 s_upload_error = true;
             }
             vRingbufferReturnItem(s_data_ringbuf, item);
@@ -536,13 +560,14 @@ static void handle_cmd_finish_upload(void)
     if (s_expected_file_size > 0 && s_bytes_received != s_expected_file_size) {
         ESP_LOGE(TAG, "Upload size mismatch: got %u, expected %u",
                  (unsigned)s_bytes_received, (unsigned)s_expected_file_size);
+        if (s_upload_err_status == BLE_SYNC_STATUS_OK) s_upload_err_status = BLE_SYNC_STATUS_SIZE_ERR;
         s_upload_error = true;
     }
 
     uint8_t storage_err = BLE_SYNC_STATUS_OK;
     const char *books_dir = ble_sync_get_books_dir(&storage_err);
 
-    uint8_t status = s_upload_error ? BLE_SYNC_STATUS_ERROR : BLE_SYNC_STATUS_OK;
+    uint8_t status = s_upload_error ? (s_upload_err_status != BLE_SYNC_STATUS_OK ? s_upload_err_status : BLE_SYNC_STATUS_ERROR) : BLE_SYNC_STATUS_OK;
     if (storage_err != BLE_SYNC_STATUS_OK) {
         status = BLE_SYNC_STATUS_STORAGE_ERR;
     }
@@ -554,7 +579,36 @@ static void handle_cmd_finish_upload(void)
         ESP_LOGW(TAG, "Deleted corrupted/incomplete file on error: %s", fpath);
     }
 
-    uint8_t resp[2] = { BLE_SYNC_OP_FINISH_UPLOAD, status };
+#if CONFIG_BOARD_MUSHAF_ENABLE || BOARD_MUSHAF_ENABLE
+    if (!s_upload_error && strcasecmp(s_upload_filename, "mushaf.bqm") == 0) {
+        mushaf_reader_init(mushaf_reader_get_state());
+        if (!mushaf_reader_has_bqm()) {
+            ESP_LOGE(TAG, "Uploaded %s failed BQM header validation", s_upload_filename);
+            if (s_upload_err_status == BLE_SYNC_STATUS_OK) s_upload_err_status = BLE_SYNC_STATUS_BQM_INVALID;
+            s_upload_error = true;
+            if (books_dir != NULL) {
+                char fpath[256];
+                snprintf(fpath, sizeof(fpath), "%s/%s", books_dir, s_upload_filename);
+                unlink(fpath);
+                ESP_LOGW(TAG, "Deleted corrupted/incomplete file on error: %s", fpath);
+            }
+        }
+    }
+#endif
+
+    status = s_upload_error ? (s_upload_err_status != BLE_SYNC_STATUS_OK ? s_upload_err_status : BLE_SYNC_STATUS_ERROR) : BLE_SYNC_STATUS_OK;
+    if (storage_err != BLE_SYNC_STATUS_OK) {
+        status = BLE_SYNC_STATUS_STORAGE_ERR;
+    }
+
+    uint8_t resp[6] = {
+        BLE_SYNC_OP_FINISH_UPLOAD,
+        status,
+        (uint8_t)(s_bytes_received & 0xFF),
+        (uint8_t)((s_bytes_received >> 8) & 0xFF),
+        (uint8_t)((s_bytes_received >> 16) & 0xFF),
+        (uint8_t)((s_bytes_received >> 24) & 0xFF)
+    };
     ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
 
     ESP_LOGI(TAG, "Upload finished: %u bytes received, status=%d",
@@ -642,6 +696,7 @@ static void handle_cmd_abort_upload(void)
     s_expected_seq = 0;
     s_upload_error = false;
 
+    s_upload_err_status = BLE_SYNC_STATUS_OK;
     uint8_t resp[2] = { BLE_SYNC_OP_ABORT_UPLOAD, BLE_SYNC_STATUS_OK };
     ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
 
@@ -884,6 +939,7 @@ static void ble_sync_worker_task(void *pvParameters)
                     if (written != item_sz) {
                         ESP_LOGE(TAG, "fwrite failed: written %u != %u",
                                  (unsigned)written, (unsigned)item_sz);
+                        if (s_upload_err_status == BLE_SYNC_STATUS_OK) s_upload_err_status = BLE_SYNC_STATUS_WRITE_ERR;
                         s_upload_error = true;
                     }
                     vRingbufferReturnItem(s_data_ringbuf, item);
@@ -938,6 +994,96 @@ static int ble_sync_control_access_cb(uint16_t conn_handle, uint16_t attr_handle
     memset(&cmd, 0, sizeof(cmd));
 
     switch (opcode) {
+    case BLE_SYNC_OP_GET_MUSHAF_STATE: {
+#if CONFIG_BOARD_MUSHAF_ENABLE || BOARD_MUSHAF_ENABLE
+        const mushaf_state_t *qst = mushaf_reader_get_state();
+        uint8_t resp[40];
+        memset(resp, 0, sizeof(resp));
+        resp[0] = BLE_SYNC_OP_GET_MUSHAF_STATE;
+        resp[1] = BLE_SYNC_STATUS_OK;
+        if (qst != NULL) {
+            resp[2] = qst->started ? 1 : 0;
+            resp[3] = qst->surah;
+            resp[4] = (uint8_t)(qst->ayah & 0xFF);
+            resp[5] = (uint8_t)((qst->ayah >> 8) & 0xFF);
+            resp[6] = qst->layer;
+            resp[7] = qst->bookmark_count;
+            for (uint8_t i = 0; i < qst->bookmark_count && i < MUSHAF_MAX_BOOKMARKS; i++) {
+                size_t base = 8 + (size_t)i * 4;
+                resp[base + 0] = qst->bookmarks[i].surah;
+                resp[base + 1] = (uint8_t)(qst->bookmarks[i].ayah & 0xFF);
+                resp[base + 2] = (uint8_t)((qst->bookmarks[i].ayah >> 8) & 0xFF);
+                resp[base + 3] = qst->bookmarks[i].juz;
+            }
+        }
+        ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
+#else
+        uint8_t resp[2] = { BLE_SYNC_OP_GET_MUSHAF_STATE, BLE_SYNC_STATUS_NOT_SUPPORTED };
+        ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
+#endif
+        break;
+    }
+
+    case BLE_SYNC_OP_SET_MUSHAF_STATE: {
+#if CONFIG_BOARD_MUSHAF_ENABLE || BOARD_MUSHAF_ENABLE
+        if (copied < 2) {
+            uint8_t resp[2] = { BLE_SYNC_OP_SET_MUSHAF_STATE, BLE_SYNC_STATUS_ERROR };
+            ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
+            break;
+        }
+        uint8_t sub = buf[1];
+        if (sub == 0x01) {
+            if (copied < 6) {
+                uint8_t resp[2] = { BLE_SYNC_OP_SET_MUSHAF_STATE, BLE_SYNC_STATUS_ERROR };
+                ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
+                break;
+            }
+            uint8_t surah = buf[2];
+            uint16_t ayah = (uint16_t)buf[3] | ((uint16_t)buf[4] << 8);
+            uint8_t layer = buf[5];
+            esp_err_t err = mushaf_reader_set_cursor(surah, ayah, layer);
+            if (err == ESP_OK && s_event_cb) {
+                s_event_cb(BLE_SYNC_EVT_REQUEST_REFRESH, NULL, s_event_cb_arg);
+            }
+            uint8_t resp[2] = { BLE_SYNC_OP_SET_MUSHAF_STATE, (err == ESP_OK) ? BLE_SYNC_STATUS_OK : BLE_SYNC_STATUS_ERROR };
+            ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
+        } else if (sub == 0x02) {
+            if (copied < 3) {
+                uint8_t resp[2] = { BLE_SYNC_OP_SET_MUSHAF_STATE, BLE_SYNC_STATUS_ERROR };
+                ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
+                break;
+            }
+            uint8_t count = buf[2];
+            if (count > MUSHAF_MAX_BOOKMARKS || copied < (uint16_t)(3 + count * 4)) {
+                uint8_t resp[2] = { BLE_SYNC_OP_SET_MUSHAF_STATE, BLE_SYNC_STATUS_ERROR };
+                ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
+                break;
+            }
+            mushaf_bookmark_t list[MUSHAF_MAX_BOOKMARKS];
+            memset(list, 0, sizeof(list));
+            for (uint8_t i = 0; i < count; i++) {
+                const uint8_t *p = &buf[3 + i * 4];
+                list[i].surah = p[0];
+                list[i].ayah = (uint16_t)p[1] | ((uint16_t)p[2] << 8);
+                list[i].juz = p[3];
+            }
+            esp_err_t err = mushaf_reader_set_bookmarks(list, count);
+            if (err == ESP_OK && s_event_cb) {
+                s_event_cb(BLE_SYNC_EVT_REQUEST_REFRESH, NULL, s_event_cb_arg);
+            }
+            uint8_t resp[2] = { BLE_SYNC_OP_SET_MUSHAF_STATE, (err == ESP_OK) ? BLE_SYNC_STATUS_OK : BLE_SYNC_STATUS_ERROR };
+            ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
+        } else {
+            uint8_t resp[2] = { BLE_SYNC_OP_SET_MUSHAF_STATE, BLE_SYNC_STATUS_ERROR };
+            ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
+        }
+#else
+        uint8_t resp[2] = { BLE_SYNC_OP_SET_MUSHAF_STATE, BLE_SYNC_STATUS_NOT_SUPPORTED };
+        ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
+#endif
+        break;
+    }
+
     case BLE_SYNC_OP_LIST_BOOKS:
         cmd.type = CMD_LIST_BOOKS;
         xQueueSend(s_cmd_queue, &cmd, pdMS_TO_TICKS(50));
@@ -1206,7 +1352,11 @@ static int ble_sync_control_access_cb(uint16_t conn_handle, uint16_t attr_handle
         uint8_t status_led = status_led_is_enabled() ? 1 : 0;
         uint8_t storage_target = (s_storage_target == STORAGE_TARGET_FLASH) ? 1 : 0;
 
-        uint8_t resp[10] = {
+        uint8_t caps = 0;
+#if CONFIG_BOARD_MUSHAF_ENABLE || BOARD_MUSHAF_ENABLE
+        caps |= BLE_SYNC_CAP_MUSHAF;
+#endif
+        uint8_t resp[15] = {
             BLE_SYNC_OP_GET_CONFIG,
             BLE_SYNC_STATUS_OK,
             pwa_font_id,
@@ -1216,7 +1366,12 @@ static int ble_sync_control_access_cb(uint16_t conn_handle, uint16_t attr_handle
             status_led,
             storage_target,
             (uint8_t)(sleep_timeout & 0xFF),
-            (uint8_t)(sleep_timeout >> 8)
+            (uint8_t)(sleep_timeout >> 8),
+            caps,
+            (uint8_t)(BOARD_DISPLAY_WIDTH & 0xFF),
+            (uint8_t)((BOARD_DISPLAY_WIDTH >> 8) & 0xFF),
+            (uint8_t)(BOARD_DISPLAY_HEIGHT & 0xFF),
+            (uint8_t)((BOARD_DISPLAY_HEIGHT >> 8) & 0xFF)
         };
         ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
         break;
@@ -1260,14 +1415,16 @@ static int ble_sync_data_access_cb(uint16_t conn_handle, uint16_t attr_handle,
 
     if (seq != s_expected_seq) {
         ESP_LOGE(TAG, "Seq mismatch: expected %u, got %u", s_expected_seq, seq);
+        if (s_upload_err_status == BLE_SYNC_STATUS_OK) s_upload_err_status = BLE_SYNC_STATUS_SEQ_ERR;
         s_upload_error = true;
     }
     s_expected_seq = seq + 1;
 
     if (payload_len > 0) {
-        BaseType_t sent = xRingbufferSend(s_data_ringbuf, payload, payload_len, pdMS_TO_TICKS(100));
+        BaseType_t sent = xRingbufferSend(s_data_ringbuf, payload, payload_len, pdMS_TO_TICKS(250));
         if (sent != pdTRUE) {
             ESP_LOGE(TAG, "Ringbuffer full, dropped %u bytes", (unsigned)payload_len);
+            if (s_upload_err_status == BLE_SYNC_STATUS_OK) s_upload_err_status = BLE_SYNC_STATUS_OVERFLOW;
             s_upload_error = true;
             return BLE_ATT_ERR_INSUFFICIENT_RES;
         }
@@ -1632,6 +1789,7 @@ void ble_sync_stop(void)
     s_bytes_received = 0;
     s_expected_file_size = 0;
     s_expected_seq = 0;
+    s_upload_err_status = BLE_SYNC_STATUS_OK;
     s_current_mtu = 23;
 
     if (s_data_ringbuf != NULL) {

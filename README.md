@@ -12,7 +12,7 @@ Mini E-reader firmware for ESP32-S3 e-paper devices with PWA management via Web 
 Developed on [Waveshare ESP32-S3-ePaper-1.54](https://github.com/waveshareteam/ESP32-S3-ePaper-1.54). See [BOARDS.md](firmware/BOARDS.md) for pinouts and supported board.
 
 > [!note]
-> As i don't want the code are hardware/board dependent, the codebase are configureable ([See BOARDS.md](firmware/BOARDS.md)). Pull request are welcome.
+> As i don't want the code to be lock for spesific hardware/board, the codebase are configureable ([See BOARDS.md](firmware/BOARDS.md)). although i haven`t test it to other board yet, But pull request are welcome.
 
 ## Features
 
@@ -20,6 +20,7 @@ Developed on [Waveshare ESP32-S3-ePaper-1.54](https://github.com/waveshareteam/E
 - **Formats**: Reads `.txt`, `.epub`, and `.fb2` files.
 - **Storage**: Internal flash with optional MicroSD.
 - **Power**: 20s auto-sleep, instant page turn on wake.
+- **Al-Quran (Optional)**: Offline Mushaf reader (see [firmware/Mushaf_Reader.md](firmware/Mushaf_Reader.md)).
 
 ## Controls
 

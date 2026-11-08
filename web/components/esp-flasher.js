@@ -847,7 +847,7 @@ class EspWebFlasher extends HTMLElement {
     );
 
     const factoryAssets = binAssets.filter((a) =>
-      /^bacain_.*factory\.bin$/i.test(a.name),
+      /^bacain_.*\.bin$/i.test(a.name),
     );
     this.availableReleaseAssets =
       factoryAssets.length > 0 ? factoryAssets : binAssets;

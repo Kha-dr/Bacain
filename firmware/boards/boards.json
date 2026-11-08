@@ -12,7 +12,23 @@
         "controller": "SSD1681"
       },
       "config_header": "boards/waveshare_154/board_def.h",
-      "output_bin": "bacain_waveshare_154_factory.bin",
+      "output_bin": "bacain_waveshare_154.bin",
+      "status": "supported"
+    },
+    {
+      "id": "waveshare_154_mushaf",
+      "name": "Waveshare ESP32-S3-ePaper-1.54 (Mushaf Edition)",
+      "chip": "esp32s3",
+      "flash_size": "8MB",
+      "display": {
+        "width": 200,
+        "height": 200,
+        "rotation": 0,
+        "controller": "SSD1681"
+      },
+      "config_header": "boards/waveshare_154/board_def.h",
+      "extra_idf_args": "-DBOARD_PROFILE=waveshare_154 -DBOARD_MUSHAF_ENABLE=1",
+      "output_bin": "bacain_waveshare_154_mushaf.bin",
       "status": "supported"
     }
   ]

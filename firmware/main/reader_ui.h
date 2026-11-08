@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include "board_config.h"
+#include <stdbool.h>
 #include "esp_err.h"
 #include "GUI_Paint.h"
 #include "fonts.h"
@@ -24,12 +26,21 @@ typedef enum {
     VIEW_BLE_SYNC,
     VIEW_BOOKMARKS,
     VIEW_NAV_HINTS,
+#if CONFIG_BOARD_MUSHAF_ENABLE || BOARD_MUSHAF_ENABLE
+    VIEW_MUSHAF_MENU,
+    VIEW_MUSHAF_READING,
+    VIEW_MUSHAF_JUMP,
+    VIEW_MUSHAF_BOOKMARKS,
+#endif
 } reader_view_t;
 
 typedef enum {
     MENU_ACTION_NONE = 0,
     MENU_ACTION_RESUME,
     MENU_ACTION_BOOK_LIST,
+#if CONFIG_BOARD_MUSHAF_ENABLE || BOARD_MUSHAF_ENABLE
+    MENU_ACTION_MUSHAF,
+#endif
     MENU_ACTION_TOGGLE_FONT,
     MENU_ACTION_BLE_SYNC,
     MENU_ACTION_NAV_HINTS,

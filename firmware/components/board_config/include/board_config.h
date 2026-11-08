@@ -330,6 +330,19 @@ extern "C" {
 #endif
 #endif
 
+#ifndef BOARD_MUSHAF_ENABLE
+#ifdef CONFIG_BOARD_MUSHAF_ENABLE
+#define BOARD_MUSHAF_ENABLE         CONFIG_BOARD_MUSHAF_ENABLE
+#else
+#define BOARD_MUSHAF_ENABLE         0
+#endif
+#endif
+#if BOARD_MUSHAF_ENABLE && !defined(CONFIG_BOARD_MUSHAF_ENABLE)
+#define CONFIG_BOARD_MUSHAF_ENABLE  1
+#elif !defined(CONFIG_BOARD_MUSHAF_ENABLE)
+#define CONFIG_BOARD_MUSHAF_ENABLE  0
+#endif
+
 #ifdef __cplusplus
 }
 #endif

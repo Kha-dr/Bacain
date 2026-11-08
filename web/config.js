@@ -30,7 +30,10 @@
         SET_ROTATION: 0x16,
         SET_BUTTON_INVERT: 0x17,
         SET_STATUS_LED: 0x18,
-        GET_CONFIG: 0x19
+        GET_CONFIG: 0x19,
+        GET_MUSHAF_STATE: 0x20,
+        SET_MUSHAF_STATE: 0x21,
+        CAP_MUSHAF: 0x01
       }
     },
     storage: {

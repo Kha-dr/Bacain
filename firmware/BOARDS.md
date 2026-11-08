@@ -13,6 +13,9 @@ The firmware uses a modular board configuration architecture to support multiple
 | :-------------- | :----------------------------- | :-------------------------- | :----------------------------- | :--------------------------------------------------------------------- | :--------------------------------------- | :----------------------------- |
 | `waveshare_154` | Waveshare ESP32-S3-ePaper-1.54 | ESP32-S3 (Xtensa dual-core) | 8MB Quad SPI Flash, 512KB SRAM | 1.54" E-Paper (SSD1681), 200x200 px, 1-bit B/W, 0 deg default rotation | UP / BOOT (GPIO 0), DOWN / PWR (GPIO 18) | Official / Supported (Default) |
 
+> [!Important]
+> The code is made to acomodate for the flash storage to be as dynamic as posible. Handled by [package_firmware.py](./package_firmware.py) as it check the board flash storage value define at [boards.json](./boards/boards.json) to modify the [partition](./partitions.csv) for the combined binary
+
 ---
 
 ## 2. Board Configuration Architecture
@@ -99,7 +102,7 @@ Add a JSON record for the new board in `firmware/boards/boards.json`:
     "height": 200,
     "rotation": 0
   },
-  "binary": "bacain_<board_id>_factory.bin",
+  "output_bin": "bacain_<board_id>.bin",
   "status": "community"
 }
 ```
