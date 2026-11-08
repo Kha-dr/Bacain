@@ -57,7 +57,7 @@ jobs:
           if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
             MATRIX_JSON=$(jq -nc --arg id "$INPUT_BOARD_ID" --arg fsize "$INPUT_FLASH_SIZE" --arg args "$INPUT_EXTRA_ARGS" --arg bin "$INPUT_OUTPUT_BIN" '[{id: $id, chip: "esp32s3", flash_size: $fsize, output_bin: $bin, extra_args: $args}]')
           else
-            MATRIX_JSON=$(jq -c '[.boards[] | {id: .id, name: .name, chip: .chip, flash_size: .flash_size, output_bin: .output_bin, extra_args: ("-DCONFIG_BOARD_PROFILE_" + (.id | ascii_upcase) + "=y")}]' firmware/boards/boards.json)
+            MATRIX_JSON=$(jq -c '[.boards[] | {id: .id, name: .name, chip: .chip, flash_size: .flash_size, output_bin: .output_bin, extra_args: (.extra_idf_args // ("-DCONFIG_BOARD_PROFILE_" + (.id | ascii_upcase) + "=y"))}]' firmware/boards/boards.json)
           fi
           echo "matrix={\"board\":$MATRIX_JSON}" >> "$GITHUB_OUTPUT"
 
@@ -93,7 +93,7 @@ jobs:
           if [ -f "$IDF_PATH/export.sh" ]; then
             . "$IDF_PATH/export.sh"
           fi
-          idf.py set-target "${CHIP_TARGET}"
+          idf.py set-target "${CHIP_TARGET}" ${EXTRA_IDF_ARGS}
           idf.py build ${EXTRA_IDF_ARGS}
 
       - name: Merge Factory Binary

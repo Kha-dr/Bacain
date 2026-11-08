@@ -23,7 +23,20 @@ services:
     volumes:
       - ..:/project
     command: >
-      bash -c "rm -rf /project/build && idf.py -B /project/build set-target esp32s3 && idf.py -B /project/build build $${EXTRA_IDF_ARGS} && python3 package_firmware.py /project/build -o \"$${FACTORY_BIN}\" --board \"$${BOARD_NAME}\""
+      bash -c "rm -rf /project/build && idf.py -B /project/build $${EXTRA_IDF_ARGS} set-target esp32s3 && idf.py -B /project/build $${EXTRA_IDF_ARGS} build && python3 package_firmware.py /project/build -o \"$${FACTORY_BIN}\" --board \"$${BOARD_NAME}\""
+
+  alquran:
+    image: espressif/idf:v5.3.1
+    container_name: bacain-firmware-alquran-builder
+    working_dir: /project/firmware
+    environment:
+      - EXTRA_IDF_ARGS=-DSDKCONFIG_DEFAULTS=sdkconfig.defaults;sdkconfig.alquran
+      - FACTORY_BIN=bacain_waveshare_154_alquran_factory.bin
+      - BOARD_NAME=Waveshare ESP32-S3-ePaper-1.54 (Al-Quran Edition)
+    volumes:
+      - ..:/project
+    command: >
+      bash -c "if [ ! -f /project/build/CMakeCache.txt ] || ! grep -q 'CONFIG_BOARD_ALQURAN_ENABLE=y' /project/firmware/sdkconfig 2>/dev/null; then rm -rf /project/build /project/firmware/sdkconfig && idf.py -B /project/build \"$${EXTRA_IDF_ARGS}\" set-target esp32s3; fi && idf.py -B /project/build \"$${EXTRA_IDF_ARGS}\" build && python3 package_firmware.py /project/build -o \"$${FACTORY_BIN}\" --board \"$${BOARD_NAME}\""
 
   flash:
     image: espressif/idf:v5.3.1

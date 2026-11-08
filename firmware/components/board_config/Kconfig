@@ -13,6 +13,13 @@ menu "Board & Hardware Configuration"
             bool "Custom / Manual Configuration"
     endchoice
 
+    config BOARD_ALQURAN_ENABLE
+        bool "Enable Al-Quran reader (.bqm engine)"
+        default n
+        help
+            Compiles the Al-Quran menu, .bqm reader, and independent NVS/RTC
+            Tilawah state. Enabled via sdkconfig.alquran overlay only.
+
     config BOARD_DISPLAY_WIDTH
         int "Display width in pixels"
         default 200

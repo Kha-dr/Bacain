@@ -14,6 +14,22 @@
       "config_header": "boards/waveshare_154/board_def.h",
       "output_bin": "bacain_waveshare_154_factory.bin",
       "status": "supported"
+    },
+    {
+      "id": "waveshare_154_alquran",
+      "name": "Waveshare ESP32-S3-ePaper-1.54 (Al-Quran Edition)",
+      "chip": "esp32s3",
+      "flash_size": "8MB",
+      "display": {
+        "width": 200,
+        "height": 200,
+        "rotation": 0,
+        "controller": "SSD1681"
+      },
+      "config_header": "boards/waveshare_154/board_def.h",
+      "extra_idf_args": "-DCONFIG_BOARD_PROFILE_WAVESHARE_154=y -DSDKCONFIG_DEFAULTS=sdkconfig.defaults;sdkconfig.alquran",
+      "output_bin": "bacain_waveshare_154_alquran_factory.bin",
+      "status": "supported"
     }
   ]
 }
