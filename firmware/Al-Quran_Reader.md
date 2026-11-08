@@ -16,17 +16,21 @@ Arabic script requires complex contextual glyph shaping and ligatures that are h
 Build the factory binary with Docker Compose:
 
 ```bash
-docker compose -f firmware/compose.yml run --rm alquran
+# From repository root:
+docker compose -f firmware/compose.yml run --rm -e BOARD=waveshare_154_alquran firmware
+
+# Or inside firmware/:
+BOARD=waveshare_154_alquran docker compose run --rm firmware
 ```
 
-Flash the generated factory binary (`firmware/build/bacain_waveshare_154_alquran_factory.bin`) at offset `0x0`:
+Flash the generated factory binary (`firmware/build/bacain_waveshare_154_alquran.bin`) at offset `0x0`:
 
 ```bash
 # Windows
-esptool.py -p COM3 -b 460800 --chip esp32s3 write_flash 0x0 build/bacain_waveshare_154_alquran_factory.bin
+esptool.py -p COM3 -b 460800 --chip esp32s3 write_flash 0x0 build/bacain_waveshare_154_alquran.bin
 
 # Linux / macOS
-esptool.py -p /dev/ttyACM0 -b 460800 --chip esp32s3 write_flash 0x0 build/bacain_waveshare_154_alquran_factory.bin
+esptool.py -p /dev/ttyACM0 -b 460800 --chip esp32s3 write_flash 0x0 build/bacain_waveshare_154_alquran.bin
 ```
 
 Binaries can also be flashed via the browser at [bacain.khadr.dev/flasher.html](https://bacain.khadr.dev/flasher.html).

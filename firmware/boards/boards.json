@@ -12,7 +12,7 @@
         "controller": "SSD1681"
       },
       "config_header": "boards/waveshare_154/board_def.h",
-      "output_bin": "bacain_waveshare_154_factory.bin",
+      "output_bin": "bacain_waveshare_154.bin",
       "status": "supported"
     },
     {
@@ -27,8 +27,8 @@
         "controller": "SSD1681"
       },
       "config_header": "boards/waveshare_154/board_def.h",
-      "extra_idf_args": "-DCONFIG_BOARD_PROFILE_WAVESHARE_154=y -DSDKCONFIG_DEFAULTS=sdkconfig.defaults;sdkconfig.alquran",
-      "output_bin": "bacain_waveshare_154_alquran_factory.bin",
+      "extra_idf_args": "-DBOARD_PROFILE=waveshare_154 -DCONFIG_BOARD_ALQURAN_ENABLE=y",
+      "output_bin": "bacain_waveshare_154_alquran.bin",
       "status": "supported"
     }
   ]

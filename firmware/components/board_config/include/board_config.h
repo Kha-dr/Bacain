@@ -330,6 +330,19 @@ extern "C" {
 #endif
 #endif
 
+#ifndef BOARD_ALQURAN_ENABLE
+#ifdef CONFIG_BOARD_ALQURAN_ENABLE
+#define BOARD_ALQURAN_ENABLE        CONFIG_BOARD_ALQURAN_ENABLE
+#else
+#define BOARD_ALQURAN_ENABLE        0
+#endif
+#endif
+#if BOARD_ALQURAN_ENABLE && !defined(CONFIG_BOARD_ALQURAN_ENABLE)
+#define CONFIG_BOARD_ALQURAN_ENABLE 1
+#elif !defined(CONFIG_BOARD_ALQURAN_ENABLE)
+#define CONFIG_BOARD_ALQURAN_ENABLE 0
+#endif
+
 #ifdef __cplusplus
 }
 #endif

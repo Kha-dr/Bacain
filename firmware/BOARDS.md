@@ -99,7 +99,7 @@ Add a JSON record for the new board in `firmware/boards/boards.json`:
     "height": 200,
     "rotation": 0
   },
-  "binary": "bacain_<board_id>_factory.bin",
+  "output_bin": "bacain_<board_id>.bin",
   "status": "community"
 }
 ```

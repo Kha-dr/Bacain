@@ -3,6 +3,7 @@
 
 #include "sdkconfig.h"
 #include <stdbool.h>
+#include "board_config.h"
 #include <stdint.h>
 #include "esp_err.h"
 

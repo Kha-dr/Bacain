@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include "board_config.h"
+#include <stdbool.h>
 #include "esp_err.h"
 #include "GUI_Paint.h"
 #include "fonts.h"

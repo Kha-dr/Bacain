@@ -2,6 +2,7 @@
 #define VIEW_QURAN_H
 
 #include "sdkconfig.h"
+#include "board_config.h"
 
 #if CONFIG_BOARD_ALQURAN_ENABLE
 

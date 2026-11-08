@@ -37,14 +37,24 @@ Navigate to **Board & Hardware Configuration**:
 
 ### B. Dynamic CI Multi-Board Matrix
 
-CI dynamically parses `firmware/boards/boards.json` to generate the build matrix. For each cataloged board profile, CI sets `CONFIG_BOARD_PROFILE_<ID>=y`, compiles the project, and packages the release factory binary. Adding a board entry to `boards.json` automatically enables CI builds for that target without workflow changes.
+CI dynamically parses `firmware/boards/boards.json` to generate the build matrix. For each cataloged board profile, CI sets `-DBOARD_PROFILE=<id>`, compiles the project, and packages the release factory binary. Adding a board entry to `boards.json` automatically enables CI builds for that target without workflow changes.
 
 ### C. Environment Variables in Docker Compose
 
-Build custom hardware configurations without modifying source files:
+Build any board cataloged in `firmware/boards/boards.json` by specifying `BOARD=<id>`:
 
 ```bash
-EXTRA_IDF_ARGS="-DBOARD_DISPLAY_WIDTH=250" FACTORY_BIN="bacain_custom_factory.bin" docker compose run --rm firmware
+# Build standard board (waveshare_154)
+docker compose run --rm firmware
+
+# Build Al-Quran Edition
+BOARD=waveshare_154_alquran docker compose run --rm firmware
+```
+
+You can also override build arguments or factory binary filenames directly without modifying source files:
+
+```bash
+EXTRA_IDF_ARGS="-DBOARD_DISPLAY_WIDTH=250" FACTORY_BIN="bacain_custom.bin" docker compose run --rm firmware
 ```
 
 ### D. Adding or Customizing Board Definitions (`boards.json` & `board_def.h`)
@@ -92,7 +102,7 @@ To add a permanent board profile under `firmware/boards/` instead of passing CLI
        "controller": "SSD1681"
      },
      "config_header": "boards/custom_213/board_def.h",
-     "output_bin": "bacain_custom_213_factory.bin",
+     "output_bin": "bacain_custom_213.bin",
      "status": "supported"
    }
    ```
@@ -102,7 +112,7 @@ To add a permanent board profile under `firmware/boards/` instead of passing CLI
 
 ## 3. Building & Packaging Binaries
 
-The build generates a single factory binary per board (`bacain_<board_id>_factory.bin`) flashed directly at offset `0x0`.
+The build generates a single factory binary per board (`bacain_<board_id>.bin`) flashed directly at offset `0x0`.
 
 ### Option A: Using Docker Compose (Recommended)
 
@@ -113,20 +123,36 @@ cd firmware
 docker compose run --rm firmware
 ```
 
-The `firmware` service in `compose.yml` automatically executes incremental compilation and packaging without manual command overrides:
+Any board defined in `firmware/boards/boards.json` can be built directly by passing its `id` via `BOARD=<id>`:
+
+```bash
+# Build Al-Quran Edition (inside firmware/)
+BOARD=waveshare_154_alquran docker compose run --rm firmware
+
+# Or from repository root:
+docker compose -f firmware/compose.yml run --rm -e BOARD=waveshare_154_alquran firmware
+```
+
+The `firmware` service in `compose.yml` automatically executes incremental compilation and packaging:
 
 1. Runs the `espressif/idf:v5.3.1` container.
-2. Compiles the project incrementally: `idf.py -B /project/build build ${EXTRA_IDF_ARGS}`.
-3. Packages the release binary: `python3 package_firmware.py /project/build -o "${FACTORY_BIN}"`.
-4. Outputs the factory binary at `build/bacain_factory.bin` (or custom name configured via `FACTORY_BIN`).
+2. Resolves target board configuration from `firmware/boards/boards.json` (`CHIP`, `EXTRA_IDF_ARGS`, and `FACTORY_BIN`).
+3. Tracks `/project/build/.board_id`: automatically clears `CMakeCache.txt` when switching `BOARD` profiles so compiler definitions take effect, while preserving cached object files for fast incremental rebuilds of the same board.
+4. Compiles the project incrementally: `idf.py -B /project/build ${EXTRA_IDF_ARGS} build`.
+5. Packages the release binary: `python3 package_firmware.py /project/build -o "${FACTORY_BIN}" --chip "${CHIP}" --board "${BOARD}"`.
+6. Outputs the factory binary at `build/${FACTORY_BIN}` (e.g. `build/bacain_waveshare_154.bin` or `build/bacain_waveshare_154_alquran.bin`).
 
 For a clean rebuild from scratch, run the `clean-build` service:
 
 ```bash
+# Standard clean build
 docker compose run --rm clean-build
+
+# Clean build for specific board
+BOARD=waveshare_154_alquran docker compose run --rm clean-build
 ```
 
-The `clean-build` service deletes `/project/build`, reinitializes the target chip (`idf.py -B /project/build set-target esp32s3`), compiles the project, and packages the factory binary.
+The `clean-build` service deletes `/project/build`, initializes the target chip (`idf.py -B /project/build ${EXTRA_IDF_ARGS} set-target ${CHIP}`), compiles the project, writes `/project/build/.board_id`, and packages the factory binary.
 
 ### Option B: Native ESP-IDF
 
@@ -136,7 +162,7 @@ Requires ESP-IDF v5.3+ installed locally:
 cd firmware
 idf.py set-target esp32s3
 idf.py build
-python3 package_firmware.py build -o bacain_<board_id>_factory.bin
+python3 package_firmware.py build -o bacain_<board_id>.bin
 ```
 
 ### Packaging Script Parameters (`package_firmware.py`)
@@ -144,10 +170,12 @@ python3 package_firmware.py build -o bacain_<board_id>_factory.bin
 The packaging script merges build artifacts (`bootloader.bin` at `0x0`, `partition-table.bin` at `0x8000`, `bacain.bin` at `0x10000`) into a single factory binary and resizes the `storage` partition entry (`0x110000..end`) + MD5 checksum to match the board's flash size:
 
 - `build_dir`: Path to build directory (default: `build`).
-- `-o, --output`: Factory binary filename (default: `bacain_factory.bin`).
-- `--chip`: esptool target chip (default: `esp32s3`).
-- `--board`: Board ID or name from `boards/boards.json` (used to resolve `flash_size` if `--flash-size` is omitted).
+- `-o, --output`: Factory binary filename (default: resolved from `boards/boards.json` or `bacain.bin`).
+- `--chip`: esptool target chip (default: resolved from `boards/boards.json` or `esp32s3`).
+- `--board`: Board ID or name from `boards/boards.json` (used to resolve `chip`, `flash_size`, and `output_bin`).
 - `--flash-size`: Flash memory size (`4MB`, `8MB`, `16MB`, `32MB`; resolved from `boards/boards.json` if omitted).
+- `--build`: Compile the project using `idf.py` before packaging.
+- `--clean`: Clean build directory and reinitialize target chip before building.
 
 ---
 
@@ -159,7 +187,7 @@ The workflow `.github/workflows/firmware_ci.yml` handles automated builds and on
 
 - **Pull Request**: Compiles firmware for every board profile in `firmware/boards/boards.json` to verify compilation (skips binary packaging and artifact uploads).
 - **Push to `main`**: Compiles and uploads `bacain-firmware-<board_id>` workflow artifacts for every board in `boards.json`.
-- **Release Tags (`v*`)**: Compiles and publishes unified factory binaries (`bacain_<board_id>_factory.bin`) for all boards in `boards.json` directly to GitHub Releases.
+- **Release Tags (`v*`)**: Compiles and publishes unified factory binaries (`bacain_<board_id>_<version>.bin`) for all boards in `boards.json` directly to GitHub Releases.
 
 ### B. Custom Firmware Build via `workflow_dispatch` (Manual Trigger)
 
@@ -171,13 +199,15 @@ Build custom hardware profiles from the GitHub web interface without modifying `
 4. Fill in parameters (pre-filled with `waveshare_154` defaults):
    - **`board_id`**: Identifier used for the uploaded artifact name `bacain-firmware-<board_id>` (default: `waveshare_154`). Does not need to exist in `boards.json`.
    - **`flash_size`**: Target flash size (`4MB`, `8MB`, `16MB`, `32MB`; default: `8MB`). Automatically scales the `/spiflash` `storage` partition (`3008K` for `4MB`, `7104K` for `8MB`, `15296K` for `16MB`).
-   - **`extra_idf_args`**: Compiler macro flags (`-DBOARD_<MACRO>=<val>` or `-DCONFIG_BOARD_<MACRO>=<val>`) to override pins, resolution, rotation, or header path (default: `-DCONFIG_BOARD_PROFILE_WAVESHARE_154=y`).
-   - **`output_bin`**: Filename for the merged factory binary (default: `bacain_waveshare_154_factory.bin`).
+   - **`extra_idf_args`**: Compiler macro flags (`-DBOARD_<MACRO>=<val>` or `-DCONFIG_BOARD_<MACRO>=<val>`) to override pins, resolution, rotation, or header path (default: `-DBOARD_PROFILE=waveshare_154`).
+   - **`output_bin`**: Filename for the merged factory binary (default: `bacain_waveshare_154.bin`).
 5. Click **Run workflow**. Download the `bacain-firmware-<board_id>` artifact zip from the workflow summary after the run finishes.
+
+> [!warning] i haven't test it yet for other boards
 
 #### Example Compiler Flags for `extra_idf_args`:
 
-You can override individual macros on top of `waveshare_154/board_def.h` (`-DBOARD_*`) or bypass `waveshare_154/board_def.h` completely (`-DCONFIG_BOARD_PROFILE_CUSTOM=y -DCONFIG_BOARD_*`):
+You can override individual macros on top of `waveshare_154/board_def.h` (`-DBOARD_*`) or bypass `waveshare_154/board_def.h` completely (`-DBOARD_PROFILE=custom -DBOARD_*`):
 
 | Custom Requirement                                    | `extra_idf_args` Value                                                                                 |
 | :---------------------------------------------------- | :----------------------------------------------------------------------------------------------------- |
@@ -188,6 +218,7 @@ You can override individual macros on top of `waveshare_154/board_def.h` (`-DBOA
 | **Configure Status LED** (Red=1, Green=2, Active-Low) | `-DBOARD_LED_RED_PIN=1 -DBOARD_LED_GREEN_PIN=2 -DBOARD_LED_ACTIVE_LEVEL=0`                             |
 | **Disable MicroSD / Power Latch**                     | `-DBOARD_SDMMC_CLK_PIN=-1 -DBOARD_PWR_LATCH_PIN=-1`                                                    |
 | **Use a Custom `board_def.h` File**                   | `-DBOARD_DEF_HEADER="\"../../boards/custom_213/board_def.h\""`                                         |
+| **Enable Al-Quran Feature**                           | `-DBOARD_ALQURAN_ENABLE=1`                                                                             |
 | **Combine Multiple Settings**                         | `-DBOARD_DISPLAY_WIDTH=296 -DBOARD_DISPLAY_HEIGHT=128 -DBOARD_DISPLAY_ROTATION=1 -DBOARD_BTN_UP_PIN=4` |
 
 ---
@@ -200,17 +231,17 @@ Open the web flasher in a Chromium browser (Chrome or Edge):
 
 1. Connect the ESP32-S3 board via USB-C.
 2. Open `web/flasher.html` (or the **Firmware Flasher** tab in the web interface).
-3. Select your board to download the latest release binary, or load a local `bacain_<board_id>_factory.bin`.
+3. Select your board to download the latest release binary, or load a local `bacain_<board_id>.bin`.
 4. Click **Connect Serial Port**, select the ESP32-S3 port, and click **Flash Firmware**.
 
 ### B. Command Line via `esptool`
 
 ```bash
 # Windows (replace COM3 with your port)
-esptool.py -p COM3 -b 460800 --chip esp32s3 write_flash 0x0 build/bacain_<board_id>_factory.bin
+esptool.py -p COM3 -b 460800 --chip esp32s3 write_flash 0x0 build/bacain_<board_id>.bin
 
 # Linux / macOS (replace /dev/ttyACM0 with your port)
-esptool.py -p /dev/ttyACM0 -b 460800 --chip esp32s3 write_flash 0x0 build/bacain_<board_id>_factory.bin
+esptool.py -p /dev/ttyACM0 -b 460800 --chip esp32s3 write_flash 0x0 build/bacain_<board_id>.bin
 ```
 
 ### C. Serial Terminal (ESP-IDF)

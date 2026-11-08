@@ -4,26 +4,24 @@ services:
     container_name: bacain-firmware-builder
     working_dir: /project/firmware
     environment:
+      - BOARD=${BOARD:-${BOARD_NAME:-waveshare_154}}
       - EXTRA_IDF_ARGS=${EXTRA_IDF_ARGS:-}
-      - FACTORY_BIN=${FACTORY_BIN:-bacain_factory.bin}
-      - BOARD_NAME=${BOARD_NAME:-Waveshare ESP32-S3-ePaper-1.54}
+      - FACTORY_BIN=${FACTORY_BIN:-}
     volumes:
       - ..:/project
-    command: >
-      bash -c "idf.py -B /project/build build $${EXTRA_IDF_ARGS} && python3 package_firmware.py /project/build -o \"$${FACTORY_BIN}\" --board \"$${BOARD_NAME}\""
+    command: python3 package_firmware.py /project/build --build
 
   clean-build:
     image: espressif/idf:v5.3.1
     container_name: bacain-firmware-clean-builder
     working_dir: /project/firmware
     environment:
+      - BOARD=${BOARD:-${BOARD_NAME:-waveshare_154}}
       - EXTRA_IDF_ARGS=${EXTRA_IDF_ARGS:-}
-      - FACTORY_BIN=${FACTORY_BIN:-bacain_factory.bin}
-      - BOARD_NAME=${BOARD_NAME:-Waveshare ESP32-S3-ePaper-1.54}
+      - FACTORY_BIN=${FACTORY_BIN:-}
     volumes:
       - ..:/project
-    command: >
-      bash -c "rm -rf /project/build && idf.py -B /project/build $${EXTRA_IDF_ARGS} set-target esp32s3 && idf.py -B /project/build $${EXTRA_IDF_ARGS} build && python3 package_firmware.py /project/build -o \"$${FACTORY_BIN}\" --board \"$${BOARD_NAME}\""
+    command: python3 package_firmware.py /project/build --build --clean
 
   flash:
     image: espressif/idf:v5.3.1
