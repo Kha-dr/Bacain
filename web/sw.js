@@ -1,8 +1,11 @@
-const CACHE_NAME = 'bacain-pwa-v3';
+const CACHE_NAME = 'bacain-pwa-v4';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
   './style.css',
+  './config.js',
+  './services/ble-client.js',
+  './services/bookmarks-modal.js',
   './app.js',
   './components/mushaf-builder.js',
   './manifest.json',
