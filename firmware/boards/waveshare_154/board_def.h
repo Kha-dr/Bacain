@@ -21,6 +21,10 @@ extern "C" {
 #define BOARD_DISPLAY_ROTATION      0
 #endif
 
+#ifndef BOARD_DISPLAY_CONTROLLER
+#define BOARD_DISPLAY_CONTROLLER    "SSD1681"
+#endif
+
 #ifndef BOARD_EPD_DC_PIN
 #define BOARD_EPD_DC_PIN            10
 #endif
@@ -55,6 +59,14 @@ extern "C" {
 
 #ifndef BOARD_EPD_BUSY_ACTIVE_LVL
 #define BOARD_EPD_BUSY_ACTIVE_LVL   1
+#endif
+
+#ifndef BOARD_EPD_RST_PULSE_US
+#define BOARD_EPD_RST_PULSE_US      20       /* SSD1681 min reset pulse is 10us; 20us margin */
+#endif
+
+#ifndef BOARD_EPD_RST_RECOVERY_US
+#define BOARD_EPD_RST_RECOVERY_US   200      /* Post-reset recovery delay */
 #endif
 
 #ifndef BOARD_HAS_SDCARD

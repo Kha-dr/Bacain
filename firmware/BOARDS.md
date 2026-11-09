@@ -84,6 +84,7 @@ Review the hardware invariants in [firmware/RULES.md](./RULES.md). Create direct
 #### Mandatory Category A Definitions
 All board profiles must define every Category A macro directly. Omitting any Category A macro triggers a compile-time `#error` in `board_config.h`:
 - `BOARD_NAME`: String literal name of the board.
+- `BOARD_DISPLAY_CONTROLLER`: Controller IC name string literal (e.g. `"SSD1681"`).
 - `BOARD_DISPLAY_WIDTH`: Display horizontal resolution in pixels.
 - `BOARD_DISPLAY_HEIGHT`: Display vertical resolution in pixels.
 - `BOARD_DISPLAY_ROTATION`: Default display rotation (0: portrait, 1: 90 deg, 2: 180 deg, 3: 270 deg).
@@ -92,6 +93,8 @@ All board profiles must define every Category A macro directly. Omitting any Cat
 - `BOARD_EPD_SCK_PIN`: E-Paper SPI Clock GPIO pin.
 - `BOARD_EPD_MOSI_PIN`: E-Paper SPI MOSI GPIO pin.
 - `BOARD_EPD_RST_PIN`: E-Paper Reset GPIO pin.
+- `BOARD_EPD_RST_PULSE_US`: Controller minimum reset pulse width in microseconds (e.g. 20).
+- `BOARD_EPD_RST_RECOVERY_US`: Controller post-reset recovery delay in microseconds (e.g. 200).
 - `BOARD_EPD_BUSY_PIN`: E-Paper Busy status GPIO pin.
 - `BOARD_EPD_PWR_PIN`: E-Paper power rail control GPIO pin.
 - `BOARD_EPD_PWR_ACTIVE_LVL`: E-Paper power rail active level (0 = active low, 1 = active high).

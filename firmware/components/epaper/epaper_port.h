@@ -1,6 +1,7 @@
 #ifndef EPAPER_PORT_H
 #define EPAPER_PORT_H
 
+#include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include "board_config.h"
@@ -22,9 +23,8 @@
 extern "C" {
 #endif
 
-/* Waveshare Official V2 Look-Up Tables (159 bytes each) */
-extern const uint8_t WF_Full_1IN54[159];
-extern const uint8_t WF_PARTIAL_1IN54_0[159];
+const uint8_t *board_epd_get_lut_full(size_t *out_len);
+const uint8_t *board_epd_get_lut_partial(size_t *out_len);
 
 void epaper_port_init(void);
 void epaper_port_init_partial(void);

@@ -9,6 +9,11 @@
 #include "driver/spi_master.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#if __has_include("esp_rom_sys.h")
+#include "esp_rom_sys.h"
+#else
+void esp_rom_delay_us(uint32_t us);
+#endif
 
 #define EPD_DC_PIN    BOARD_EPD_DC_PIN
 #define EPD_CS_PIN    BOARD_EPD_CS_PIN
@@ -18,59 +23,25 @@
 #define EPD_BUSY_PIN  BOARD_EPD_BUSY_PIN
 #define EPD_PWR_PIN   BOARD_EPD_PWR_PIN
 
-#define epaper_rst_1  gpio_set_level(EPD_RST_PIN, 1)
-#define epaper_rst_0  gpio_set_level(EPD_RST_PIN, 0)
+#define epaper_rst_1() gpio_set_level(EPD_RST_PIN, 1)
+#define epaper_rst_0() gpio_set_level(EPD_RST_PIN, 0)
 #define epaper_cs_1   gpio_set_level(EPD_CS_PIN, 1)
 #define epaper_cs_0   gpio_set_level(EPD_CS_PIN, 0)
 #define epaper_dc_1   gpio_set_level(EPD_DC_PIN, 1)
 #define epaper_dc_0   gpio_set_level(EPD_DC_PIN, 0)
 #define ReadBusy      gpio_get_level(EPD_BUSY_PIN)
 
-/* Waveshare Official V2 Full Refresh Look-Up Table (159 bytes) */
-const uint8_t WF_Full_1IN54[159] = {
-    0x80, 0x48, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x40, 0x48, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x80, 0x48, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x40, 0x48, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x0A, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x08, 0x01, 0x00, 0x08, 0x01, 0x00, 0x02,
-    0x0A, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x00, 0x00, 0x00,
-    0x22, 0x17, 0x41, 0x00, 0x32, 0x20
-};
+const uint8_t * __attribute__((weak)) board_epd_get_lut_full(size_t *out_len)
+{
+    if (out_len) *out_len = 0;
+    return NULL;
+}
 
-/* Waveshare Official V2 Partial Refresh Look-Up Table (159 bytes) */
-const uint8_t WF_PARTIAL_1IN54_0[159] = {
-    0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x80, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x40, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x0F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x00, 0x00, 0x00,
-    0x02, 0x17, 0x41, 0xB0, 0x32, 0x28
-};
+const uint8_t * __attribute__((weak)) board_epd_get_lut_partial(size_t *out_len)
+{
+    if (out_len) *out_len = 0;
+    return NULL;
+}
 
 static spi_device_handle_t spi = NULL;
 
@@ -94,15 +65,17 @@ static void epaper_gpio_init(void) {
     gpio_conf.pin_bit_mask = ((uint64_t) 0x01 << EPD_BUSY_PIN);
     ESP_ERROR_CHECK_WITHOUT_ABORT(gpio_config(&gpio_conf));
 
-    epaper_rst_1;
+    epaper_rst_1();
 }
 
-/* SSD1681 timing: min reset low pulse 10 us, recovery time 10 ms */
-static void epaper_reset(void) {
-    epaper_rst_0;
-    vTaskDelay(pdMS_TO_TICKS(10));
-    epaper_rst_1;
-    vTaskDelay(pdMS_TO_TICKS(10));
+static void epaper_reset(void)
+{
+    epaper_rst_1();
+    esp_rom_delay_us(BOARD_EPD_RST_RECOVERY_US);
+    epaper_rst_0();
+    esp_rom_delay_us(BOARD_EPD_RST_PULSE_US);
+    epaper_rst_1();
+    esp_rom_delay_us(BOARD_EPD_RST_RECOVERY_US);
 }
 
 static void epaper_spi_init(void) {
@@ -247,6 +220,9 @@ static void epaper_TurnOnDisplayPart(void) {
 }
 
 void epaper_port_init(void) {
+    const uint8_t x_end_byte = (BOARD_DISPLAY_WIDTH / 8) - 1;
+    const uint16_t y_end_line = BOARD_DISPLAY_HEIGHT - 1;
+
     epaper_spi_init();
     epaper_reset();
 
@@ -255,20 +231,20 @@ void epaper_port_init(void) {
     epaper_readbusyh();
 
     epaper_SendCommand(0x01);  // Driver output control
-    epaper_SendData(0xC7);
-    epaper_SendData(0x00);
+    epaper_SendData((uint8_t)(y_end_line & 0xFF));
+    epaper_SendData((uint8_t)((y_end_line >> 8) & 0xFF));
     epaper_SendData(0x01);
 
     epaper_SendCommand(0x11);  // Data entry mode
     epaper_SendData(0x01);
 
-    epaper_SendCommand(0x44);  // Set Windows X: 0x00, 0x18 (199 >> 3 = 24 = 0x18)
+    epaper_SendCommand(0x44);  // Set Windows X
     epaper_SendData(0x00);
-    epaper_SendData(0x18);
+    epaper_SendData(x_end_byte);
 
-    epaper_SendCommand(0x45);  // Set Windows Y: Ystart=199 (0xC7, 0x00), Yend=0 (0x00, 0x00)
-    epaper_SendData(0xC7);
-    epaper_SendData(0x00);
+    epaper_SendCommand(0x45);  // Set Windows Y
+    epaper_SendData((uint8_t)(y_end_line & 0xFF));
+    epaper_SendData((uint8_t)((y_end_line >> 8) & 0xFF));
     epaper_SendData(0x00);
     epaper_SendData(0x00);
 
@@ -287,19 +263,28 @@ void epaper_port_init(void) {
     epaper_SendData(0x00);
 
     epaper_SendCommand(0x4F);  // Set Cursor Y
-    epaper_SendData(0xC7);
-    epaper_SendData(0x00);
+    epaper_SendData((uint8_t)(y_end_line & 0xFF));
+    epaper_SendData((uint8_t)((y_end_line >> 8) & 0xFF));
     epaper_readbusyh();
 
-    epaper_set_lut(WF_Full_1IN54);
+    const uint8_t *lut_full = board_epd_get_lut_full(NULL);
+    if (lut_full != NULL) {
+        epaper_set_lut(lut_full);
+    }
 }
 
 void epaper_port_init_partial(void) {
+    const uint8_t x_end_byte = (BOARD_DISPLAY_WIDTH / 8) - 1;
+    const uint16_t y_end_line = BOARD_DISPLAY_HEIGHT - 1;
+
     epaper_spi_init();
     epaper_reset();
     epaper_readbusyh();
 
-    epaper_set_lut(WF_PARTIAL_1IN54_0);
+    const uint8_t *lut_part = board_epd_get_lut_partial(NULL);
+    if (lut_part != NULL) {
+        epaper_set_lut(lut_part);
+    }
 
     epaper_SendCommand(0x37);
     epaper_SendData(0x00);
@@ -322,8 +307,8 @@ void epaper_port_init_partial(void) {
     epaper_readbusyh();
 
     epaper_SendCommand(0x01);  // Driver output control
-    epaper_SendData(0xC7);
-    epaper_SendData(0x00);
+    epaper_SendData((uint8_t)(y_end_line & 0xFF));
+    epaper_SendData((uint8_t)((y_end_line >> 8) & 0xFF));
     epaper_SendData(0x01);
 
     epaper_SendCommand(0x11);
@@ -331,22 +316,23 @@ void epaper_port_init_partial(void) {
 
     epaper_SendCommand(0x44);
     epaper_SendData(0x00);
-    epaper_SendData(0x18);
+    epaper_SendData(x_end_byte);
 
     epaper_SendCommand(0x45);
-    epaper_SendData(0xC7);
-    epaper_SendData(0x00);
+    epaper_SendData((uint8_t)(y_end_line & 0xFF));
+    epaper_SendData((uint8_t)((y_end_line >> 8) & 0xFF));
     epaper_SendData(0x00);
     epaper_SendData(0x00);
 
     epaper_SendCommand(0x4E);
     epaper_SendData(0x00);
     epaper_SendCommand(0x4F);
-    epaper_SendData(0xC7);
-    epaper_SendData(0x00);
+    epaper_SendData((uint8_t)(y_end_line & 0xFF));
+    epaper_SendData((uint8_t)((y_end_line >> 8) & 0xFF));
 }
 
 void epaper_port_clear(uint8_t color) {
+    const uint16_t y_end_line = BOARD_DISPLAY_HEIGHT - 1;
     uint8_t fill_val = (color == 0x00) ? 0x00 : 0xFF;
     uint8_t line_buffer[250];
     memset(line_buffer, fill_val, sizeof(line_buffer));
@@ -354,8 +340,8 @@ void epaper_port_clear(uint8_t color) {
     epaper_SendCommand(0x4E);  // Set Cursor X
     epaper_SendData(0x00);
     epaper_SendCommand(0x4F);  // Set Cursor Y
-    epaper_SendData(0xC7);
-    epaper_SendData(0x00);
+    epaper_SendData((uint8_t)(y_end_line & 0xFF));
+    epaper_SendData((uint8_t)((y_end_line >> 8) & 0xFF));
 
     epaper_SendCommand(0x24);
     for (int i = 0; i < (BOARD_DISPLAY_BUFFER_SIZE / sizeof(line_buffer)); i++) {
@@ -365,8 +351,8 @@ void epaper_port_clear(uint8_t color) {
     epaper_SendCommand(0x4E);  // Set Cursor X
     epaper_SendData(0x00);
     epaper_SendCommand(0x4F);  // Set Cursor Y
-    epaper_SendData(0xC7);
-    epaper_SendData(0x00);
+    epaper_SendData((uint8_t)(y_end_line & 0xFF));
+    epaper_SendData((uint8_t)((y_end_line >> 8) & 0xFF));
 
     epaper_SendCommand(0x26);
     for (int i = 0; i < (BOARD_DISPLAY_BUFFER_SIZE / sizeof(line_buffer)); i++) {
@@ -379,11 +365,13 @@ void epaper_port_clear(uint8_t color) {
 void epaper_port_display(const uint8_t *Image) {
     if (!Image) return;
 
+    const uint16_t y_end_line = BOARD_DISPLAY_HEIGHT - 1;
+
     epaper_SendCommand(0x4E);  // Set Cursor X
     epaper_SendData(0x00);
     epaper_SendCommand(0x4F);  // Set Cursor Y
-    epaper_SendData(0xC7);
-    epaper_SendData(0x00);
+    epaper_SendData((uint8_t)(y_end_line & 0xFF));
+    epaper_SendData((uint8_t)((y_end_line >> 8) & 0xFF));
 
     epaper_SendCommand(0x24);
     epaper_write_bytes(Image, BOARD_DISPLAY_BUFFER_SIZE);
@@ -391,8 +379,8 @@ void epaper_port_display(const uint8_t *Image) {
     epaper_SendCommand(0x4E);  // Set Cursor X
     epaper_SendData(0x00);
     epaper_SendCommand(0x4F);  // Set Cursor Y
-    epaper_SendData(0xC7);
-    epaper_SendData(0x00);
+    epaper_SendData((uint8_t)(y_end_line & 0xFF));
+    epaper_SendData((uint8_t)((y_end_line >> 8) & 0xFF));
 
     epaper_SendCommand(0x26);
     epaper_write_bytes(Image, BOARD_DISPLAY_BUFFER_SIZE);
@@ -405,11 +393,13 @@ void epaper_port_display_part(const uint8_t *Image) {
         return;
     }
 
+    const uint16_t y_end_line = BOARD_DISPLAY_HEIGHT - 1;
+
     epaper_SendCommand(0x4E);  // Set Cursor X
     epaper_SendData(0x00);
     epaper_SendCommand(0x4F);  // Set Cursor Y
-    epaper_SendData(0xC7);
-    epaper_SendData(0x00);
+    epaper_SendData((uint8_t)(y_end_line & 0xFF));
+    epaper_SendData((uint8_t)((y_end_line >> 8) & 0xFF));
 
     epaper_SendCommand(0x24);
     epaper_write_bytes(Image, BOARD_DISPLAY_BUFFER_SIZE);
@@ -421,20 +411,21 @@ void epaper_port_display_part_diff(const uint8_t *prev_image, const uint8_t *new
     if (!new_image) {
         return;
     }
+    const uint16_t y_end_line = BOARD_DISPLAY_HEIGHT - 1;
     if (prev_image) {
         epaper_SendCommand(0x4E);  // Set Cursor X
         epaper_SendData(0x00);
         epaper_SendCommand(0x4F);  // Set Cursor Y
-        epaper_SendData(0xC7);
-        epaper_SendData(0x00);
+        epaper_SendData((uint8_t)(y_end_line & 0xFF));
+        epaper_SendData((uint8_t)((y_end_line >> 8) & 0xFF));
         epaper_SendCommand(0x26);  // Old data RAM 0x26
         epaper_write_bytes(prev_image, BOARD_DISPLAY_BUFFER_SIZE);
     }
     epaper_SendCommand(0x4E);      // Set Cursor X
     epaper_SendData(0x00);
     epaper_SendCommand(0x4F);      // Set Cursor Y
-    epaper_SendData(0xC7);
-    epaper_SendData(0x00);
+    epaper_SendData((uint8_t)(y_end_line & 0xFF));
+    epaper_SendData((uint8_t)((y_end_line >> 8) & 0xFF));
     epaper_SendCommand(0x24);      // New data RAM 0x24
     epaper_write_bytes(new_image, BOARD_DISPLAY_BUFFER_SIZE);
 
@@ -450,7 +441,10 @@ void epaper_port_display_full(const uint8_t *Image) {
     epaper_port_display(Image);
 
     // Switch LUT to partial refresh for subsequent partial updates without hardware reset
-    epaper_set_lut(WF_PARTIAL_1IN54_0);
+    const uint8_t *lut_part = board_epd_get_lut_partial(NULL);
+    if (lut_part != NULL) {
+        epaper_set_lut(lut_part);
+    }
     epaper_SendCommand(0x37);
     epaper_SendData(0x00);
     epaper_SendData(0x00);
@@ -500,7 +494,7 @@ void epaper_power_on(void) {
 }
 
 void epaper_power_off(void) {
-    epaper_rst_0;
+    epaper_rst_0();
     epaper_cs_0;
     epaper_dc_0;
     gpio_set_level(EPD_PWR_PIN, !BOARD_EPD_PWR_ACTIVE_LVL);
