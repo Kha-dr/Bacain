@@ -142,15 +142,18 @@ static void epaper_spi_init(void) {
     s_spi_initialized = true;
 }
 
+#ifndef BOARD_EPD_BUSY_ACTIVE_LVL
+#define BOARD_EPD_BUSY_ACTIVE_LVL 1
+#endif
+
 /*
   Waiting for e-Paper idle.
-  Waveshare V2 (SSD1681): 1 = BUSY, 0 = IDLE!
 */
 static void epaper_readbusyh(void) {
     ESP_LOGI("EPD", "Waiting for e-Paper idle (pin=%d)...", ReadBusy);
     vTaskDelay(pdMS_TO_TICKS(10));
     int timeout = 0;
-    while (ReadBusy == 1) { // 1 = BUSY on V2!
+    while (ReadBusy == BOARD_EPD_BUSY_ACTIVE_LVL) {
         vTaskDelay(pdMS_TO_TICKS(10));
         timeout++;
         if (timeout > 400) { // 4 seconds safety timeout
@@ -355,7 +358,7 @@ void epaper_port_clear(uint8_t color) {
     epaper_SendData(0x00);
 
     epaper_SendCommand(0x24);
-    for (int i = 0; i < (5000 / sizeof(line_buffer)); i++) {
+    for (int i = 0; i < (BOARD_DISPLAY_BUFFER_SIZE / sizeof(line_buffer)); i++) {
         epaper_write_bytes(line_buffer, sizeof(line_buffer));
     }
 
@@ -366,7 +369,7 @@ void epaper_port_clear(uint8_t color) {
     epaper_SendData(0x00);
 
     epaper_SendCommand(0x26);
-    for (int i = 0; i < (5000 / sizeof(line_buffer)); i++) {
+    for (int i = 0; i < (BOARD_DISPLAY_BUFFER_SIZE / sizeof(line_buffer)); i++) {
         epaper_write_bytes(line_buffer, sizeof(line_buffer));
     }
 
@@ -383,7 +386,7 @@ void epaper_port_display(const uint8_t *Image) {
     epaper_SendData(0x00);
 
     epaper_SendCommand(0x24);
-    epaper_write_bytes(Image, 5000);
+    epaper_write_bytes(Image, BOARD_DISPLAY_BUFFER_SIZE);
 
     epaper_SendCommand(0x4E);  // Set Cursor X
     epaper_SendData(0x00);
@@ -392,7 +395,7 @@ void epaper_port_display(const uint8_t *Image) {
     epaper_SendData(0x00);
 
     epaper_SendCommand(0x26);
-    epaper_write_bytes(Image, 5000);
+    epaper_write_bytes(Image, BOARD_DISPLAY_BUFFER_SIZE);
 
     epaper_TurnOnDisplay();
 }
@@ -409,7 +412,7 @@ void epaper_port_display_part(const uint8_t *Image) {
     epaper_SendData(0x00);
 
     epaper_SendCommand(0x24);
-    epaper_write_bytes(Image, 5000);
+    epaper_write_bytes(Image, BOARD_DISPLAY_BUFFER_SIZE);
 
     epaper_TurnOnDisplayPart();
 }
@@ -425,7 +428,7 @@ void epaper_port_display_part_diff(const uint8_t *prev_image, const uint8_t *new
         epaper_SendData(0xC7);
         epaper_SendData(0x00);
         epaper_SendCommand(0x26);  // Old data RAM 0x26
-        epaper_write_bytes(prev_image, 5000);
+        epaper_write_bytes(prev_image, BOARD_DISPLAY_BUFFER_SIZE);
     }
     epaper_SendCommand(0x4E);      // Set Cursor X
     epaper_SendData(0x00);
@@ -433,7 +436,7 @@ void epaper_port_display_part_diff(const uint8_t *prev_image, const uint8_t *new
     epaper_SendData(0xC7);
     epaper_SendData(0x00);
     epaper_SendCommand(0x24);      // New data RAM 0x24
-    epaper_write_bytes(new_image, 5000);
+    epaper_write_bytes(new_image, BOARD_DISPLAY_BUFFER_SIZE);
 
     epaper_TurnOnDisplayPart();
 }
@@ -474,6 +477,10 @@ void epaper_port_sleep(void) {
     epaper_SendData(0x01);
 }
 
+#ifndef BOARD_EPD_PWR_ACTIVE_LVL
+#define BOARD_EPD_PWR_ACTIVE_LVL 0
+#endif
+
 void epaper_power_on(void) {
     static bool s_pwr_gpio_inited = false;
     if (!s_pwr_gpio_inited) {
@@ -486,8 +493,8 @@ void epaper_power_on(void) {
         ESP_ERROR_CHECK_WITHOUT_ABORT(gpio_config(&conf));
         s_pwr_gpio_inited = true;
     }
-    if (gpio_get_level(EPD_PWR_PIN) != 0) {
-        gpio_set_level(EPD_PWR_PIN, 0);
+    if (gpio_get_level(EPD_PWR_PIN) != BOARD_EPD_PWR_ACTIVE_LVL) {
+        gpio_set_level(EPD_PWR_PIN, BOARD_EPD_PWR_ACTIVE_LVL);
         vTaskDelay(pdMS_TO_TICKS(15));
     }
 }
@@ -496,5 +503,5 @@ void epaper_power_off(void) {
     epaper_rst_0;
     epaper_cs_0;
     epaper_dc_0;
-    gpio_set_level(EPD_PWR_PIN, 1); // High level = power cut
+    gpio_set_level(EPD_PWR_PIN, !BOARD_EPD_PWR_ACTIVE_LVL);
 }
