@@ -260,6 +260,7 @@ def main(argv: list | None = None) -> int:
     if args.build:
         extra_args_list = shlex.split(extra_idf_args) if extra_idf_args else []
         board_id_file = build_dir / ".board_id"
+        config_signature = f"{board_id} {extra_idf_args}".strip()
 
         if args.clean:
             print(f"[package_firmware] Cleaning build directory: {build_dir}")
@@ -269,11 +270,11 @@ def main(argv: list | None = None) -> int:
             print(f"[package_firmware] Running: {' '.join(cmd_target)}")
             subprocess.run(cmd_target, check=True)
         else:
-            cached_board = None
+            cached_signature = None
             if board_id_file.is_file():
-                cached_board = board_id_file.read_text(encoding="utf-8").strip()
-            if cached_board != board_id:
-                print(f"[package_firmware] Board changed ({cached_board} -> {board_id}), clearing CMakeCache.txt")
+                cached_signature = board_id_file.read_text(encoding="utf-8").strip()
+            if cached_signature != config_signature:
+                print(f"[package_firmware] Board configuration changed ({cached_signature} -> {config_signature}), clearing CMakeCache.txt")
                 cache_file = build_dir / "CMakeCache.txt"
                 if cache_file.is_file():
                     cache_file.unlink()
@@ -283,7 +284,7 @@ def main(argv: list | None = None) -> int:
         subprocess.run(cmd_build, check=True)
 
         build_dir.mkdir(parents=True, exist_ok=True)
-        board_id_file.write_text(board_id, encoding="utf-8")
+        board_id_file.write_text(config_signature, encoding="utf-8")
 
     flash_size = resolve_board_flash_size(board_query, output_name, args.flash_size)
     flash_size_bytes = parse_flash_size_bytes(flash_size)

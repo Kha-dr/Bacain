@@ -31,18 +31,6 @@ void esp_rom_delay_us(uint32_t us);
 #define epaper_dc_0   gpio_set_level(EPD_DC_PIN, 0)
 #define ReadBusy      gpio_get_level(EPD_BUSY_PIN)
 
-const uint8_t * __attribute__((weak)) board_epd_get_lut_full(size_t *out_len)
-{
-    if (out_len) *out_len = 0;
-    return NULL;
-}
-
-const uint8_t * __attribute__((weak)) board_epd_get_lut_partial(size_t *out_len)
-{
-    if (out_len) *out_len = 0;
-    return NULL;
-}
-
 static spi_device_handle_t spi = NULL;
 
 static void epaper_gpio_init(void) {

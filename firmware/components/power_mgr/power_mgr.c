@@ -488,7 +488,7 @@ void power_mgr_enter_deep_sleep(uint32_t sleep_seconds) {
         esp_sleep_enable_ext1_wakeup_io(ext1_pins, ESP_EXT1_WAKEUP_ANY_LOW);
     }
 
-    esp_sleep_pd_config(ESP_PD_DOMAIN_MAX, ESP_PD_OPTION_AUTO);
+    esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
 
     if (sleep_seconds > 0) {
         esp_sleep_enable_timer_wakeup(((uint64_t)sleep_seconds) * 1000000ULL);
@@ -517,9 +517,16 @@ void power_mgr_enter_deep_sleep(uint32_t sleep_seconds) {
             gpio_hold_en((gpio_num_t)pin);
         }
     }
-    gpio_deep_sleep_hold_en();
 
-    while (1) {
+    if (BOARD_BTN_UP_PIN >= 0 && GPIO_IS_VALID_GPIO(BOARD_BTN_UP_PIN)) {
+        gpio_set_direction((gpio_num_t)BOARD_BTN_UP_PIN, GPIO_MODE_INPUT);
+    }
+    if (BOARD_BTN_DOWN_PIN >= 0 && GPIO_IS_VALID_GPIO(BOARD_BTN_DOWN_PIN) && BOARD_BTN_DOWN_PIN != BOARD_BTN_UP_PIN) {
+        gpio_set_direction((gpio_num_t)BOARD_BTN_DOWN_PIN, GPIO_MODE_INPUT);
+    }
+
+    int wait_cycles = 0;
+    while (wait_cycles < 300) {
         bool button_pressed = false;
         if (BOARD_BTN_UP_PIN >= 0 && GPIO_IS_VALID_GPIO(BOARD_BTN_UP_PIN)) {
             if (gpio_get_level((gpio_num_t)BOARD_BTN_UP_PIN) == 0) {
@@ -535,10 +542,12 @@ void power_mgr_enter_deep_sleep(uint32_t sleep_seconds) {
             break;
         }
         vTaskDelay(pdMS_TO_TICKS(10));
+        wait_cycles++;
     }
 
     board_power_pre_sleep();
     vTaskDelay(pdMS_TO_TICKS(50));
+    gpio_deep_sleep_hold_en();
     esp_deep_sleep_start();
 }
 
