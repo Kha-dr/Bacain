@@ -172,10 +172,7 @@ void app_main(void) {
     // 1. Critical: Latch board power and cut audio rail
     power_mgr_early_init();
     status_led_init();
-    esp_reset_reason_t rst_reason = esp_reset_reason();
-    if (rst_reason != ESP_RST_DEEPSLEEP) {
-        status_led_trigger(STATUS_LED_EVT_WAKEUP);
-    }
+    status_led_trigger(STATUS_LED_EVT_WAKEUP);
 
     // 2. Initialize NVS
     esp_err_t ret = nvs_flash_init();
@@ -281,7 +278,7 @@ void app_main(void) {
 
         s_current_view = VIEW_MENU;
         view_menu_set_index(0);
-        view_menu_render(true);
+        view_menu_render(false);
         ESP_LOGI(TAG, "Cold boot started into view %d", s_current_view);
     } else {
         s_current_view = dispatch_wake_view(s_rtc_last_view);
