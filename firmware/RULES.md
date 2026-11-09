@@ -6,7 +6,8 @@ Every board profile, power subsystem, display driver, and application state rout
 
 Hardware definitions and silicon specificities must remain isolated from application code.
 
-- **Centralized Declarations**: Pin numbers, SPI bus timings, display controllers, and ADC channels belong exclusively in [`board_config.h`](./components/board_config/include/board_config.h) and target board headers such as [`board_def.h`](./boards/waveshare_154/board_def.h).
+- **Centralized Declarations**: Pin numbers, display geometries, feature enable flags, and battery OCV tables belong in target board definitions such as [`board_def.h`](./boards/waveshare_154/board_def.h). Board-specific C hooks (`board_power_*`) reside in `firmware/boards/<board_id>/board.c` (such as [`board.c`](./boards/waveshare_154/board.c)).
+- **Compile-Time Zero Fallback Invariant**: [`board_config.h`](./components/board_config/include/board_config.h) enforces mandatory definitions and enabled feature pins via strict preprocessor `#error` compilation guards, prohibiting silent hardware defaults.
 - **Zero Silicon Leakage into Application Logic**: Higher-level subsystems must never reference silicon strapping labels (`GPIO 0`, `GPIO 18`, `BOOT`, `PWR`). All application code consumes semantic macros: `BOARD_BTN_UP_PIN`, `BOARD_BTN_DOWN_PIN`, `BOARD_VBAT_PWR_HOLD_PIN`.
 - **Explicit Sentinel `-1` Availability**: Unconnected, absent, or unrouted peripherals must use the explicit sentinel `-1`, never arbitrary numeric defaults such as `0` (which collides with `GPIO 0`, ESP32-S3 strapping pin). Subsystems check availability at runtime:
   ```c
@@ -39,20 +40,21 @@ Active CPU execution is a transient event between long periods of unpowered slee
   - `s_rtc_last_view`: Active application view.
   - `s_rtc_menu_index`, `s_rtc_book_index`: Selected cursor positions.
   - `s_rtc_settings_cached`: Cached display rotation, font size, and navigation hints.
-- **Differential Screen Refresh from Retention RAM**: In [`reader_ui.c`](./main/reader_ui.c), the previous display buffer `s_rtc_canvas` (5000 bytes) is retained in RTC memory. Upon wake, `reader_ui_flush_canvas` compares `s_rtc_canvas` against the new canvas and calls `epaper_port_display_part_diff`. This avoids full screen flashes, eliminates re-parsing book files from disk, and keeps the wake-to-sleep cycle under 300 ms.
+- **Differential Screen Refresh from Retention RAM**: In [`reader_ui.c`](./main/reader_ui.c), the previous display buffer `s_rtc_canvas` (`BOARD_DISPLAY_BUFFER_SIZE`, defined as `BOARD_DISPLAY_WIDTH * BOARD_DISPLAY_HEIGHT / 8`) is retained in RTC memory. Upon wake, `reader_ui_flush_canvas` compares `s_rtc_canvas` against the new canvas and calls `epaper_port_display_part_diff`. This avoids full screen flashes, eliminates re-parsing book files from disk, and keeps the wake-to-sleep cycle under 300 ms.
 
 ### 2.3 Zero-Allocation Runtime & Predictable Footprints
 
 Heap fragmentation is a primary failure mode in embedded systems with long uptime requirements.
 
 - **Eliminate Run-Time Heap Churn**: Continuous execution loops must never allocate or free dynamic memory (`malloc`, `free`, `strdup`, `cJSON_Parse`). All buffers must be statically sized at compile time.
-- **Compile-Time Sized Buffers**: Display framebuffers (`DISPLAY_BUFFER_SIZE` = 5000 bytes) are allocated once at boot in `reader_ui_init` using internal DMA-capable SRAM (`MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA`). Text pager lines, line break tables, and file catalogue arrays use fixed compile-time boundaries.
+- **Compile-Time Sized Buffers**: Display framebuffers (`BOARD_DISPLAY_BUFFER_SIZE`) are allocated once at boot in `reader_ui_init` using internal DMA-capable SRAM (`MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA`). Text pager lines, line break tables, and file catalogue arrays use fixed compile-time boundaries.
 - **Aggressive Binary Pruning**: Never compile dead assets, unreferenced fonts, or obsolete controller LUTs into the firmware image. Unused font tables and display drivers must be excluded at the Kconfig and CMake component level to conserve flash and execution SRAM.
 
 ### 2.4 Uncompromising Fault Transparency (Zero Silent Fallbacks)
 
 Reliability requires fast, deterministic failure rather than hidden corruption.
 
+- **Compile-Time Fault Transparency**: Any missing board profile, omitted mandatory property, or missing pin for an enabled peripheral halts compilation with an explicit `#error`, eliminating silent fallback bugs before code can execute.
 - **Fail Fast, Fail Loudly**: Swallowing errors via empty catch blocks or ignoring return codes (`esp_err_t`) is strictly forbidden. If an SPI bus transaction, flash sector write, or ADC measurement fails, log the exact return code via `ESP_LOGE` and bubble the failure up the call stack.
 - **Zero Dummy Data**: Never synthesize fake metrics, randomized battery readings, or simulated timers. If battery ADC conversion fails, report 0 mV and render an error indicator rather than manufacturing dummy data.
 - **Hardware Failure Manifestation**: When hardware fails (such as an uninitialized display or missing internal flash partition), the firmware halts gracefully, asserts the status LED or display error banner, and waits for diagnostics rather than executing undefined instructions.
@@ -67,6 +69,7 @@ For detailed implementations adhering to this philosophy, inspect the canonical 
 - Supported Boards and Profiles: [BOARDS.md](./BOARDS.md)
 - Central Board Support Package: [board_config.h](./components/board_config/include/board_config.h)
 - Waveshare 1.54 Board Definition: [board_def.h](./boards/waveshare_154/board_def.h)
+- Board Hardware Hooks: [board.c](./boards/waveshare_154/board.c) (`firmware/boards/<board_id>/board.c` for board-specific power and hardware hook overrides)
 - Power Management and OCV Curves: [power_mgr.c](./components/power_mgr/power_mgr.c)
 - Deterministic UI State Machine and Differential Refresh: [reader_ui.c](./main/reader_ui.c)
 - Main Lifecycle and Concurrency: [main.c](./main/main.c)
