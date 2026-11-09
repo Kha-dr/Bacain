@@ -83,6 +83,14 @@ void      board_power_post_wake(void)  __attribute__((weak));
 #endif
 #endif
 
+#ifndef BOARD_DISPLAY_CONTROLLER
+#ifdef CONFIG_BOARD_DISPLAY_CONTROLLER
+#define BOARD_DISPLAY_CONTROLLER    CONFIG_BOARD_DISPLAY_CONTROLLER
+#else
+#error "Missing mandatory board definition: BOARD_DISPLAY_CONTROLLER"
+#endif
+#endif
+
 #ifndef BOARD_DISPLAY_BUFFER_SIZE
 #define BOARD_DISPLAY_BUFFER_SIZE   (BOARD_DISPLAY_WIDTH * BOARD_DISPLAY_HEIGHT / 8)
 #endif
@@ -156,6 +164,22 @@ void      board_power_post_wake(void)  __attribute__((weak));
 #define BOARD_EPD_BUSY_ACTIVE_LVL   CONFIG_BOARD_EPD_BUSY_ACTIVE_LVL
 #else
 #define BOARD_EPD_BUSY_ACTIVE_LVL   1
+#endif
+#endif
+
+#ifndef BOARD_EPD_RST_PULSE_US
+#ifdef CONFIG_BOARD_EPD_RST_PULSE_US
+#define BOARD_EPD_RST_PULSE_US      CONFIG_BOARD_EPD_RST_PULSE_US
+#else
+#error "Missing mandatory board definition: BOARD_EPD_RST_PULSE_US"
+#endif
+#endif
+
+#ifndef BOARD_EPD_RST_RECOVERY_US
+#ifdef CONFIG_BOARD_EPD_RST_RECOVERY_US
+#define BOARD_EPD_RST_RECOVERY_US   CONFIG_BOARD_EPD_RST_RECOVERY_US
+#else
+#error "Missing mandatory board definition: BOARD_EPD_RST_RECOVERY_US"
 #endif
 #endif
 
