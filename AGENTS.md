@@ -7,8 +7,11 @@ These rules are mandatory for all agents and subagents operating in this reposit
 1. **Zero Mock / Zero Fake Data**:
    - Never implement mocks, dummy returns, simulated progress, or fake metrics (`Math.random()`, fake timers).
    - If a feature or driver is not implemented, set `this.available = false` and throw `new Error('<feature> not implemented')`.
-2. **Zero Silent Fallback**:
-   - Never catch errors silently or fall back without logging and throwing. Empty `catch {}` blocks are forbidden.
+2. **Zero Silent Fallback & Universal Fail-Fast**:
+   - Never catch errors silently, suppress error codes, or fall back without logging and propagating the error. Empty `catch {}` blocks and unhandled return values are forbidden across all languages and layers.
+   - Forbid weak dummy symbols (`__attribute__((weak))`): never provide weak fallback stubs that return `NULL`, `0`, or no-op defaults. Missing implementations must fail the build immediately at link time.
+   - Forbid silent feature degradation: any uninitialized peripheral, missing configuration, or failed driver contract must log a hard error or assert. Code must never quietly degrade fidelity or fall back to an unrequested operational mode.
+   - Strict parameter integrity: all enum constants, domain selectors, register configurations, and pin numbers passed to system or SDK APIs must be verified against actual hardware specifications. Never pass speculative values or out-of-bounds sentinels.
 3. **Ponytail (Minimal Complete Change)**:
    - Make the smallest complete change that solves the issue. Avoid speculative abstractions, unused code, and unnecessary layers.
    - Complexity is technical debt: the deleted line is the safest line.
@@ -54,21 +57,26 @@ For hardware design, electrical constraints, and embedded firmware rules, refer 
 
 To prevent context exhaustion, cognitive degradation, and hallucination:
 
-1. **Context Protection (Orchestrator Boundary)**:
-   - The primary orchestrator is strictly a dispatcher, architectural auditor, and user communicator. It must never manually traverse directories or inspect code files to understand a subsystem.
-   - Proactive delegation is mandatory: delegate any task that can be handled by a subagent, including exploratory codebase searches and reading file subsets. Formulate the scope and objective, then delegate exploration directly.
-2. **Scoped Granularity**:
+1. **Context Protection & KISS Triage (Orchestrator Boundary)**:
+   - **Golden Delegation Rule**: If a solution is stupid simple, do it yourself directly. If a task can be broken down into multiple distinct parts, delegate them.
+   - Triage before delegation (KISS): If a bug, fix, or feature touches 1 to 2 files and has a localized solution, the primary orchestrator must implement and verify it directly. Do not spawn subagents for trivial edits that take seconds.
+   - Delegate when: exploring unfamiliar subsystems across >4 files, parallel multi-file refactoring, or running long-running build/test scripts.
+   - For exploratory tasks, the orchestrator formulates the specific objective and target files, then delegates exploration.
+2. **Strict Local Ground Truth (Anti-Rabbit-Hole)**:
+   - The repository is 100% self-contained. Never use web search or external API queries for board pinouts, hardware schematics, or drivers.
+   - Hardware ground truth lives strictly in `firmware/boards/<board_id>/board_def.h` and `board.c`. If a pin, polarity, or rail is defined there, it is authoritative.
+3. **Scoped Granularity**:
    - Delegate tasks to subagents scoped to 1 to 4 files only.
    - Keep file scopes between parallel subagents strictly non-overlapping.
    - Explicitly list target files (`FILE SCOPE`) and forbid edits outside that list.
-3. **Contract Specifications**:
+4. **Contract Specifications**:
    - Provide exact target functions, line references, and contracts.
    - Use `Model: 'flash'` for concrete implementation and verification tasks.
-4. **Independent Verification (Separation of Concerns)**:
+5. **Independent Verification (Separation of Concerns)**:
    - Implementors must never verify their own changes: an agent that writes code possesses the same cognitive blind spots that generated the bugs. A task is not complete when the implementor claims it works.
    - Verification requires runtime execution without mocks: static syntax checks (`node -c`, lint passes) are insufficient. Verification requires actual runtime execution (headless browser DOM execution, clean container compilation, physical assertion passes).
    - Dedicated verifiers: every non-trivial change must be verified by an independent verifier subagent or automated test script operating without mocks.
-5. **Main Agent Final Audit**:
+6. **Main Agent Final Audit**:
    - The main agent conducts the final audit directly by inspecting files, reviewing `git diff`, and running test scripts before completing the task.
 
 ## 5. Communication, Style & Anti-Slop Standards
@@ -92,3 +100,35 @@ All agents and subagents must enforce antislop skills (`antislop`, `antislop-cod
 6. **Copy & Text (`antislop-copywriting`)**:
    - Never use promotional adjectives, vague filler, or hyperbolic descriptions.
    - Keep UI labels, headers, and documentation direct, purposeful, and human-crafted.
+
+## 6. Architecture & Subsystem Directory
+
+Any agent navigating this codebase must consult this directory before exploring files:
+
+| Subsystem               | Authoritative Files                                                                             | Semantics & Boundaries                                                                                                                                       |
+| :---------------------- | :---------------------------------------------------------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Board Definition**    | `firmware/boards/<board_id>/board_def.h`<br>`firmware/boards/<board_id>/board.c`                | Defines physical pins, active polarities, power rails, display LUTs. Zero board defines allowed in core components.                                          |
+| **Power & Sleep**       | `firmware/components/power_mgr/power_mgr.c`                                                     | Deep sleep entry and wake. RTC IO domain must remain `ESP_PD_OPTION_ON` for wake pull-ups. GPIO holds deferred to sleep entry. Button release loops bounded. |
+| **Display & LUTs**      | `firmware/components/epaper/epaper_port.c`<br>`firmware/components/board_config/CMakeLists.txt` | EPD SPI bus and refresh sequencing. Archive linking requires explicit symbol extraction (`-u board_epd_get_lut_partial -u board_power_pre_sleep`).           |
+| **Status LED**          | `firmware/components/status_led/status_led.c`                                                   | Wake event must execute on a one-shot background task (0 ms wake delay). Sleep event is synchronous (500 ms) to finish before CPU powerdown.                 |
+| **UI Views**            | `firmware/main/views/`<br>`firmware/main/main.c`                                                | Views are fully decoupled event consumers (`button_event_t`). No view directly manages hardware sleep.                                                       |
+| **Storage & Library**   | `firmware/components/reader_core/`<br>`firmware/components/sdcard/`                             | SD card has priority; falls back to internal SPIFFS / Flash storage.                                                                                         |
+| **BLE Synchronization** | `firmware/components/ble_sync/`                                                                 | Binary frame transport for file upload and config sync. Companion client executes heavy processing.                                                          |
+
+## 7. Build & Verification Cookbook
+
+Always execute builds inside Docker to prevent toolchain drift:
+
+1. **Fast Incremental Verification (Default)**:
+
+   ```bash
+   docker-compose -f firmware/compose.yml run --rm -e BOARD=waveshare_154 firmware
+   ```
+
+   _Recompiles only modified files in 5 to 10 seconds. Use for all iterative code verification._
+
+2. **Cold Clean Build (Cache Wipe)**:
+   ```bash
+   docker-compose -f firmware/compose.yml run --rm -e BOARD=waveshare_154 clean-build
+   ```
+   _Wipes the `build/` directory and recompiles all 1,143 targets from scratch. Use only when validating configuration signature isolation or diagnosing stale cache corruption._
