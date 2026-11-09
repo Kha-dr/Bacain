@@ -11,8 +11,8 @@ extern "C" {
 #endif
 
 typedef enum {
-    BTN_ID_UP   = 0,    // Navigation Up (BOOT, GPIO 0)
-    BTN_ID_DOWN = 1,    // Navigation Down (PWR, GPIO 18)
+    BTN_ID_UP   = 0,    // Navigation Up (BOARD_BTN_UP_PIN)
+    BTN_ID_DOWN = 1,    // Navigation Down (BOARD_BTN_DOWN_PIN)
     // Aliases backward-compatible
     BTN_ID_BOOT = BTN_ID_UP,
     BTN_ID_PWR  = BTN_ID_DOWN,
@@ -32,7 +32,7 @@ typedef struct {
     btn_press_type_t type;
 } button_event_t;
 
-// Initializes GPIO 0 (BOOT) and GPIO 18 (PWR) with polling timer & event queue
+// Initializes buttons with polling timer & event queue
 esp_err_t button_init(QueueHandle_t *out_queue);
 
 // Deinitializes timer and button resources
