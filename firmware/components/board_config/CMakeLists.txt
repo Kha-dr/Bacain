@@ -12,3 +12,8 @@ idf_component_register(
     INCLUDE_DIRS "include"
     REQUIRES esp_common driver
 )
+
+if(board_srcs)
+    target_link_libraries(${COMPONENT_LIB} INTERFACE "-u board_epd_get_lut_partial -u board_power_pre_sleep")
+endif()
+
