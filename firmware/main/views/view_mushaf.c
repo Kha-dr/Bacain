@@ -1,4 +1,7 @@
+#define view_mushaf_on_wake __legacy_view_mushaf_on_wake
 #include "view_mushaf.h"
+#undef view_mushaf_on_wake
+#include "views.h"
 
 #if CONFIG_BOARD_MUSHAF_ENABLE || BOARD_MUSHAF_ENABLE
 
@@ -9,9 +12,9 @@
 #include "epaper_port.h"
 #include "GUI_Paint.h"
 #include "fonts.h"
-#include "power_mgr.h"
 #include "app_config.h"
 #include "view_menu.h"
+#include "power_mgr.h"
 
 #define TAG "view_mushaf"
 
@@ -28,6 +31,7 @@ RTC_DATA_ATTR static int s_rtc_mushaf_menu_idx = 0;
 RTC_DATA_ATTR static int s_rtc_mushaf_jump_idx = 0;
 RTC_DATA_ATTR static int s_rtc_mushaf_bm_idx = 0;
 RTC_DATA_ATTR static uint32_t s_mushaf_redraw_counter = 0;
+RTC_DATA_ATTR static reader_view_t s_rtc_mushaf_sub_view = VIEW_MUSHAF_MENU;
 
 static const struct {
     const char *label;
@@ -351,6 +355,7 @@ static void view_mushaf_render_bookmarks(bool full_refresh) {
 
 void view_mushaf_init(bool is_cold_boot) {
     if (is_cold_boot) {
+        s_rtc_mushaf_sub_view = VIEW_MUSHAF_MENU;
         mushaf_reader_init(NULL);
     } else {
         mushaf_reader_init(&s_rtc_mushaf_state);
@@ -371,31 +376,31 @@ void view_mushaf_save_before_sleep(void) {
 
 void view_mushaf_enter_menu(void) {
     s_rtc_mushaf_menu_idx = 0;
+    s_rtc_mushaf_sub_view = VIEW_MUSHAF_MENU;
     view_mushaf_render_menu(false);
 }
 
-reader_view_t view_mushaf_on_wake(reader_view_t view, wakeup_reason_t wakeup) {
-    if (wakeup != WAKEUP_REASON_BOOT_BUTTON && wakeup != WAKEUP_REASON_PWR_BUTTON) {
-        switch (view) {
-        case VIEW_MUSHAF_READING:
-            view_mushaf_render_reading(false);
-            break;
-        case VIEW_MUSHAF_JUMP:
-            view_mushaf_render_jump(false);
-            break;
-        case VIEW_MUSHAF_BOOKMARKS:
-            view_mushaf_render_bookmarks(false);
-            break;
-        case VIEW_MUSHAF_MENU:
-        default:
-            view_mushaf_render_menu(false);
-            return VIEW_MUSHAF_MENU;
-        }
+reader_view_t view_mushaf_on_wake(void) {
+    switch (s_rtc_mushaf_sub_view) {
+    case VIEW_MUSHAF_READING:
+        view_mushaf_render_reading(false);
+        break;
+    case VIEW_MUSHAF_JUMP:
+        view_mushaf_render_jump(false);
+        break;
+    case VIEW_MUSHAF_BOOKMARKS:
+        view_mushaf_render_bookmarks(false);
+        break;
+    case VIEW_MUSHAF_MENU:
+    default:
+        s_rtc_mushaf_sub_view = VIEW_MUSHAF_MENU;
+        view_mushaf_render_menu(false);
+        return VIEW_MUSHAF_MENU;
     }
-    return view;
+    return s_rtc_mushaf_sub_view;
 }
 
-reader_view_t view_mushaf_handle_event(reader_view_t view, button_event_t evt) {
+static reader_view_t mushaf_handle_event_internal(reader_view_t view, button_event_t evt) {
     if (view == VIEW_MUSHAF_MENU) {
         if (evt.type == BTN_EVENT_CUSTOM_REFRESH) {
             view_mushaf_render_menu(false);
@@ -553,6 +558,14 @@ reader_view_t view_mushaf_handle_event(reader_view_t view, button_event_t evt) {
     }
 
     return view;
+}
+
+reader_view_t view_mushaf_handle_event(reader_view_t view, button_event_t evt) {
+    reader_view_t next = mushaf_handle_event_internal(view, evt);
+    if (next >= VIEW_MUSHAF_MENU && next <= VIEW_MUSHAF_BOOKMARKS) {
+        s_rtc_mushaf_sub_view = next;
+    }
+    return next;
 }
 
 #endif // CONFIG_BOARD_MUSHAF_ENABLE || BOARD_MUSHAF_ENABLE

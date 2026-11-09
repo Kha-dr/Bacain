@@ -1,4 +1,7 @@
+#define view_ble_sync_on_wake __legacy_view_ble_sync_on_wake
 #include "view_ble_sync.h"
+#undef view_ble_sync_on_wake
+#include "views.h"
 #include <stdio.h>
 #include "esp_log.h"
 #include "esp_timer.h"
@@ -82,8 +85,7 @@ void view_ble_sync_enter(void) {
     view_ble_sync_render(ble_sync_is_connected(), ble_sync_get_bytes_received(), NULL);
 }
 
-reader_view_t view_ble_sync_on_wake(wakeup_reason_t wakeup) {
-    (void)wakeup;
+reader_view_t view_ble_sync_on_wake(void) {
     view_ble_sync_enter();
     return VIEW_BLE_SYNC;
 }

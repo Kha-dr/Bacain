@@ -147,7 +147,7 @@ void reader_ui_render_book_list_full(int selected_index) {
     view_library_render(true);
 }
 
-reader_view_t view_library_on_wake(wakeup_reason_t wakeup) {
+reader_view_t view_library_on_wake(void) {
     if (book_library_get_count() == 0) {
         book_library_scan();
     }
@@ -158,9 +158,6 @@ reader_view_t view_library_on_wake(wakeup_reason_t wakeup) {
         }
     } else {
         s_rtc_book_index = 0;
-    }
-    if (wakeup != WAKEUP_REASON_BOOT_BUTTON && wakeup != WAKEUP_REASON_PWR_BUTTON) {
-        view_library_render(false);
     }
     return VIEW_BOOK_LIST;
 }

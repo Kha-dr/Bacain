@@ -1,4 +1,7 @@
+#define view_nav_hints_on_wake __legacy_view_nav_hints_on_wake
 #include "view_nav_hints.h"
+#undef view_nav_hints_on_wake
+#include "views.h"
 #include "view_menu.h"
 #include "epaper_port.h"
 #include "GUI_Paint.h"
@@ -48,8 +51,7 @@ void reader_ui_render_nav_hints(void) {
     view_nav_hints_render();
 }
 
-reader_view_t view_nav_hints_on_wake(wakeup_reason_t wakeup) {
-    (void)wakeup;
+reader_view_t view_nav_hints_on_wake(void) {
     view_nav_hints_render();
     return VIEW_NAV_HINTS;
 }
