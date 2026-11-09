@@ -72,6 +72,19 @@ static void set_pin_level(int pin, bool active) {
         gpio_set_level((gpio_num_t)pin, level);
     }
 }
+
+static void led_wake_task(void *param) {
+    int pin = (int)(intptr_t)param;
+    for (int i = 0; i < 2; i++) {
+        set_pin_level(pin, true);
+        delay_ms(150);
+        set_pin_level(pin, false);
+        if (i < 1) {
+            delay_ms(120);
+        }
+    }
+    vTaskDelete(NULL);
+}
 #endif
 
 void status_led_init(void) {
@@ -124,12 +137,15 @@ void status_led_trigger(status_led_event_t event) {
         }
 
         if (pin >= 0) {
-            for (int i = 0; i < 2; i++) {
-                set_pin_level(pin, true);
-                delay_ms(150);
-                set_pin_level(pin, false);
-                if (i < 1) {
-                    delay_ms(120);
+            BaseType_t res = xTaskCreate(led_wake_task, "led_wake", 2048, (void *)(intptr_t)pin, 1, NULL);
+            if (res != pdPASS) {
+                for (int i = 0; i < 2; i++) {
+                    set_pin_level(pin, true);
+                    delay_ms(150);
+                    set_pin_level(pin, false);
+                    if (i < 1) {
+                        delay_ms(120);
+                    }
                 }
             }
         }
