@@ -275,7 +275,7 @@ static void ble_sync_get_status_payload(ble_sync_status_payload_t *payload)
     payload->battery_pct = power_mgr_get_battery_percentage();
     uint32_t mv = power_mgr_get_battery_voltage_mv();
     payload->battery_mv = (uint16_t)(mv > 0xFFFF ? 0xFFFF : mv);
-    payload->is_charging = (mv >= 4250) ? 1 : 0;
+    payload->is_charging = power_mgr_is_charging() ? 1 : 0;
 
     uint64_t free_bytes = 0;
     uint64_t total_bytes = 0;

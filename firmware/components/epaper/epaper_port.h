@@ -3,9 +3,10 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include "board_config.h"
 
-#define EXAMPLE_LCD_WIDTH  200
-#define EXAMPLE_LCD_HEIGHT 200
+#define EXAMPLE_LCD_WIDTH  BOARD_DISPLAY_WIDTH
+#define EXAMPLE_LCD_HEIGHT BOARD_DISPLAY_HEIGHT
 
 /**********************************
  Color Definitions (1-bit monochrome)

@@ -158,7 +158,7 @@ static reader_view_t dispatch_view_event(reader_view_t view, button_event_t evt)
 }
 
 void app_main(void) {
-    // 1. Critical: Latch board power HIGH (GPIO 17) and cut audio rail
+    // 1. Critical: Latch board power and cut audio rail
     power_mgr_early_init();
     status_led_init();
     esp_reset_reason_t rst_reason = esp_reset_reason();

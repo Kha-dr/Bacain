@@ -33,9 +33,6 @@ static const char *TAG = "text_pager";
 #ifndef UI_HEADER_HEIGHT
 #define UI_HEADER_HEIGHT       19
 #endif
-#ifndef UI_FOOTER_Y
-#define UI_FOOTER_Y            184
-#endif
 #ifndef UI_FOOTER_HEIGHT
 #define UI_FOOTER_HEIGHT       16
 #endif
@@ -45,6 +42,10 @@ static const char *TAG = "text_pager";
 #ifndef UI_BODY_MAX_HEIGHT
 #define UI_BODY_MAX_HEIGHT     160
 #endif
+
+static inline uint16_t get_ui_footer_y(uint16_t disp_h) {
+    return (disp_h > UI_FOOTER_HEIGHT) ? (disp_h - UI_FOOTER_HEIGHT) : 0;
+}
 
 static text_pager_t      s_pager = {0};
 static FILE             *s_book_fp = NULL;
@@ -77,7 +78,8 @@ static inline UWORD get_margin_x(text_pager_font_size_t font_size, uint16_t disp
 
 static inline size_t get_max_lines(text_pager_font_size_t font_size, uint16_t disp_h) {
     uint16_t line_pitch = (font_size == TEXT_PAGER_FONT_16) ? 20 : 14;
-    int32_t footer_h = (int32_t)disp_h - UI_FOOTER_Y;
+    int32_t footer_y = get_ui_footer_y(disp_h);
+    int32_t footer_h = (int32_t)disp_h - footer_y;
     int32_t body_area_h = (int32_t)disp_h - UI_HEADER_HEIGHT - footer_h - 4;
     if (body_area_h <= 0 || line_pitch == 0) {
         return 1;
@@ -639,12 +641,15 @@ esp_err_t text_pager_render_page(void) {
     }
     Paint_DrawLine(0, UI_HEADER_HEIGHT, Paint.Width - 1, UI_HEADER_HEIGHT, fg_col, DOT_PIXEL_1X1, LINE_STYLE_SOLID);
 
-    // 2. Body (UI_BODY_Y_START .. UI_FOOTER_Y - 1)
-    Paint_ClearWindows(0, UI_HEADER_HEIGHT + 1, Paint.Width - 1, UI_FOOTER_Y - 1, bg_col);
+    uint16_t disp_w   = (Paint.Width > 0) ? Paint.Width : BOARD_DISPLAY_WIDTH;
+    uint16_t disp_h   = (Paint.Height > 0) ? Paint.Height : BOARD_DISPLAY_HEIGHT;
+    uint16_t footer_y = get_ui_footer_y(disp_h);
+
+    // 2. Body (UI_BODY_Y_START .. footer_y - 1)
+    Paint_ClearWindows(0, UI_HEADER_HEIGHT + 1, Paint.Width - 1, footer_y - 1, bg_col);
 
     sFONT *body_font = (s_pager.font_size == TEXT_PAGER_FONT_16) ? &Font16 : &Font12;
     UWORD line_pitch = (s_pager.font_size == TEXT_PAGER_FONT_16) ? 20 : 14;
-    uint16_t disp_w  = (Paint.Width > 0) ? Paint.Width : BOARD_DISPLAY_WIDTH;
     UWORD margin_x   = get_margin_x(s_pager.font_size, disp_w);
     UWORD body_y     = UI_BODY_Y_START;
 
@@ -654,20 +659,20 @@ esp_err_t text_pager_render_page(void) {
     } else {
         for (size_t i = 0; i < s_pager.current_page.line_count; i++) {
             UWORD y_pos = body_y + (UWORD)(i * line_pitch);
-            if (y_pos + body_font->Height >= UI_FOOTER_Y) {
+            if (y_pos + body_font->Height >= footer_y) {
                 break;
             }
             draw_safe_string(margin_x, y_pos, s_pager.current_page.lines[i], body_font, fg_col, bg_col);
         }
     }
 
-    // 3. Footer (UI_FOOTER_Y .. Paint.Height - 1)
-    Paint_DrawLine(0, UI_FOOTER_Y - 1, Paint.Width - 1, UI_FOOTER_Y - 1, fg_col, DOT_PIXEL_1X1, LINE_STYLE_SOLID);
-    Paint_ClearWindows(0, UI_FOOTER_Y, Paint.Width - 1, Paint.Height - 1, bg_col);
+    // 3. Footer (footer_y .. Paint.Height - 1)
+    Paint_DrawLine(0, footer_y - 1, Paint.Width - 1, footer_y - 1, fg_col, DOT_PIXEL_1X1, LINE_STYLE_SOLID);
+    Paint_ClearWindows(0, footer_y, Paint.Width - 1, Paint.Height - 1, bg_col);
 
     // Bookmark indicator on left
     if (s_pager.book_open && book_library_is_bookmarked(s_pager.current_page.page_start_offset)) {
-        draw_safe_string(8, UI_FOOTER_Y + 2, "[BM]", &Font12, fg_col, bg_col);
+        draw_safe_string(8, footer_y + 2, "[BM]", &Font12, fg_col, bg_col);
     }
 
     // Progress percentage on right
@@ -676,7 +681,7 @@ esp_err_t text_pager_render_page(void) {
     size_t pct_len = strlen(pct_str);
     UWORD pct_w = (UWORD)(pct_len * Font12.Width);
     UWORD pct_x = (Paint.Width > pct_w + 8) ? (Paint.Width - pct_w - 8) : (Paint.Width - pct_w);
-    draw_safe_string(pct_x, UI_FOOTER_Y + 2, pct_str, &Font12, fg_col, bg_col);
+    draw_safe_string(pct_x, footer_y + 2, pct_str, &Font12, fg_col, bg_col);
 
     return ESP_OK;
 }

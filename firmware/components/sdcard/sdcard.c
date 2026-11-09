@@ -17,6 +17,10 @@
 #define SDMMC_CLK_PIN   BOARD_SDMMC_CLK_PIN
 #define SDMMC_CMD_PIN   BOARD_SDMMC_CMD_PIN
 
+#ifndef BOARD_HAS_SDCARD
+#define BOARD_HAS_SDCARD 1
+#endif
+
 static sdmmc_card_t *s_card = NULL;
 static bool s_mounted = false;
 
@@ -26,6 +30,15 @@ static bool s_flash_mounted = false;
 esp_err_t sdcard_init(void) {
     if (s_mounted) {
         return ESP_OK;
+    }
+
+#if !BOARD_HAS_SDCARD
+    ESP_LOGI(TAG, "SD card not equipped on this board");
+    return ESP_ERR_NOT_SUPPORTED;
+#else
+    if (BOARD_SDMMC_CLK_PIN < 0) {
+        ESP_LOGI(TAG, "SD card pins not configured");
+        return ESP_ERR_NOT_SUPPORTED;
     }
 
     ESP_LOGI(TAG, "Initializing SD card (1-line SDMMC)...");
@@ -62,6 +75,7 @@ esp_err_t sdcard_init(void) {
     mkdir(SDCARD_MOUNT_POINT "/.reader", 0777);
 
     return ESP_OK;
+#endif
 }
 
 void sdcard_deinit(void) {
