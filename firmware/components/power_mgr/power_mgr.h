@@ -33,11 +33,17 @@ bool power_mgr_is_battery_available(void);
 // Detects cause of wake up
 wakeup_reason_t power_mgr_get_wakeup_cause(void);
 
-// Battery ADC readings
+// Battery ADC readings (returns RTC-persisted cached value during wake before fresh conversion)
 uint32_t power_mgr_get_battery_voltage_mv(void);
 uint8_t  power_mgr_get_battery_percentage(void);
 uint32_t power_mgr_get_battery_mv(void);
 uint8_t  power_mgr_get_battery_pct(void);
+
+// Manually caches battery millivolts in RTC memory
+void power_mgr_cache_battery_mv(uint32_t mv);
+
+// Forces a fresh ADC conversion and updates RTC cache
+uint32_t power_mgr_read_battery_mv(void);
 
 // Enters low-power deep sleep (sleep_seconds = 0 for indefinite until button)
 void power_mgr_enter_deep_sleep(uint32_t sleep_seconds);

@@ -7,6 +7,7 @@
 #include "esp_adc/adc_cali.h"
 #include "esp_adc/adc_cali_scheme.h"
 #include "esp_log.h"
+#include "esp_attr.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -92,28 +93,16 @@
 #define BOARD_VOLTAGE_DIVIDER_RATIO 2.0f
 #endif
 
-#ifndef BOOT_BUTTON_PIN
-#ifdef BOARD_BTN_BOOT_PIN
-#define BOOT_BUTTON_PIN BOARD_BTN_BOOT_PIN
-#else
-#define BOOT_BUTTON_PIN -1
-#endif
-#endif
-
-#ifndef PWR_BUTTON_PIN
-#ifdef BOARD_BTN_PWR_PIN
-#define PWR_BUTTON_PIN BOARD_BTN_PWR_PIN
-#else
-#define PWR_BUTTON_PIN -1
-#endif
-#endif
-
 #define BATTERY_ADC_SAMPLE_COUNT 16
 
 static adc_oneshot_unit_handle_t s_adc_handle = NULL;
 static adc_cali_handle_t         s_cali_handle = NULL;
 static bool                      s_cali_enabled = false;
 static bool                      s_battery_available = false;
+
+RTC_DATA_ATTR static uint32_t s_rtc_cached_battery_mv = 0;
+RTC_DATA_ATTR static bool s_rtc_battery_valid = false;
+static bool s_fresh_conversion_done = false;
 
 // Default weak board power hook implementations
 esp_err_t __attribute__((weak)) board_power_early_init(void) {
@@ -338,9 +327,9 @@ wakeup_reason_t power_mgr_get_wakeup_cause(void) {
     esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
     if (cause == ESP_SLEEP_WAKEUP_EXT1) {
         uint64_t status = esp_sleep_get_ext1_wakeup_status();
-        if (BOOT_BUTTON_PIN >= 0 && (status & (1ULL << BOOT_BUTTON_PIN))) {
+        if (BOARD_BTN_UP_PIN >= 0 && (status & (1ULL << BOARD_BTN_UP_PIN))) {
             return WAKEUP_REASON_BOOT_BUTTON;
-        } else if (PWR_BUTTON_PIN >= 0 && (status & (1ULL << PWR_BUTTON_PIN))) {
+        } else if (BOARD_BTN_DOWN_PIN >= 0 && (status & (1ULL << BOARD_BTN_DOWN_PIN))) {
             return WAKEUP_REASON_PWR_BUTTON;
         }
         return WAKEUP_REASON_OTHER;
@@ -350,9 +339,17 @@ wakeup_reason_t power_mgr_get_wakeup_cause(void) {
     return WAKEUP_REASON_COLD_BOOT;
 }
 
-uint32_t power_mgr_get_battery_mv(void) {
+void power_mgr_cache_battery_mv(uint32_t mv) {
+    s_rtc_cached_battery_mv = mv;
+    s_rtc_battery_valid = (mv > 0);
+}
+
+uint32_t power_mgr_read_battery_mv(void) {
     uint32_t board_mv = board_power_get_battery_mv();
     if (board_mv > 0) {
+        s_rtc_cached_battery_mv = board_mv;
+        s_rtc_battery_valid = true;
+        s_fresh_conversion_done = true;
         return board_mv;
     }
 
@@ -389,7 +386,19 @@ uint32_t power_mgr_get_battery_mv(void) {
         mv = (avg_raw * 3300) / 4095;
     }
 
-    return (uint32_t)((float)mv * BOARD_VOLTAGE_DIVIDER_RATIO);
+    uint32_t calculated_mv = (uint32_t)((float)mv * BOARD_VOLTAGE_DIVIDER_RATIO);
+    s_rtc_cached_battery_mv = calculated_mv;
+    s_rtc_battery_valid = (calculated_mv > 0);
+    s_fresh_conversion_done = true;
+    return calculated_mv;
+}
+
+uint32_t power_mgr_get_battery_mv(void) {
+    if (s_rtc_battery_valid && !s_fresh_conversion_done && esp_sleep_get_wakeup_cause() != ESP_SLEEP_WAKEUP_UNDEFINED) {
+        return s_rtc_cached_battery_mv;
+    }
+
+    return power_mgr_read_battery_mv();
 }
 
 uint32_t power_mgr_get_battery_voltage_mv(void) {
@@ -459,18 +468,21 @@ uint8_t power_mgr_get_battery_percentage(void) {
 void power_mgr_enter_deep_sleep(uint32_t sleep_seconds) {
     ESP_LOGI(TAG, "Entering deep sleep (%lu s)", (unsigned long)sleep_seconds);
 
+    // Refresh battery voltage cache before deep sleep
+    power_mgr_read_battery_mv();
+
     esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL);
 
     uint64_t ext1_pins = 0;
-    if (BOOT_BUTTON_PIN >= 0 && rtc_gpio_is_valid_gpio((gpio_num_t)BOOT_BUTTON_PIN)) {
-        ext1_pins |= (1ULL << BOOT_BUTTON_PIN);
-        rtc_gpio_pullup_en((gpio_num_t)BOOT_BUTTON_PIN);
-        rtc_gpio_pulldown_dis((gpio_num_t)BOOT_BUTTON_PIN);
+    if (BOARD_BTN_UP_PIN >= 0 && rtc_gpio_is_valid_gpio((gpio_num_t)BOARD_BTN_UP_PIN)) {
+        ext1_pins |= (1ULL << BOARD_BTN_UP_PIN);
+        rtc_gpio_pullup_en((gpio_num_t)BOARD_BTN_UP_PIN);
+        rtc_gpio_pulldown_dis((gpio_num_t)BOARD_BTN_UP_PIN);
     }
-    if (PWR_BUTTON_PIN >= 0 && rtc_gpio_is_valid_gpio((gpio_num_t)PWR_BUTTON_PIN) && PWR_BUTTON_PIN != BOOT_BUTTON_PIN) {
-        ext1_pins |= (1ULL << PWR_BUTTON_PIN);
-        rtc_gpio_pullup_en((gpio_num_t)PWR_BUTTON_PIN);
-        rtc_gpio_pulldown_dis((gpio_num_t)PWR_BUTTON_PIN);
+    if (BOARD_BTN_DOWN_PIN >= 0 && rtc_gpio_is_valid_gpio((gpio_num_t)BOARD_BTN_DOWN_PIN) && BOARD_BTN_DOWN_PIN != BOARD_BTN_UP_PIN) {
+        ext1_pins |= (1ULL << BOARD_BTN_DOWN_PIN);
+        rtc_gpio_pullup_en((gpio_num_t)BOARD_BTN_DOWN_PIN);
+        rtc_gpio_pulldown_dis((gpio_num_t)BOARD_BTN_DOWN_PIN);
     }
     if (ext1_pins != 0) {
         esp_sleep_enable_ext1_wakeup_io(ext1_pins, ESP_EXT1_WAKEUP_ANY_LOW);
@@ -509,13 +521,13 @@ void power_mgr_enter_deep_sleep(uint32_t sleep_seconds) {
 
     while (1) {
         bool button_pressed = false;
-        if (BOOT_BUTTON_PIN >= 0 && GPIO_IS_VALID_GPIO(BOOT_BUTTON_PIN)) {
-            if (gpio_get_level((gpio_num_t)BOOT_BUTTON_PIN) == 0) {
+        if (BOARD_BTN_UP_PIN >= 0 && GPIO_IS_VALID_GPIO(BOARD_BTN_UP_PIN)) {
+            if (gpio_get_level((gpio_num_t)BOARD_BTN_UP_PIN) == 0) {
                 button_pressed = true;
             }
         }
-        if (PWR_BUTTON_PIN >= 0 && GPIO_IS_VALID_GPIO(PWR_BUTTON_PIN) && PWR_BUTTON_PIN != BOOT_BUTTON_PIN) {
-            if (gpio_get_level((gpio_num_t)PWR_BUTTON_PIN) == 0) {
+        if (BOARD_BTN_DOWN_PIN >= 0 && GPIO_IS_VALID_GPIO(BOARD_BTN_DOWN_PIN) && BOARD_BTN_DOWN_PIN != BOARD_BTN_UP_PIN) {
+            if (gpio_get_level((gpio_num_t)BOARD_BTN_DOWN_PIN) == 0) {
                 button_pressed = true;
             }
         }
