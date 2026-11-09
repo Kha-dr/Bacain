@@ -99,7 +99,7 @@ void reader_ui_render_bookmarks_full(int selected_index) {
     view_bookmarks_render(true);
 }
 
-reader_view_t view_bookmarks_on_wake(wakeup_reason_t wakeup) {
+reader_view_t view_bookmarks_on_wake(void) {
     const reading_state_t *st = book_library_get_state();
     int count = (st != NULL) ? (int)st->bookmark_count : 0;
     if (count > 0) {
@@ -108,9 +108,6 @@ reader_view_t view_bookmarks_on_wake(wakeup_reason_t wakeup) {
         }
     } else {
         s_rtc_bookmark_index = 0;
-    }
-    if (wakeup != WAKEUP_REASON_BOOT_BUTTON && wakeup != WAKEUP_REASON_PWR_BUTTON) {
-        view_bookmarks_render(false);
     }
     return VIEW_BOOKMARKS;
 }

@@ -6,8 +6,8 @@
 #include "fonts.h"
 #include "text_pager.h"
 #include "book_library.h"
-#include "power_mgr.h"
 #include "app_config.h"
+#include "power_mgr.h"
 #include "view_menu.h"
 #include "view_bookmarks.h"
 
@@ -56,19 +56,13 @@ void view_reading_render_page_turn(void) {
     }
 }
 
-reader_view_t view_reading_on_wake(wakeup_reason_t wakeup, bool book_opened) {
-    if (book_opened) {
+reader_view_t view_reading_on_wake(void) {
+    if (text_pager_get_current_page() != NULL) {
         s_redraw_counter = 0;
-        if (wakeup != WAKEUP_REASON_BOOT_BUTTON && wakeup != WAKEUP_REASON_PWR_BUTTON) {
-            view_reading_render(false);
-        }
         return VIEW_READING;
     }
 
     view_menu_set_index(0);
-    if (wakeup != WAKEUP_REASON_BOOT_BUTTON && wakeup != WAKEUP_REASON_PWR_BUTTON) {
-        view_menu_render(false);
-    }
     return VIEW_MENU;
 }
 

@@ -3,7 +3,6 @@
 
 #include <stdbool.h>
 #include "reader_ui.h"
-#include "power_mgr.h"
 #include "button.h"
 
 #ifdef __cplusplus
@@ -13,7 +12,7 @@ extern "C" {
 int view_library_get_index(void);
 void view_library_set_index(int index);
 void view_library_render(bool full_refresh);
-reader_view_t view_library_on_wake(wakeup_reason_t wakeup);
+reader_view_t view_library_on_wake(void);
 reader_view_t view_library_handle_event(button_event_t evt);
 
 #ifdef __cplusplus

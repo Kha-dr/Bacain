@@ -6,8 +6,8 @@
 #include "fonts.h"
 #include "text_pager.h"
 #include "book_library.h"
-#include "power_mgr.h"
 #include "app_config.h"
+#include "power_mgr.h"
 #include "view_reading.h"
 #include "view_library.h"
 #include "view_ble_sync.h"
@@ -152,12 +152,9 @@ void reader_ui_render_menu_full(int selected_index) {
     view_menu_render(true);
 }
 
-reader_view_t view_menu_on_wake(wakeup_reason_t wakeup) {
+reader_view_t view_menu_on_wake(void) {
     if (s_rtc_menu_index < 0 || s_rtc_menu_index >= MENU_ITEM_COUNT) {
         s_rtc_menu_index = 0;
-    }
-    if (wakeup != WAKEUP_REASON_BOOT_BUTTON && wakeup != WAKEUP_REASON_PWR_BUTTON) {
-        view_menu_render(false);
     }
     return VIEW_MENU;
 }

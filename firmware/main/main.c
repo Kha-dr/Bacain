@@ -22,6 +22,7 @@
 #include "reader_ui.h"
 #include "status_led.h"
 
+#include "views.h"
 #include "view_reading.h"
 #include "view_menu.h"
 #include "view_library.h"
@@ -40,6 +41,7 @@ static int64_t s_last_activity_us = 0;
 
 RTC_DATA_ATTR static reader_view_t s_rtc_last_view = VIEW_MENU;
 RTC_DATA_ATTR static bool s_rtc_has_sdcard = false;
+RTC_DATA_ATTR static storage_target_t s_rtc_storage_target = STORAGE_TARGET_FLASH;
 
 static void update_activity(void) {
     s_last_activity_us = esp_timer_get_time();
@@ -47,6 +49,16 @@ static void update_activity(void) {
 
 void app_enter_deep_sleep(void) {
     s_rtc_last_view = s_current_view;
+    reading_state_t state;
+    if (book_library_get_current_state(&state) == ESP_OK && state.active_book_path[0] != '\0') {
+        if (strncmp(state.active_book_path, "/sdcard", 7) == 0) {
+            s_rtc_storage_target = STORAGE_TARGET_SDCARD;
+        } else {
+            s_rtc_storage_target = STORAGE_TARGET_FLASH;
+        }
+    } else {
+        s_rtc_storage_target = book_library_get_storage_target();
+    }
     book_library_update_offset(text_pager_get_current_offset());
     book_library_flush_state();
 #if CONFIG_BOARD_MUSHAF_ENABLE
@@ -103,30 +115,29 @@ static void on_ble_sync_event(ble_sync_event_t event, const void *param, void *u
     }
 }
 
-static reader_view_t dispatch_wake_view(reader_view_t last_view, wakeup_reason_t wakeup, bool book_opened) {
+static reader_view_t dispatch_wake_view(reader_view_t last_view) {
     switch (last_view) {
         case VIEW_READING:
-            return view_reading_on_wake(wakeup, book_opened);
+            return view_reading_on_wake();
         case VIEW_MENU:
-            return view_menu_on_wake(wakeup);
+            return view_menu_on_wake();
         case VIEW_BOOK_LIST:
-            return view_library_on_wake(wakeup);
+            return view_library_on_wake();
         case VIEW_BOOKMARKS:
-            return view_bookmarks_on_wake(wakeup);
+            return view_bookmarks_on_wake();
         case VIEW_NAV_HINTS:
-            return view_nav_hints_on_wake(wakeup);
+            return view_nav_hints_on_wake();
         case VIEW_BLE_SYNC:
-            return view_ble_sync_on_wake(wakeup);
+            return view_ble_sync_on_wake();
 #if CONFIG_BOARD_MUSHAF_ENABLE
         case VIEW_MUSHAF_MENU:
         case VIEW_MUSHAF_READING:
         case VIEW_MUSHAF_JUMP:
         case VIEW_MUSHAF_BOOKMARKS:
-            return view_mushaf_on_wake(last_view, wakeup);
+            return view_mushaf_on_wake();
 #endif
         default:
             view_menu_set_index(0);
-            view_menu_render(false);
             return VIEW_MENU;
     }
 }
@@ -162,11 +173,7 @@ void app_main(void) {
     power_mgr_early_init();
     status_led_init();
     esp_reset_reason_t rst_reason = esp_reset_reason();
-    if (rst_reason == ESP_RST_SW || rst_reason == ESP_RST_PANIC ||
-        rst_reason == ESP_RST_INT_WDT || rst_reason == ESP_RST_TASK_WDT ||
-        rst_reason == ESP_RST_WDT) {
-        status_led_trigger(STATUS_LED_EVT_REBOOT);
-    } else {
+    if (rst_reason != ESP_RST_DEEPSLEEP) {
         status_led_trigger(STATUS_LED_EVT_WAKEUP);
     }
 
@@ -181,8 +188,7 @@ void app_main(void) {
     ESP_LOGI(TAG, "Starting BacaIn firmware...");
 
     wakeup_reason_t raw_wakeup = power_mgr_get_wakeup_cause();
-    wakeup_reason_t wakeup = raw_wakeup;
-    bool is_cold_boot = (wakeup == WAKEUP_REASON_COLD_BOOT || esp_reset_reason() != ESP_RST_DEEPSLEEP);
+    bool is_cold_boot = (raw_wakeup == WAKEUP_REASON_COLD_BOOT || esp_reset_reason() != ESP_RST_DEEPSLEEP);
     app_settings_load(is_cold_boot);
 
     // 3. Initialize Peripherals
@@ -193,14 +199,7 @@ void app_main(void) {
         ESP_LOGE(TAG, "Internal Flash storage initialization failed (0x%x)", flash_ret);
     }
 
-    if (button_get_inverted()) {
-        if (wakeup == WAKEUP_REASON_BOOT_BUTTON) {
-            wakeup = WAKEUP_REASON_PWR_BUTTON;
-        } else if (wakeup == WAKEUP_REASON_PWR_BUTTON) {
-            wakeup = WAKEUP_REASON_BOOT_BUTTON;
-        }
-    }
-    ESP_LOGI(TAG, "Wakeup reason: %d", wakeup);
+    ESP_LOGI(TAG, "Wakeup reason: %d", raw_wakeup);
 
     if (is_cold_boot) {
         ret = sdcard_init();
@@ -210,7 +209,7 @@ void app_main(void) {
             s_rtc_has_sdcard = false;
             ESP_LOGI(TAG, "MicroSD not detected, using internal Flash storage");
         }
-    } else if (s_rtc_has_sdcard) {
+    } else if (s_rtc_has_sdcard && s_rtc_storage_target == STORAGE_TARGET_SDCARD) {
         ret = sdcard_init();
         if (ret != ESP_OK) {
             s_rtc_has_sdcard = false;
@@ -233,8 +232,9 @@ void app_main(void) {
 #if CONFIG_BOARD_MUSHAF_ENABLE
     view_mushaf_init(is_cold_boot);
 #endif
-    book_library_set_storage_target(STORAGE_TARGET_FLASH);
-    ble_sync_set_storage_target(STORAGE_TARGET_FLASH);
+    storage_target_t active_target = (s_rtc_has_sdcard && s_rtc_storage_target == STORAGE_TARGET_SDCARD) ? STORAGE_TARGET_SDCARD : STORAGE_TARGET_FLASH;
+    book_library_set_storage_target(active_target);
+    ble_sync_set_storage_target(active_target);
     if (is_cold_boot) {
         book_library_scan();
     }
@@ -284,7 +284,12 @@ void app_main(void) {
         view_menu_render(true);
         ESP_LOGI(TAG, "Cold boot started into view %d", s_current_view);
     } else {
-        s_current_view = dispatch_wake_view(s_rtc_last_view, wakeup, opened);
+        s_current_view = dispatch_wake_view(s_rtc_last_view);
+        bool is_button_wake = (raw_wakeup == WAKEUP_REASON_BOOT_BUTTON || raw_wakeup == WAKEUP_REASON_PWR_BUTTON);
+        if (!is_button_wake) {
+            button_event_t refresh_evt = { .button = BTN_ID_BOOT, .type = BTN_EVENT_CUSTOM_REFRESH };
+            s_current_view = dispatch_view_event(s_current_view, refresh_evt);
+        }
         s_rtc_last_view = s_current_view;
         ESP_LOGI(TAG, "Wake view %d restored.", s_current_view);
     }
