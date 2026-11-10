@@ -107,9 +107,11 @@ static bool     s_is_connected = false;
 static bool     s_sync_running = false;
 static uint16_t s_current_mtu = 23;
 
+#define BLE_SYNC_DEFAULT_SLEEP_TIMEOUT_SEC 5
+
 /* Storage Target State */
 static storage_target_t s_storage_target = STORAGE_TARGET_FLASH;
-static uint16_t         s_sleep_timeout_sec = 20;
+static uint16_t         s_sleep_timeout_sec = BLE_SYNC_DEFAULT_SLEEP_TIMEOUT_SEC;
 static bool             s_sleep_timeout_loaded = false;
 
 /* File Upload State */
@@ -1329,7 +1331,7 @@ static int ble_sync_control_access_cb(uint16_t conn_handle, uint16_t attr_handle
         uint8_t nav_hints = 1;
         uint8_t rotation = 0;
         uint8_t btn_invert = 0;
-        uint16_t sleep_timeout = 20;
+        uint16_t sleep_timeout = BLE_SYNC_DEFAULT_SLEEP_TIMEOUT_SEC;
         nvs_handle_t nvs_hdl;
         if (nvs_open("settings", NVS_READONLY, &nvs_hdl) == ESP_OK) {
             nvs_get_u8(nvs_hdl, "font_size", &nvs_font);
@@ -1339,12 +1341,12 @@ static int ble_sync_control_access_cb(uint16_t conn_handle, uint16_t attr_handle
             nvs_get_u8(nvs_hdl, "rotation", &rotation);
             nvs_get_u8(nvs_hdl, "btn_invert", &btn_invert);
             if (nvs_get_u16(nvs_hdl, "sleep_timeout", &sleep_timeout) != ESP_OK) {
-                sleep_timeout = 20;
+                sleep_timeout = BLE_SYNC_DEFAULT_SLEEP_TIMEOUT_SEC;
             }
             nvs_close(nvs_hdl);
         } else {
             nav_hints = reader_ui_get_show_nav_hints() ? 1 : 0;
-            sleep_timeout = 20;
+            sleep_timeout = BLE_SYNC_DEFAULT_SLEEP_TIMEOUT_SEC;
         }
         s_sleep_timeout_sec = sleep_timeout;
         s_sleep_timeout_loaded = true;
