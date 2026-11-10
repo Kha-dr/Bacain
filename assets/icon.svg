@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <!-- App Canvas Frame -->
+  <rect width="512" height="512" rx="112" fill="#121212" />
+  <rect width="510" height="510" x="1" y="1" rx="111" fill="none" stroke="#27272a" stroke-width="2" />
+
+  <!-- Left Open Book Page (Scaled Up) -->
+  <path d="M 234 136
+           C 152 102, 68 124, 68 124
+           L 68 368
+           C 68 368, 152 346, 234 380
+           Z" fill="#e2e8f0" />
+
+  <!-- Right Open Book Page (Scaled Up) -->
+  <path d="M 278 136
+           C 360 102, 444 124, 444 124
+           L 444 368
+           C 444 368, 360 346, 278 380
+           Z" fill="#e2e8f0" />
+
+  <!-- Center Floating Bookmark Ribbon -->
+  <path d="M 238 100
+           L 274 100
+           L 274 430
+           L 256 410
+           L 238 430
+           Z" fill="#38bdf8" />
+
+  <!-- Base Page Layers / Book Thickness -->
+  <path d="M 83 386 C 148 366, 206 394, 234 404" stroke="#475569" stroke-width="4" stroke-linecap="round" fill="none" />
+  <path d="M 429 386 C 364 366, 306 394, 278 404" stroke="#475569" stroke-width="4" stroke-linecap="round"
+    fill="none" />
+</svg>

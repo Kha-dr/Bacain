@@ -1,7 +1,7 @@
 # BacaIn
 
 <div align="center">
-  <img src="./web/icon.svg" alt="BacaIn" width="25%" />
+  <img src="./assets/device-hero-placeholder.png" alt="BacaIn Hardware" width="100%" />
 
 Mini E-reader firmware for ESP32-S3 e-paper devices with PWA management via Web Bluetooth.
 
@@ -21,6 +21,12 @@ Developed on [Waveshare ESP32-S3-ePaper-1.54](https://github.com/waveshareteam/E
 - **Storage**: Internal flash with optional MicroSD.
 - **Power**: 20s auto-sleep, instant page turn on wake.
 - **Al-Quran (Optional)**: Offline Mushaf reader (see [firmware/Mushaf_Reader.md](firmware/Mushaf_Reader.md)).
+
+### E-Paper Display Interface
+
+| Reading View | Reader Menu | Sync Screen |
+| :---: | :---: | :---: |
+| <img src="./assets/ui-reading.png" width="220" alt="Reading View" /> | <img src="./assets/ui-menu.png" width="220" alt="Reader Menu" /> | <img src="./assets/ui-sync.png" width="220" alt="Sync Screen" /> |
 
 ## Controls
 
@@ -53,6 +59,12 @@ Access the 7-item menu by holding (>1.2s) UP or DOWN while reading:
 7. **Power Off**: Display power-off screen and enter deep sleep.
 
 ## Quick Start
+
+### Web Companion & Flasher
+
+| Mobile Companion | Web Dashboard | Web Serial Flasher |
+| :---: | :---: | :---: |
+| <img src="./assets/pwa-mobile.png" width="200" alt="Mobile Companion" /> | <img src="./assets/pwa-dashboard.png" width="300" alt="Web Dashboard" /> | <img src="./assets/web-flasher.png" width="300" alt="Web Serial Flasher" /> |
 
 ### 1. Flash Firmware
 
