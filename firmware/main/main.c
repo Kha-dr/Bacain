@@ -40,56 +40,10 @@
 #define LOOP_MAX_WAIT_MS 60000       // keeps pdMS_TO_TICKS within 32 bits; bounds staleness of BLE-changed timeout
 #define BLE_RX_REFRESH_MIN_US 500000
 
-/* ---------------- WAKE PROFILE ----------------
- * Define WAKE_PROFILE to record timing marks during boot/wake.
- * Marks are buffered in RAM and printed once, after the first event
- * is rendered, so UART output does not skew the measurements.
- * Printed with ESP_LOGW so they survive CONFIG_LOG_DEFAULT_LEVEL_WARN.
- */
-// #define WAKE_PROFILE 1
-#ifdef WAKE_PROFILE
-#define WAKE_MARK_MAX 24
-typedef struct
-{
-    const char *label;
-    int64_t us;
-} wake_mark_t;
-static wake_mark_t s_wake_marks[WAKE_MARK_MAX];
-static int s_wake_mark_count = 0;
-
-static void wake_mark(const char *label)
-{
-    if (s_wake_mark_count < WAKE_MARK_MAX)
-    {
-        s_wake_marks[s_wake_mark_count].label = label;
-        s_wake_marks[s_wake_mark_count].us = esp_timer_get_time();
-        s_wake_mark_count++;
-    }
-}
-
-static void wake_marks_dump(void)
-{
-    int64_t prev = (s_wake_mark_count > 0) ? s_wake_marks[0].us : 0;
-    for (int i = 0; i < s_wake_mark_count; i++)
-    {
-        ESP_LOGW("WAKE", "%-24s %9lld us  +%8lld us",
-                 s_wake_marks[i].label, s_wake_marks[i].us, s_wake_marks[i].us - prev);
-        prev = s_wake_marks[i].us;
-    }
-}
-#define WAKE_MARK(label) wake_mark(label)
-#define WAKE_DUMP() wake_marks_dump()
-#else
-#define WAKE_MARK(label) ((void)0)
-#define WAKE_DUMP() ((void)0)
-#endif
-/* ---------------- END WAKE PROFILE ---------------- */
-
 static QueueHandle_t s_btn_queue = NULL;
 static atomic_int s_current_view = VIEW_MENU; // written by main task, read by BLE task
 static int64_t s_last_activity_us = 0;
 static bool s_nvs_ready = false;             // main task only
-static bool s_first_event_handled = false;   // main task only
 
 RTC_DATA_ATTR static reader_view_t s_rtc_last_view = VIEW_MENU;
 RTC_DATA_ATTR static bool s_rtc_has_sdcard = false;
@@ -349,9 +303,7 @@ void app_main(void)
 {
     // 1. Latch board power and cut audio rail (must stay first)
     power_mgr_early_init();
-    WAKE_MARK("power_mgr_early_init");
     ensure_nvs();
-    WAKE_MARK("nvs");
     status_led_init();
     status_led_trigger(STATUS_LED_EVT_WAKEUP); // background task, returns immediately
 
@@ -372,13 +324,11 @@ void app_main(void)
         }
     }
     ESP_ERROR_CHECK(button_init(&s_btn_queue));
-    WAKE_MARK("button_init");
 
     // 3. Settings, once. text_pager_init() first (font is applied to the pager);
     //    must run before reader_ui_init() (rotation is read there).
     text_pager_init();
     app_settings_load(is_cold_boot);
-    WAKE_MARK("settings");
 
     ESP_LOGI(TAG, "Starting BacaIn firmware (wakeup=%d, cold=%d)...", raw_wakeup, is_cold_boot);
 
@@ -388,7 +338,6 @@ void app_main(void)
     {
         ESP_LOGE(TAG, "Internal flash storage init failed (0x%x)", flash_ret);
     }
-    WAKE_MARK("flash_storage_init");
 
     // Retry SD whenever it is the target: no card-detect pin, so a reinserted
     // card is only found by probing (~20 ms when absent).
@@ -400,11 +349,9 @@ void app_main(void)
             ESP_LOGI(TAG, "MicroSD not detected, using internal flash storage");
         }
     }
-    WAKE_MARK("sdcard_init");
 
     // 5. Display
     ESP_ERROR_CHECK(reader_ui_init(is_cold_boot));
-    WAKE_MARK("reader_ui_init");
 
     // Show splash before the slow library scan so the screen updates sooner
     if (is_cold_boot)
@@ -428,12 +375,10 @@ void app_main(void)
         book_library_scan();
     }
     ble_sync_register_callback(on_ble_sync_event, NULL);
-    WAKE_MARK("library/mushaf init");
 
     // 8. Restore reading state metadata
     reading_state_t state;
     (void)book_library_load_state(&state);
-    WAKE_MARK("book_library_load_state");
 
     // 9. Initial view
     if (is_cold_boot)
@@ -456,7 +401,6 @@ void app_main(void)
         }
         set_view(view);
     }
-    WAKE_MARK("wake view restored");
 
     update_activity();
 
@@ -483,13 +427,6 @@ void app_main(void)
             view = dispatch_view_event(view, evt);
             set_view(view);
 
-            // First event after boot/wake: the page is now rendered.
-            if (!s_first_event_handled)
-            {
-                s_first_event_handled = true;
-                WAKE_MARK("first event rendered");
-                WAKE_DUMP();
-            }
             if (is_refresh)
             {
                 continue;
