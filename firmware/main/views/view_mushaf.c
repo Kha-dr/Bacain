@@ -383,21 +383,14 @@ void view_mushaf_enter_menu(void) {
 reader_view_t view_mushaf_on_wake(void) {
     switch (s_rtc_mushaf_sub_view) {
     case VIEW_MUSHAF_READING:
-        view_mushaf_render_reading(false);
-        break;
     case VIEW_MUSHAF_JUMP:
-        view_mushaf_render_jump(false);
-        break;
     case VIEW_MUSHAF_BOOKMARKS:
-        view_mushaf_render_bookmarks(false);
-        break;
+        return s_rtc_mushaf_sub_view;
     case VIEW_MUSHAF_MENU:
     default:
         s_rtc_mushaf_sub_view = VIEW_MUSHAF_MENU;
-        view_mushaf_render_menu(false);
         return VIEW_MUSHAF_MENU;
     }
-    return s_rtc_mushaf_sub_view;
 }
 
 static reader_view_t mushaf_handle_event_internal(reader_view_t view, button_event_t evt) {

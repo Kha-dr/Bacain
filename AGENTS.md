@@ -58,9 +58,10 @@ For hardware design, electrical constraints, and embedded firmware rules, refer 
 To prevent context exhaustion, cognitive degradation, and hallucination:
 
 1. **Context Protection & KISS Triage (Orchestrator Boundary)**:
-   - **Golden Delegation Rule**: If a solution is stupid simple, do it yourself directly. If a task can be broken down into multiple distinct parts, delegate them.
    - Triage before delegation (KISS): If a bug, fix, or feature touches 1 to 2 files and has a localized solution, the primary orchestrator must implement and verify it directly. Do not spawn subagents for trivial edits that take seconds.
-   - Delegate when: exploring unfamiliar subsystems across >4 files, parallel multi-file refactoring, or running long-running build/test scripts.
+   - Delegate when:
+     - exploring unfamiliar subsystems across multiple files, parallel multi-file refactoring, or running long-running build/test scripts.
+     - If a solution is stupid simple, do it yourself directly. If a task can be broken down into multiple distinct parts, delegate them.
    - For exploratory tasks, the orchestrator formulates the specific objective and target files, then delegates exploration.
 2. **Strict Local Ground Truth (Anti-Rabbit-Hole)**:
    - The repository is 100% self-contained. Never use web search or external API queries for board pinouts, hardware schematics, or drivers.

@@ -481,7 +481,7 @@ esp_err_t text_pager_open_book(const char *path, size_t byte_offset) {
     ESP_LOGI(TAG, "Opened '%s' (title: '%s', size: %u bytes, offset: %u)",
              path, s_pager.book_title, (unsigned int)s_pager.total_bytes, (unsigned int)s_pager.current_offset);
 
-    return text_pager_render_page();
+    return ESP_OK;
 }
 
 void text_pager_close_book(void) {
