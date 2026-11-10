@@ -246,7 +246,6 @@ extern "C" {
 #endif
 
 // Light Sleep GPIO Pad Protection
-#ifndef BOARD_LIGHT_SLEEP_KEEP_PINS
 #define BOARD_LIGHT_SLEEP_KEEP_PINS { \
     BOARD_PWR_LATCH_PIN, \
     BOARD_AUDIO_PWR_PIN, \
@@ -255,7 +254,6 @@ extern "C" {
     BOARD_EPD_DC_PIN, \
     BOARD_EPD_CS_PIN \
 }
-#endif
 
 #ifdef __cplusplus
 }

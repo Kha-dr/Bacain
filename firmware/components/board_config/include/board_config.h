@@ -51,7 +51,7 @@ void      board_power_post_wake(void)  __attribute__((weak));
 void      board_light_sleep_pins_init(void);
 
 #ifndef BOARD_LIGHT_SLEEP_KEEP_PINS
-#define BOARD_LIGHT_SLEEP_KEEP_PINS { -1 }
+#error "Board must define BOARD_LIGHT_SLEEP_KEEP_PINS (outputs that keep their level in light sleep)"
 #endif
 
 // Mandatory Category A Definitions
