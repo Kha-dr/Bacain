@@ -48,6 +48,9 @@ static void epaper_gpio_init(void) {
     gpio_conf.pull_down_en  = GPIO_PULLDOWN_DISABLE;
     gpio_conf.pull_up_en    = GPIO_PULLUP_ENABLE;
     ESP_ERROR_CHECK_WITHOUT_ABORT(gpio_config(&gpio_conf));
+    gpio_sleep_sel_dis((gpio_num_t)EPD_RST_PIN);
+    gpio_sleep_sel_dis((gpio_num_t)EPD_DC_PIN);
+    gpio_sleep_sel_dis((gpio_num_t)EPD_CS_PIN);
 
     gpio_conf.mode         = GPIO_MODE_INPUT;
     gpio_conf.pin_bit_mask = ((uint64_t) 0x01 << EPD_BUSY_PIN);
@@ -468,6 +471,7 @@ void epaper_power_on(void) {
         conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
         conf.pull_up_en = GPIO_PULLUP_ENABLE;
         ESP_ERROR_CHECK_WITHOUT_ABORT(gpio_config(&conf));
+        gpio_sleep_sel_dis((gpio_num_t)EPD_PWR_PIN);
         s_pwr_gpio_inited = true;
     }
     if (gpio_get_level(EPD_PWR_PIN) != BOARD_EPD_PWR_ACTIVE_LVL) {
