@@ -72,6 +72,12 @@ esp_err_t text_pager_open_book(const char *path, size_t byte_offset);
 void text_pager_close_book(void);
 
 /**
+ * @brief Check whether a book is currently open.
+ * @return true if open, false otherwise.
+ */
+bool text_pager_is_book_open(void);
+
+/**
  * @brief Set the font size (Font16 or Font12).
  * @param font_size TEXT_PAGER_FONT_16 or TEXT_PAGER_FONT_12.
  * @return ESP_OK on success.

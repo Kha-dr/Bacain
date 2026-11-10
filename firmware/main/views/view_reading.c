@@ -17,9 +17,37 @@ void view_reading_reset_redraw_counter(void) {
     s_redraw_counter = 0;
 }
 
+esp_err_t view_reading_ensure_book_open(void) {
+    if (text_pager_is_book_open()) {
+        return ESP_OK;
+    }
+
+    reading_state_t state;
+    if (book_library_get_current_state(&state) == ESP_OK && state.active_book_path[0] != '\0') {
+        if (text_pager_open_book(state.active_book_path, state.byte_offset) == ESP_OK) {
+            return ESP_OK;
+        }
+    }
+
+    // Fallback: open first LIBRARY_ENTRY_FILE found in library
+    size_t count = book_library_get_count();
+    for (size_t i = 0; i < count; i++) {
+        const book_info_t *book = book_library_get_book(i);
+        if (book && book->type == LIBRARY_ENTRY_FILE &&
+            text_pager_open_book(book->path, 0) == ESP_OK) {
+            book_library_set_active_book(book->path, true);
+            return ESP_OK;
+        }
+    }
+
+    return ESP_ERR_NOT_FOUND;
+}
+
 void view_reading_render(bool full_refresh) {
     uint8_t *canvas = reader_ui_get_canvas();
     if (!canvas) return;
+
+    view_reading_ensure_book_open();
 
     epaper_power_on();
 
@@ -57,7 +85,7 @@ void view_reading_render_page_turn(void) {
 }
 
 reader_view_t view_reading_on_wake(void) {
-    if (text_pager_get_current_page() != NULL) {
+    if (view_reading_ensure_book_open() == ESP_OK && text_pager_get_current_page() != NULL) {
         s_redraw_counter = 0;
         return VIEW_READING;
     }

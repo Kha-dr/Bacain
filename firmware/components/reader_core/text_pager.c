@@ -500,6 +500,10 @@ void text_pager_close_book(void) {
     }
 }
 
+bool text_pager_is_book_open(void) {
+    return s_pager.book_open;
+}
+
 esp_err_t text_pager_set_font_size(text_pager_font_size_t font_size) {
     if (s_mutex == NULL) {
         return ESP_ERR_INVALID_STATE;

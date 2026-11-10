@@ -153,7 +153,10 @@ void app_enter_deep_sleep(void)
     {
         s_rtc_storage_target = book_library_get_storage_target();
     }
-    book_library_update_offset(text_pager_get_current_offset());
+    if (text_pager_is_book_open())
+    {
+        book_library_update_offset(text_pager_get_current_offset());
+    }
     book_library_flush_state(); // no write if state not dirty
 #if CONFIG_BOARD_MUSHAF_ENABLE
     view_mushaf_save_before_sleep();
@@ -276,27 +279,6 @@ static reader_view_t dispatch_view_event(reader_view_t view, button_event_t evt)
 #endif
     default:
         return view;
-    }
-}
-
-static void restore_or_open_default_book(void)
-{
-    reading_state_t state;
-    if (book_library_load_state(&state) == ESP_OK && state.active_book_path[0] != '\0' &&
-        text_pager_open_book(state.active_book_path, state.byte_offset) == ESP_OK)
-    {
-        return;
-    }
-    size_t count = book_library_get_count();
-    for (size_t i = 0; i < count; i++)
-    {
-        const book_info_t *book = book_library_get_book(i);
-        if (book && book->type == LIBRARY_ENTRY_FILE &&
-            text_pager_open_book(book->path, 0) == ESP_OK)
-        {
-            book_library_set_active_book(book->path, true);
-            return;
-        }
     }
 }
 
@@ -448,10 +430,10 @@ void app_main(void)
     ble_sync_register_callback(on_ble_sync_event, NULL);
     WAKE_MARK("library/mushaf init");
 
-    // 8. Restore reading state or open first available book
-    //    (always opened: app_enter_deep_sleep() saves the pager offset unconditionally)
-    restore_or_open_default_book();
-    WAKE_MARK("book open");
+    // 8. Restore reading state metadata
+    reading_state_t state;
+    (void)book_library_load_state(&state);
+    WAKE_MARK("book_library_load_state");
 
     // 9. Initial view
     if (is_cold_boot)
