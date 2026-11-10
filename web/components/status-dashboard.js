@@ -17,7 +17,7 @@ class StatusDashboard extends HTMLElement {
   constructor() {
     super();
     this.isDeviceConnected = false;
-    this.currentStorageTarget = 0; // 0: SD, 1: Flash
+    this.currentStorageTarget = 1; // 0: SD, 1: Flash (Default to Flash)
     this._flashFreeKb = 0;
     this._flashTotalKb = 0;
     this._sdMounted = false;
@@ -130,6 +130,14 @@ class StatusDashboard extends HTMLElement {
   }
 
   /**
+   * Update Connection Status Alias
+   * @param {boolean} connected
+   */
+  updateConnectionStatus(connected) {
+    this.updateDeviceStatus({ state: !!connected });
+  }
+
+  /**
    * Update Device Status
    * @param {{ state?: string|boolean, name?: string, uuid?: string, mtu?: number|string }} status
    */
@@ -208,6 +216,30 @@ class StatusDashboard extends HTMLElement {
         badgeEl.textContent = 'On Battery';
         if (!desc && descEl) descEl.textContent = 'Operating on battery';
       }
+    }
+  }
+
+  /**
+   * Route storage update to the active storage card (Flash or SD)
+   * @param {{ freeKb?: number, totalKb?: number, usedKb?: number, usedPct?: number }} storage
+   */
+  updateStorage({ freeKb, totalKb, usedKb, usedPct } = {}) {
+    this._lastStorageData = { freeKb, totalKb, usedKb, usedPct };
+    if (this.currentStorageTarget === 1) {
+      this.updateFlashStorage({ freeKb, totalKb, isActive: true });
+    } else {
+      this.updateSdStorage({ freeKb, totalKb, isMounted: (totalKb || 0) > 0, isActive: true });
+    }
+  }
+
+  /**
+   * Set active storage target and refresh card presentation
+   * @param {number} target - 0: SD, 1: Flash
+   */
+  setStorageTarget(target) {
+    this.currentStorageTarget = Number(target) || 0;
+    if (this._lastStorageData) {
+      this.updateStorage(this._lastStorageData);
     }
   }
 

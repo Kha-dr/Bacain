@@ -346,6 +346,18 @@ async function connect() {
     isConnecting = false;
     dispatchConnectionChange();
 
+    // Query active hardware ground truth (NVS config & initial status)
+    try {
+      await readDeviceStatus();
+    } catch (e) {
+      console.warn("Initial status read error:", e);
+    }
+    try {
+      await requestDeviceConfig();
+    } catch (e) {
+      console.warn("Initial config read error:", e);
+    }
+
     return bleDevice;
   } catch (error) {
     isConnecting = false;

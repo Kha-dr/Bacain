@@ -66,6 +66,7 @@ static const char *TAG = "ble_sync";
 
 #define RINGBUF_SIZE     (64 * 1024)
 #define CMD_QUEUE_LEN    16
+#define WORKER_TASK_STACK_SIZE 8192
 
 /* 128-bit Service and Characteristic UUIDs (stored little-endian in NimBLE) */
 /* Service: 0000fe60-0000-1000-8000-00805f9b34fb */
@@ -143,12 +144,17 @@ typedef enum {
     CMD_SET_NAV_HINTS,
     CMD_SET_ROTATION,
     CMD_SET_BUTTON_INVERT,
+    CMD_GET_BOOKMARKS,
+    CMD_DELETE_BOOKMARK,
+    CMD_ADD_BOOKMARK,
+    CMD_SET_BOOK_OFFSET,
 } ble_sync_cmd_type_t;
 
 typedef struct {
     ble_sync_cmd_type_t type;
     char filename[128];
     uint32_t file_size;
+    uint32_t offset;
     uint8_t storage_target;
     uint16_t param16;
     uint8_t param8;
@@ -836,6 +842,73 @@ static void handle_cmd_set_button_invert(uint8_t inverted)
     ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
 }
 
+static void handle_cmd_get_bookmarks(const ble_sync_cmd_msg_t *cmd)
+{
+    char rel_path[128] = {0};
+    sanitize_rel_path(cmd->filename, rel_path, sizeof(rel_path));
+    size_t byte_offset = 0;
+    size_t total_bytes = 0;
+    size_t bookmarks[BOOK_MAX_BOOKMARKS] = {0};
+    size_t bm_count = 0;
+    esp_err_t err = book_library_get_book_state(rel_path, &byte_offset, &total_bytes, bookmarks, &bm_count);
+    if (bm_count > BOOK_MAX_BOOKMARKS) {
+        bm_count = BOOK_MAX_BOOKMARKS;
+    }
+    uint8_t resp[11 + BOOK_MAX_BOOKMARKS * 4];
+    memset(resp, 0, sizeof(resp));
+    resp[0] = BLE_CTRL_OP_GET_BOOKMARKS;
+    resp[1] = (err == ESP_OK) ? BLE_SYNC_STATUS_OK : BLE_SYNC_STATUS_ERROR;
+    uint32_t off_u32 = (uint32_t)byte_offset;
+    uint32_t tot_u32 = (uint32_t)total_bytes;
+    resp[2] = (uint8_t)(off_u32 & 0xFF);
+    resp[3] = (uint8_t)((off_u32 >> 8) & 0xFF);
+    resp[4] = (uint8_t)((off_u32 >> 16) & 0xFF);
+    resp[5] = (uint8_t)((off_u32 >> 24) & 0xFF);
+    resp[6] = (uint8_t)(tot_u32 & 0xFF);
+    resp[7] = (uint8_t)((tot_u32 >> 8) & 0xFF);
+    resp[8] = (uint8_t)((tot_u32 >> 16) & 0xFF);
+    resp[9] = (uint8_t)((tot_u32 >> 24) & 0xFF);
+    resp[10] = (uint8_t)bm_count;
+    for (size_t i = 0; i < bm_count; i++) {
+        uint32_t bm = (uint32_t)bookmarks[i];
+        resp[11 + i * 4 + 0] = (uint8_t)(bm & 0xFF);
+        resp[11 + i * 4 + 1] = (uint8_t)((bm >> 8) & 0xFF);
+        resp[11 + i * 4 + 2] = (uint8_t)((bm >> 16) & 0xFF);
+        resp[11 + i * 4 + 3] = (uint8_t)((bm >> 24) & 0xFF);
+    }
+    ble_sync_notify(s_control_val_handle, resp, (uint16_t)(11 + bm_count * 4));
+}
+
+static void handle_cmd_delete_bookmark(const ble_sync_cmd_msg_t *cmd)
+{
+    char rel_path[128] = {0};
+    sanitize_rel_path(cmd->filename, rel_path, sizeof(rel_path));
+    esp_err_t err = book_library_remove_book_bookmark(rel_path, (size_t)cmd->offset);
+    uint8_t resp[2] = { BLE_CTRL_OP_DELETE_BOOKMARK, (err == ESP_OK) ? BLE_SYNC_STATUS_OK : BLE_SYNC_STATUS_ERROR };
+    ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
+}
+
+static void handle_cmd_add_bookmark(const ble_sync_cmd_msg_t *cmd)
+{
+    char rel_path[128] = {0};
+    sanitize_rel_path(cmd->filename, rel_path, sizeof(rel_path));
+    esp_err_t err = book_library_add_book_bookmark(rel_path, (size_t)cmd->offset);
+    uint8_t resp[2] = { BLE_CTRL_OP_ADD_BOOKMARK, (err == ESP_OK) ? BLE_SYNC_STATUS_OK : BLE_SYNC_STATUS_ERROR };
+    ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
+}
+
+static void handle_cmd_set_book_offset(const ble_sync_cmd_msg_t *cmd)
+{
+    char rel_path[128] = {0};
+    sanitize_rel_path(cmd->filename, rel_path, sizeof(rel_path));
+    esp_err_t err = book_library_set_book_offset(rel_path, (size_t)cmd->offset);
+    if (err == ESP_OK && s_event_cb) {
+        s_event_cb(BLE_SYNC_EVT_REQUEST_REFRESH, NULL, s_event_cb_arg);
+    }
+    uint8_t resp[2] = { BLE_CTRL_OP_SET_BOOK_OFFSET, (err == ESP_OK) ? BLE_SYNC_STATUS_OK : BLE_SYNC_STATUS_ERROR };
+    ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
+}
+
 static void ble_sync_worker_task(void *pvParameters)
 {
     ESP_LOGI(TAG, "Worker task started");
@@ -885,6 +958,18 @@ static void ble_sync_worker_task(void *pvParameters)
                 case CMD_SET_BUTTON_INVERT:
                     handle_cmd_set_button_invert(cmd.param8);
                     break;
+                case CMD_GET_BOOKMARKS:
+                    handle_cmd_get_bookmarks(&cmd);
+                    break;
+                case CMD_DELETE_BOOKMARK:
+                    handle_cmd_delete_bookmark(&cmd);
+                    break;
+                case CMD_ADD_BOOKMARK:
+                    handle_cmd_add_bookmark(&cmd);
+                    break;
+                case CMD_SET_BOOK_OFFSET:
+                    handle_cmd_set_book_offset(&cmd);
+                    break;
                 default:
                     break;
                 }
@@ -925,6 +1010,18 @@ static void ble_sync_worker_task(void *pvParameters)
                     continue;
                 case CMD_SET_BUTTON_INVERT:
                     handle_cmd_set_button_invert(cmd.param8);
+                    continue;
+                case CMD_GET_BOOKMARKS:
+                    handle_cmd_get_bookmarks(&cmd);
+                    continue;
+                case CMD_DELETE_BOOKMARK:
+                    handle_cmd_delete_bookmark(&cmd);
+                    continue;
+                case CMD_ADD_BOOKMARK:
+                    handle_cmd_add_bookmark(&cmd);
+                    continue;
+                case CMD_SET_BOOK_OFFSET:
+                    handle_cmd_set_book_offset(&cmd);
                     continue;
                 default:
                     break;
@@ -1143,39 +1240,14 @@ static int ble_sync_control_access_cb(uint16_t conn_handle, uint16_t attr_handle
             ble_sync_notify(s_control_val_handle, err_resp, sizeof(err_resp));
             break;
         }
-        char rel_path[128] = {0};
-        sanitize_rel_path((const char *)&buf[1], rel_path, sizeof(rel_path));
-        size_t byte_offset = 0;
-        size_t total_bytes = 0;
-        size_t bookmarks[BOOK_MAX_BOOKMARKS] = {0};
-        size_t bm_count = 0;
-        esp_err_t err = book_library_get_book_state(rel_path, &byte_offset, &total_bytes, bookmarks, &bm_count);
-        if (bm_count > BOOK_MAX_BOOKMARKS) {
-            bm_count = BOOK_MAX_BOOKMARKS;
+        cmd.type = CMD_GET_BOOKMARKS;
+        strncpy(cmd.filename, (char *)&buf[1], sizeof(cmd.filename) - 1);
+        cmd.filename[sizeof(cmd.filename) - 1] = '\0';
+        if (xQueueSend(s_cmd_queue, &cmd, pdMS_TO_TICKS(50)) != pdTRUE) {
+            ESP_LOGE(TAG, "Command queue full for GET_BOOKMARKS");
+            uint8_t err_resp[11] = { BLE_CTRL_OP_GET_BOOKMARKS, BLE_SYNC_STATUS_ERROR };
+            ble_sync_notify(s_control_val_handle, err_resp, sizeof(err_resp));
         }
-        uint8_t resp[11 + BOOK_MAX_BOOKMARKS * 4];
-        memset(resp, 0, sizeof(resp));
-        resp[0] = BLE_CTRL_OP_GET_BOOKMARKS;
-        resp[1] = (err == ESP_OK) ? BLE_SYNC_STATUS_OK : BLE_SYNC_STATUS_ERROR;
-        uint32_t off_u32 = (uint32_t)byte_offset;
-        uint32_t tot_u32 = (uint32_t)total_bytes;
-        resp[2] = (uint8_t)(off_u32 & 0xFF);
-        resp[3] = (uint8_t)((off_u32 >> 8) & 0xFF);
-        resp[4] = (uint8_t)((off_u32 >> 16) & 0xFF);
-        resp[5] = (uint8_t)((off_u32 >> 24) & 0xFF);
-        resp[6] = (uint8_t)(tot_u32 & 0xFF);
-        resp[7] = (uint8_t)((tot_u32 >> 8) & 0xFF);
-        resp[8] = (uint8_t)((tot_u32 >> 16) & 0xFF);
-        resp[9] = (uint8_t)((tot_u32 >> 24) & 0xFF);
-        resp[10] = (uint8_t)bm_count;
-        for (size_t i = 0; i < bm_count; i++) {
-            uint32_t bm = (uint32_t)bookmarks[i];
-            resp[11 + i * 4 + 0] = (uint8_t)(bm & 0xFF);
-            resp[11 + i * 4 + 1] = (uint8_t)((bm >> 8) & 0xFF);
-            resp[11 + i * 4 + 2] = (uint8_t)((bm >> 16) & 0xFF);
-            resp[11 + i * 4 + 3] = (uint8_t)((bm >> 24) & 0xFF);
-        }
-        ble_sync_notify(s_control_val_handle, resp, (uint16_t)(11 + bm_count * 4));
         break;
     }
 
@@ -1185,15 +1257,18 @@ static int ble_sync_control_access_cb(uint16_t conn_handle, uint16_t attr_handle
             ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
             break;
         }
-        uint32_t target_offset = (uint32_t)buf[1] |
-                                 ((uint32_t)buf[2] << 8) |
-                                 ((uint32_t)buf[3] << 16) |
-                                 ((uint32_t)buf[4] << 24);
-        char rel_path[128] = {0};
-        sanitize_rel_path((const char *)&buf[5], rel_path, sizeof(rel_path));
-        esp_err_t err = book_library_remove_book_bookmark(rel_path, (size_t)target_offset);
-        uint8_t resp[2] = { BLE_CTRL_OP_DELETE_BOOKMARK, (err == ESP_OK) ? BLE_SYNC_STATUS_OK : BLE_SYNC_STATUS_ERROR };
-        ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
+        cmd.type = CMD_DELETE_BOOKMARK;
+        cmd.offset = (uint32_t)buf[1] |
+                     ((uint32_t)buf[2] << 8) |
+                     ((uint32_t)buf[3] << 16) |
+                     ((uint32_t)buf[4] << 24);
+        strncpy(cmd.filename, (char *)&buf[5], sizeof(cmd.filename) - 1);
+        cmd.filename[sizeof(cmd.filename) - 1] = '\0';
+        if (xQueueSend(s_cmd_queue, &cmd, pdMS_TO_TICKS(50)) != pdTRUE) {
+            ESP_LOGE(TAG, "Command queue full for DELETE_BOOKMARK");
+            uint8_t resp[2] = { BLE_CTRL_OP_DELETE_BOOKMARK, BLE_SYNC_STATUS_ERROR };
+            ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
+        }
         break;
     }
 
@@ -1203,15 +1278,18 @@ static int ble_sync_control_access_cb(uint16_t conn_handle, uint16_t attr_handle
             ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
             break;
         }
-        uint32_t target_offset = (uint32_t)buf[1] |
-                                 ((uint32_t)buf[2] << 8) |
-                                 ((uint32_t)buf[3] << 16) |
-                                 ((uint32_t)buf[4] << 24);
-        char rel_path[128] = {0};
-        sanitize_rel_path((const char *)&buf[5], rel_path, sizeof(rel_path));
-        esp_err_t err = book_library_add_book_bookmark(rel_path, (size_t)target_offset);
-        uint8_t resp[2] = { BLE_CTRL_OP_ADD_BOOKMARK, (err == ESP_OK) ? BLE_SYNC_STATUS_OK : BLE_SYNC_STATUS_ERROR };
-        ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
+        cmd.type = CMD_ADD_BOOKMARK;
+        cmd.offset = (uint32_t)buf[1] |
+                     ((uint32_t)buf[2] << 8) |
+                     ((uint32_t)buf[3] << 16) |
+                     ((uint32_t)buf[4] << 24);
+        strncpy(cmd.filename, (char *)&buf[5], sizeof(cmd.filename) - 1);
+        cmd.filename[sizeof(cmd.filename) - 1] = '\0';
+        if (xQueueSend(s_cmd_queue, &cmd, pdMS_TO_TICKS(50)) != pdTRUE) {
+            ESP_LOGE(TAG, "Command queue full for ADD_BOOKMARK");
+            uint8_t resp[2] = { BLE_CTRL_OP_ADD_BOOKMARK, BLE_SYNC_STATUS_ERROR };
+            ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
+        }
         break;
     }
 
@@ -1221,18 +1299,18 @@ static int ble_sync_control_access_cb(uint16_t conn_handle, uint16_t attr_handle
             ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
             break;
         }
-        uint32_t target_offset = (uint32_t)buf[1] |
-                                 ((uint32_t)buf[2] << 8) |
-                                 ((uint32_t)buf[3] << 16) |
-                                 ((uint32_t)buf[4] << 24);
-        char rel_path[128] = {0};
-        sanitize_rel_path((const char *)&buf[5], rel_path, sizeof(rel_path));
-        esp_err_t err = book_library_set_book_offset(rel_path, (size_t)target_offset);
-        if (err == ESP_OK && s_event_cb) {
-            s_event_cb(BLE_SYNC_EVT_REQUEST_REFRESH, NULL, s_event_cb_arg);
+        cmd.type = CMD_SET_BOOK_OFFSET;
+        cmd.offset = (uint32_t)buf[1] |
+                     ((uint32_t)buf[2] << 8) |
+                     ((uint32_t)buf[3] << 16) |
+                     ((uint32_t)buf[4] << 24);
+        strncpy(cmd.filename, (char *)&buf[5], sizeof(cmd.filename) - 1);
+        cmd.filename[sizeof(cmd.filename) - 1] = '\0';
+        if (xQueueSend(s_cmd_queue, &cmd, pdMS_TO_TICKS(50)) != pdTRUE) {
+            ESP_LOGE(TAG, "Command queue full for SET_BOOK_OFFSET");
+            uint8_t resp[2] = { BLE_CTRL_OP_SET_BOOK_OFFSET, BLE_SYNC_STATUS_ERROR };
+            ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
         }
-        uint8_t resp[2] = { BLE_CTRL_OP_SET_BOOK_OFFSET, (err == ESP_OK) ? BLE_SYNC_STATUS_OK : BLE_SYNC_STATUS_ERROR };
-        ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
         break;
     }
 
@@ -1693,7 +1771,7 @@ esp_err_t ble_sync_start(void)
     if (s_worker_task_hdl == NULL) {
         BaseType_t task_ret = xTaskCreate(ble_sync_worker_task,
                                           "ble_sync_wrk",
-                                          4096,
+                                          WORKER_TASK_STACK_SIZE,
                                           NULL,
                                           5,
                                           &s_worker_task_hdl);

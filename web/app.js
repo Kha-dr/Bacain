@@ -171,9 +171,18 @@
 
       if (
         el.statusDashboard &&
-        typeof el.statusDashboard.updateConnectionStatus === "function"
+        typeof el.statusDashboard.updateDeviceStatus === "function"
       ) {
-        el.statusDashboard.updateConnectionStatus(true);
+        el.statusDashboard.updateDeviceStatus({
+          state: true,
+          name: deviceName || (window.BleClient && window.BleClient.getDeviceName()) || "BacaIn",
+        });
+      }
+      if (
+        el.bookLibrary &&
+        typeof el.bookLibrary.setDeviceConnected === "function"
+      ) {
+        el.bookLibrary.setDeviceConnected(true);
       }
     } else {
       if (el.connectBtnText) el.connectBtnText.textContent = "Connect Device";
@@ -189,9 +198,15 @@
 
       if (
         el.statusDashboard &&
-        typeof el.statusDashboard.updateConnectionStatus === "function"
+        typeof el.statusDashboard.updateDeviceStatus === "function"
       ) {
-        el.statusDashboard.updateConnectionStatus(false);
+        el.statusDashboard.updateDeviceStatus({ state: false });
+      }
+      if (
+        el.bookLibrary &&
+        typeof el.bookLibrary.setDeviceConnected === "function"
+      ) {
+        el.bookLibrary.setDeviceConnected(false);
       }
       unmountMushafBuilder();
     }
@@ -236,7 +251,7 @@
         (book) => {
           remoteBooks.push(book);
           if (el.bookLibrary && typeof el.bookLibrary.setBooks === "function") {
-            el.bookLibrary.setBooks(remoteBooks);
+            el.bookLibrary.setBooks(remoteBooks, "/spiflash/books/");
           }
         },
         () => {
@@ -245,6 +260,18 @@
             typeof el.bookLibrary.setLoading === "function"
           ) {
             el.bookLibrary.setLoading(false);
+          }
+          if (
+            el.bookLibrary &&
+            typeof el.bookLibrary.setDeviceConnected === "function"
+          ) {
+            el.bookLibrary.setDeviceConnected(true);
+          }
+          if (
+            el.bookLibrary &&
+            typeof el.bookLibrary.renderBooks === "function"
+          ) {
+            el.bookLibrary.renderBooks(remoteBooks, "/spiflash/books/");
           }
           log(`Book list updated: ${remoteBooks.length} items.`, "info");
         },
@@ -762,6 +789,17 @@
 
     window.addEventListener("ble-config-changed", (e) => {
       const cfg = e.detail;
+      if (cfg.storageTarget !== undefined) {
+        if (el.statusDashboard && typeof el.statusDashboard.setStorageTarget === "function") {
+          el.statusDashboard.setStorageTarget(cfg.storageTarget);
+        } else if (el.statusDashboard) {
+          el.statusDashboard.currentStorageTarget = cfg.storageTarget;
+        }
+        if (el.bookLibrary && typeof el.bookLibrary.setStorageTargetBadge === "function") {
+          el.bookLibrary.setStorageTargetBadge(cfg.storageTarget);
+        }
+      }
+
       if (
         el.deviceSettingsModal &&
         typeof el.deviceSettingsModal.updateConfig === "function"
@@ -799,6 +837,12 @@
     initTheme();
     checkBluetoothCompatibility();
     setupEventListeners();
+    if (el.statusDashboard && typeof el.statusDashboard.setStorageTarget === "function") {
+      el.statusDashboard.setStorageTarget(1);
+    }
+    if (el.bookLibrary && typeof el.bookLibrary.setStorageTargetBadge === "function") {
+      el.bookLibrary.setStorageTargetBadge(1);
+    }
     registerServiceWorker();
     setupPwaInstall();
     log("BacaIn Web Client initialized.", "info");
