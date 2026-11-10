@@ -9,6 +9,10 @@
 #include "driver/spi_master.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "sdkconfig.h"
+#if CONFIG_PM_ENABLE
+#include "esp_pm.h"
+#endif
 #if __has_include("esp_rom_sys.h")
 #include "esp_rom_sys.h"
 #else
@@ -32,6 +36,31 @@ void esp_rom_delay_us(uint32_t us);
 #define ReadBusy      gpio_get_level(EPD_BUSY_PIN)
 
 static spi_device_handle_t spi = NULL;
+
+#if CONFIG_PM_ENABLE
+static esp_pm_lock_handle_t s_epd_pm_lock = NULL;
+static bool s_epd_pm_locked = false;
+
+static void epd_pm_lock(void) {
+    if (s_epd_pm_lock == NULL) {
+        esp_pm_lock_create(ESP_PM_NO_LIGHT_SLEEP, 0, "epd_spi", &s_epd_pm_lock);
+    }
+    if (s_epd_pm_lock != NULL && !s_epd_pm_locked) {
+        esp_pm_lock_acquire(s_epd_pm_lock);
+        s_epd_pm_locked = true;
+    }
+}
+
+static void epd_pm_unlock(void) {
+    if (s_epd_pm_lock != NULL && s_epd_pm_locked) {
+        esp_pm_lock_release(s_epd_pm_lock);
+        s_epd_pm_locked = false;
+    }
+}
+#else
+static inline void epd_pm_lock(void) {}
+static inline void epd_pm_unlock(void) {}
+#endif
 
 static void epaper_gpio_init(void) {
     gpio_reset_pin(EPD_RST_PIN);
@@ -111,6 +140,7 @@ static void epaper_spi_init(void) {
   Waiting for e-Paper idle.
 */
 static void epaper_readbusyh(void) {
+    epd_pm_unlock();
     ESP_LOGI("EPD", "Waiting for e-Paper idle (pin=%d)...", ReadBusy);
     vTaskDelay(pdMS_TO_TICKS(10));
     int timeout = 0;
@@ -130,6 +160,7 @@ static void spi_send_byte(uint8_t data) {
         ESP_LOGE("EPD", "SPI device not initialized");
         return;
     }
+    epd_pm_lock();
     esp_err_t ret;
     spi_transaction_t t;
     memset(&t, 0, sizeof(t));
@@ -140,6 +171,7 @@ static void spi_send_byte(uint8_t data) {
 }
 
 static void epaper_SendCommand(uint8_t Reg) {
+    epd_pm_lock();
     epaper_dc_0;
     epaper_cs_0;
     spi_send_byte(Reg);
@@ -147,6 +179,7 @@ static void epaper_SendCommand(uint8_t Reg) {
 }
 
 static void epaper_SendData(uint8_t Data) {
+    epd_pm_lock();
     epaper_dc_1;
     epaper_cs_0;
     spi_send_byte(Data);
@@ -157,6 +190,7 @@ static void epaper_write_bytes(const uint8_t *Data, int len) {
     if (spi == NULL || Data == NULL || len <= 0) {
         return;
     }
+    epd_pm_lock();
     epaper_dc_1;
     epaper_cs_0;
     esp_err_t ret;
@@ -259,6 +293,7 @@ void epaper_port_init(void) {
     if (lut_full != NULL) {
         epaper_set_lut(lut_full);
     }
+    epd_pm_unlock();
 }
 
 void epaper_port_init_partial(void) {
@@ -312,6 +347,7 @@ void epaper_port_init_partial(void) {
     epaper_SendCommand(0x4F);
     epaper_SendData((uint8_t)(y_end_line & 0xFF));
     epaper_SendData((uint8_t)((y_end_line >> 8) & 0xFF));
+    epd_pm_unlock();
 }
 
 void epaper_port_clear(uint8_t color) {
@@ -452,6 +488,7 @@ void epaper_port_display_full(const uint8_t *Image) {
 void epaper_port_sleep(void) {
     epaper_SendCommand(0x10);
     epaper_SendData(0x01);
+    epd_pm_unlock();
 }
 
 #ifndef BOARD_EPD_PWR_ACTIVE_LVL
@@ -481,4 +518,5 @@ void epaper_power_off(void) {
     epaper_cs_0;
     epaper_dc_0;
     gpio_set_level(EPD_PWR_PIN, !BOARD_EPD_PWR_ACTIVE_LVL);
+    epd_pm_unlock();
 }

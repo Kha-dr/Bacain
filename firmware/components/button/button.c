@@ -13,6 +13,8 @@
 #include "soc/rtc_cntl_reg.h"
 #include "soc/rtc_io_reg.h"
 #include "soc/timer_group_reg.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 #if !CONFIG_IDF_TARGET_ESP32S3
 #error "button wake stub register map is ESP32-S3 only"
@@ -153,6 +155,39 @@ static bool s_btn_inverted = false;
 static bool s_has_wake_seed = false;
 static btn_id_t s_wake_seed_btn = BTN_ID_BOOT;
 static uint16_t s_chord_ticks = 0;
+static TaskHandle_t s_btn_task = NULL;
+static bool s_timer_running = false;
+static portMUX_TYPE s_btn_lock = portMUX_INITIALIZER_UNLOCKED;
+
+static void button_task(void *arg) {
+    (void)arg;
+    uint32_t notify_val = 0;
+    while (1) {
+        if (xTaskNotifyWait(0, 0xFFFFFFFFUL, &notify_val, portMAX_DELAY) == pdTRUE) {
+            bool restart = false;
+            portENTER_CRITICAL(&s_btn_lock);
+            if (s_timer != NULL && !s_timer_running) {
+                s_timer_running = true;
+                restart = true;
+            }
+            portEXIT_CRITICAL(&s_btn_lock);
+            if (restart) {
+                esp_timer_start_periodic(s_timer, BUTTON_SAMPLE_INTERVAL_US);
+            }
+        }
+    }
+}
+
+static void IRAM_ATTR button_gpio_isr(void *arg) {
+    (void)arg;
+    gpio_intr_disable((gpio_num_t)BOARD_BTN_UP_PIN);
+    gpio_intr_disable((gpio_num_t)BOARD_BTN_DOWN_PIN);
+    BaseType_t high_task_wakeup = pdFALSE;
+    if (s_btn_task != NULL) {
+        xTaskNotifyFromISR(s_btn_task, 1, eSetValueWithOverwrite, &high_task_wakeup);
+        portYIELD_FROM_ISR(high_task_wakeup);
+    }
+}
 
 static uint8_t read_button_gpio(uint8_t button_id) {
     if (button_id == BTN_ID_UP || button_id == BTN_ID_BOOT) {
@@ -274,6 +309,16 @@ void button_seed_wakeup(btn_id_t wake_btn) {
     s_wake_seed_btn = wake_btn;
     if (s_timer != NULL) {
         apply_wake_seed();
+        bool restart = false;
+        portENTER_CRITICAL(&s_btn_lock);
+        if (!s_timer_running) {
+            s_timer_running = true;
+            restart = true;
+        }
+        portEXIT_CRITICAL(&s_btn_lock);
+        if (restart) {
+            esp_timer_start_periodic(s_timer, BUTTON_SAMPLE_INTERVAL_US);
+        }
     }
 }
 
@@ -301,6 +346,42 @@ static void button_timer_cb(void *arg) {
 #endif
 
     button_ticks();
+
+    if (s_btn_boot.state == BTN_STATE_IDLE &&
+        s_btn_pwr.state == BTN_STATE_IDLE &&
+        s_chord_ticks == 0 &&
+        !s_has_wake_seed &&
+        gpio_get_level((gpio_num_t)BOARD_BTN_UP_PIN) != 0 &&
+        gpio_get_level((gpio_num_t)BOARD_BTN_DOWN_PIN) != 0) {
+        // Race-free order:
+        // 1) enable both pin interrupts
+        gpio_intr_enable((gpio_num_t)BOARD_BTN_UP_PIN);
+        gpio_intr_enable((gpio_num_t)BOARD_BTN_DOWN_PIN);
+
+        // 2) esp_timer_stop()
+        esp_timer_stop(s_timer);
+        portENTER_CRITICAL(&s_btn_lock);
+        s_timer_running = false;
+        portEXIT_CRITICAL(&s_btn_lock);
+
+        // 3) re-read both pins; if either is pressed, disable the interrupts
+        //    and restart the timer immediately.
+        if (gpio_get_level((gpio_num_t)BOARD_BTN_UP_PIN) == 0 ||
+            gpio_get_level((gpio_num_t)BOARD_BTN_DOWN_PIN) == 0) {
+            gpio_intr_disable((gpio_num_t)BOARD_BTN_UP_PIN);
+            gpio_intr_disable((gpio_num_t)BOARD_BTN_DOWN_PIN);
+            bool restart = false;
+            portENTER_CRITICAL(&s_btn_lock);
+            if (!s_timer_running) {
+                s_timer_running = true;
+                restart = true;
+            }
+            portEXIT_CRITICAL(&s_btn_lock);
+            if (restart) {
+                esp_timer_start_periodic(s_timer, BUTTON_SAMPLE_INTERVAL_US);
+            }
+        }
+    }
 }
 
 esp_err_t button_init(QueueHandle_t *out_queue) {
@@ -316,6 +397,27 @@ esp_err_t button_init(QueueHandle_t *out_queue) {
         .intr_type = GPIO_INTR_DISABLE,
     };
     ESP_ERROR_CHECK(gpio_config(&conf));
+
+    ESP_ERROR_CHECK(gpio_wakeup_enable((gpio_num_t)BOARD_BTN_UP_PIN, GPIO_INTR_LOW_LEVEL));
+    ESP_ERROR_CHECK(gpio_wakeup_enable((gpio_num_t)BOARD_BTN_DOWN_PIN, GPIO_INTR_LOW_LEVEL));
+    ESP_ERROR_CHECK(esp_sleep_enable_gpio_wakeup());
+
+    BaseType_t task_ret = xTaskCreate(button_task, "btn_task", 2048, NULL, 10, &s_btn_task);
+    if (task_ret != pdPASS) {
+        ESP_LOGE(TAG, "Failed to create button task");
+        return ESP_ERR_NO_MEM;
+    }
+
+    esp_err_t isr_err = gpio_install_isr_service(0);
+    if (isr_err != ESP_OK && isr_err != ESP_ERR_INVALID_STATE) {
+        ESP_LOGE(TAG, "Failed to install gpio isr service (0x%x)", isr_err);
+        return isr_err;
+    }
+    ESP_ERROR_CHECK(gpio_isr_handler_add((gpio_num_t)BOARD_BTN_UP_PIN, button_gpio_isr, NULL));
+    ESP_ERROR_CHECK(gpio_isr_handler_add((gpio_num_t)BOARD_BTN_DOWN_PIN, button_gpio_isr, NULL));
+
+    gpio_intr_disable((gpio_num_t)BOARD_BTN_UP_PIN);
+    gpio_intr_disable((gpio_num_t)BOARD_BTN_DOWN_PIN);
 
     button_init_struct(&s_btn_boot, read_button_gpio, 0, BTN_ID_BOOT);
     button_attach(&s_btn_boot, MBTN_SINGLE_CLICK, on_boot_click);
@@ -337,6 +439,7 @@ esp_err_t button_init(QueueHandle_t *out_queue) {
         .name = "btn_timer"
     };
     ESP_ERROR_CHECK(esp_timer_create(&timer_args, &s_timer));
+    s_timer_running = true;
     ESP_ERROR_CHECK(esp_timer_start_periodic(s_timer, BUTTON_SAMPLE_INTERVAL_US));
 
     ESP_LOGI(TAG, "Buttons initialized (UP: GPIO %d, DOWN: GPIO %d)", BOARD_BTN_UP_PIN, BOARD_BTN_DOWN_PIN);
@@ -345,10 +448,23 @@ esp_err_t button_init(QueueHandle_t *out_queue) {
 
 void button_deinit(void) {
     if (s_timer) {
-        esp_timer_stop(s_timer);
+        if (s_timer_running) {
+            esp_timer_stop(s_timer);
+        }
         esp_timer_delete(s_timer);
         s_timer = NULL;
     }
+    s_timer_running = false;
+    if (s_btn_task) {
+        vTaskDelete(s_btn_task);
+        s_btn_task = NULL;
+    }
+    gpio_intr_disable((gpio_num_t)BOARD_BTN_UP_PIN);
+    gpio_intr_disable((gpio_num_t)BOARD_BTN_DOWN_PIN);
+    gpio_isr_handler_remove((gpio_num_t)BOARD_BTN_UP_PIN);
+    gpio_isr_handler_remove((gpio_num_t)BOARD_BTN_DOWN_PIN);
+    gpio_wakeup_disable((gpio_num_t)BOARD_BTN_UP_PIN);
+    gpio_wakeup_disable((gpio_num_t)BOARD_BTN_DOWN_PIN);
     button_stop(&s_btn_boot);
     button_stop(&s_btn_pwr);
     if (s_event_queue) {
