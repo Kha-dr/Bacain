@@ -1862,14 +1862,18 @@ uint16_t ble_sync_get_sleep_timeout(void)
 {
     if (!s_sleep_timeout_loaded) {
         nvs_handle_t nvs_hdl;
-        if (nvs_open("settings", NVS_READONLY, &nvs_hdl) == ESP_OK) {
-            uint16_t val = 20;
+        esp_err_t err = nvs_open("settings", NVS_READONLY, &nvs_hdl);
+        if (err == ESP_OK) {
+            uint16_t val = BLE_SYNC_DEFAULT_SLEEP_TIMEOUT_SEC;
             if (nvs_get_u16(nvs_hdl, "sleep_timeout", &val) == ESP_OK) {
                 s_sleep_timeout_sec = val;
             }
             nvs_close(nvs_hdl);
+            s_sleep_timeout_loaded = true;
+        } else if (err != ESP_ERR_NVS_NOT_INITIALIZED) {
+            // e.g. namespace not created yet on a fresh device: keep default
+            s_sleep_timeout_loaded = true;
         }
-        s_sleep_timeout_loaded = true;
     }
     return s_sleep_timeout_sec;
 }
