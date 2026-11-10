@@ -22,10 +22,15 @@ Hardware settings follow a 3-tier precedence order:
 
 ### A. Using `menuconfig` (Kconfig)
 
-Open the configuration menu:
+Open the configuration menu inside the `firmware/` directory:
 
 ```bash
+# From repository root:
+cd firmware
 idf.py menuconfig
+
+# Or run via Docker (interactive TTY):
+docker compose -f firmware/compose.yml run --rm -it firmware idf.py menuconfig
 ```
 
 Navigate to **Board & Hardware Configuration**:
