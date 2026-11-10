@@ -276,16 +276,6 @@ void app_main(void)
     }
     ESP_ERROR_CHECK(button_init(&s_btn_queue));
 
-    esp_pm_config_t pm = {
-        .max_freq_mhz = 240,
-        .min_freq_mhz = 80, // APB stays 80 MHz: SPI/UART unaffected
-        .light_sleep_enable = true,
-    };
-    esp_err_t pm_err = esp_pm_configure(&pm);
-    if (pm_err != ESP_OK) {
-        ESP_LOGE(TAG, "esp_pm_configure failed (0x%x), running without light sleep", pm_err);
-    }
-
     // 3. Settings, once. text_pager_init() first (font is applied to the pager);
     //    must run before reader_ui_init() (rotation is read there).
     text_pager_init();
@@ -313,6 +303,19 @@ void app_main(void)
 
     // 5. Display
     ESP_ERROR_CHECK(reader_ui_init(is_cold_boot));
+
+    // Protect all board output lines from floating in light sleep before enabling PM
+    board_light_sleep_pins_init();
+
+    esp_pm_config_t pm = {
+        .max_freq_mhz = 240,
+        .min_freq_mhz = 80, // APB stays 80 MHz: SPI/UART unaffected
+        .light_sleep_enable = true,
+    };
+    esp_err_t pm_err = esp_pm_configure(&pm);
+    if (pm_err != ESP_OK) {
+        ESP_LOGE(TAG, "esp_pm_configure failed (0x%x), running without light sleep", pm_err);
+    }
 
     // Show splash before the slow library scan so the screen updates sooner
     if (is_cold_boot)

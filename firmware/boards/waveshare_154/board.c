@@ -6,6 +6,16 @@
 
 static const char *TAG = "board_waveshare_154";
 
+void board_light_sleep_pins_init(void) {
+    static const int s_keep_pins[] = BOARD_LIGHT_SLEEP_KEEP_PINS;
+    for (size_t i = 0; i < sizeof(s_keep_pins) / sizeof(s_keep_pins[0]); i++) {
+        int pin = s_keep_pins[i];
+        if (pin >= 0 && GPIO_IS_VALID_GPIO(pin)) {
+            gpio_sleep_sel_dis((gpio_num_t)pin);
+        }
+    }
+}
+
 void board_power_pre_sleep(void) {
     ESP_LOGI(TAG, "Waveshare 1.54 pre-sleep hook");
 #if defined(BOARD_AUDIO_PWR_PIN) && (BOARD_AUDIO_PWR_PIN >= 0)

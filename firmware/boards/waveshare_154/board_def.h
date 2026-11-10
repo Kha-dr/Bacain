@@ -245,6 +245,18 @@ extern "C" {
 #define BOARD_I2S_DOUT_PIN          7
 #endif
 
+// Light Sleep GPIO Pad Protection
+#ifndef BOARD_LIGHT_SLEEP_KEEP_PINS
+#define BOARD_LIGHT_SLEEP_KEEP_PINS { \
+    BOARD_PWR_LATCH_PIN, \
+    BOARD_AUDIO_PWR_PIN, \
+    BOARD_EPD_PWR_PIN, \
+    BOARD_EPD_RST_PIN, \
+    BOARD_EPD_DC_PIN, \
+    BOARD_EPD_CS_PIN \
+}
+#endif
+
 #ifdef __cplusplus
 }
 #endif

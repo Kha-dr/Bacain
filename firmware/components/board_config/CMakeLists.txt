@@ -14,6 +14,6 @@ idf_component_register(
 )
 
 if(board_srcs)
-    target_link_libraries(${COMPONENT_LIB} INTERFACE "-u board_epd_get_lut_partial -u board_power_pre_sleep")
+    target_link_libraries(${COMPONENT_LIB} INTERFACE "-u board_epd_get_lut_partial -u board_power_pre_sleep -u board_light_sleep_pins_init")
 endif()
 

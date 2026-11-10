@@ -48,6 +48,11 @@ bool      board_power_is_charging(void) __attribute__((weak));
 uint32_t  board_power_get_battery_mv(void) __attribute__((weak));
 void      board_power_pre_sleep(void)  __attribute__((weak));
 void      board_power_post_wake(void)  __attribute__((weak));
+void      board_light_sleep_pins_init(void);
+
+#ifndef BOARD_LIGHT_SLEEP_KEEP_PINS
+#define BOARD_LIGHT_SLEEP_KEEP_PINS { -1 }
+#endif
 
 // Mandatory Category A Definitions
 
