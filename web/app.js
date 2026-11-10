@@ -14,6 +14,7 @@
     statusDot: document.getElementById("statusDot"),
     settingsBtn: document.getElementById("settingsBtn"),
     githubBtn: document.getElementById("githubBtn"),
+    installBtn: document.getElementById("installBtn"),
 
     // Views
     onboardingView: document.getElementById("onboardingView"),
@@ -63,6 +64,7 @@
   let cancelUploadRequested = false;
   let bookPendingDelete = null;
   let remoteBooks = [];
+  let deferredInstallPrompt = null;
 
   // ============================================================================
   // Utilities & Feedback
@@ -482,6 +484,36 @@
   }
 
   // ============================================================================
+  // PWA Installation
+  // ============================================================================
+  function setupPwaInstall() {
+    if (window.matchMedia("(display-mode: standalone)").matches) {
+      return;
+    }
+
+    window.addEventListener("beforeinstallprompt", (e) => {
+      // Allow the browser's native mini-infobar while keeping prompt reference
+      deferredInstallPrompt = e;
+      if (el.installBtn) el.installBtn.style.display = "inline-flex";
+    });
+
+    if (el.installBtn) {
+      el.installBtn.addEventListener("click", async () => {
+        if (!deferredInstallPrompt) return;
+        deferredInstallPrompt.prompt();
+        await deferredInstallPrompt.userChoice;
+        deferredInstallPrompt = null;
+        el.installBtn.style.display = "none";
+      });
+    }
+
+    window.addEventListener("appinstalled", () => {
+      deferredInstallPrompt = null;
+      if (el.installBtn) el.installBtn.style.display = "none";
+    });
+  }
+
+  // ============================================================================
   // Event Bindings
   // ============================================================================
   function setupEventListeners() {
@@ -768,6 +800,7 @@
     checkBluetoothCompatibility();
     setupEventListeners();
     registerServiceWorker();
+    setupPwaInstall();
     log("BacaIn Web Client initialized.", "info");
   }
 

@@ -1,19 +1,55 @@
 {
+  "id": "./index.html",
   "name": "BacaIn",
   "short_name": "BacaIn",
-  "description": "Web Bluetooth BacaIn library and device manager",
+  "description": "Web Bluetooth BacaIn e-reader manager",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
   "orientation": "any",
   "background_color": "#0f172a",
   "theme_color": "#2563eb",
   "icons": [
     {
-      "src": "icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "screenshot-wide.png",
+      "sizes": "1502x915",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "BacaIn Desktop Dashboard and Library"
+    },
+    {
+      "src": "screenshot-narrow.png",
+      "sizes": "627x915",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "BacaIn Mobile Device Controls and Book Manager"
     }
   ],
   "categories": ["utilities", "productivity", "books"]
