@@ -13,6 +13,8 @@
 static const char *TAG = "STATUS_LED";
 static bool s_enabled = true;
 
+#define STATUS_LED_SLEEP_PULSE_MS 150  // visibility only: power_mgr forces LED off + holds before sleep
+
 bool status_led_is_available(void) {
 #if BOARD_HAS_STATUS_LED
     return (BOARD_LED_RED_PIN >= 0 || BOARD_LED_GREEN_PIN >= 0 || BOARD_LED_BLUE_PIN >= 0);
@@ -156,7 +158,7 @@ void status_led_trigger(status_led_event_t event) {
         if (BOARD_LED_RED_PIN >= 0 && BOARD_LED_GREEN_PIN >= 0) {
             set_pin_level(BOARD_LED_RED_PIN, true);
             set_pin_level(BOARD_LED_GREEN_PIN, true);
-            delay_ms(500);
+            delay_ms(STATUS_LED_SLEEP_PULSE_MS);
             set_pin_level(BOARD_LED_RED_PIN, false);
             set_pin_level(BOARD_LED_GREEN_PIN, false);
         } else {
@@ -171,7 +173,7 @@ void status_led_trigger(status_led_event_t event) {
 
             if (sleep_pin >= 0) {
                 set_pin_level(sleep_pin, true);
-                delay_ms(500);
+                delay_ms(STATUS_LED_SLEEP_PULSE_MS);
                 set_pin_level(sleep_pin, false);
             }
         }
