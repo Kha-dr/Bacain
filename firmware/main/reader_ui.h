@@ -71,9 +71,9 @@ void      reader_ui_render_ble_sync(bool is_connected, uint32_t bytes_received, 
 void      reader_ui_render_splash(const char *title, const char *subtitle);
 
 /**
- * @brief Render sleeping screen with official BacaIn icon and wake guide.
+ * @brief Render power off screen with official BacaIn icon and turn-on guide.
  */
-void      reader_ui_render_sleeping(void);
+void      reader_ui_render_power_off(void);
 
 /**
  * @brief Get copy of current reading state.

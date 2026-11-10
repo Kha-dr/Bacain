@@ -86,7 +86,7 @@ static void post_refresh_event(void)
     }
 }
 
-void app_enter_deep_sleep(void)
+static void prepare_power_down(void)
 {
     ensure_nvs(); // no-op unless sleep happens before deferred init ran
     s_rtc_last_view = get_view();
@@ -115,7 +115,18 @@ void app_enter_deep_sleep(void)
     epaper_port_sleep();
     epaper_power_off();
     esp_deep_sleep_disable_rom_logging(); // silences ROM banner on next wake only; no eFuse burn
+}
+
+void app_enter_deep_sleep(void)
+{
+    prepare_power_down();
     power_mgr_enter_deep_sleep(0);
+}
+
+static void app_power_off(void)
+{
+    prepare_power_down();
+    power_mgr_power_off(); // falls back to deep sleep if the rail stays up (USB)
 }
 
 // Runs in the NimBLE host task: never touch peripherals here, only signal the main task.
@@ -339,7 +350,7 @@ void app_main(void)
             view = views_dispatch_event(view, refresh_evt);
             if (view == VIEW_REQUEST_POWER_OFF)
             {
-                app_enter_deep_sleep();
+                app_power_off();
             }
         }
         set_view(view);
@@ -370,7 +381,7 @@ void app_main(void)
             view = views_dispatch_event(view, evt);
             if (view == VIEW_REQUEST_POWER_OFF)
             {
-                app_enter_deep_sleep();
+                app_power_off();
             }
             set_view(view);
 

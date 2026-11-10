@@ -207,7 +207,7 @@ reader_view_t view_menu_handle_event(button_event_t evt) {
                 view_menu_render(true);
                 return VIEW_MENU;
             case MENU_ITEM_POWER_OFF:
-                reader_ui_render_sleeping();
+                reader_ui_render_power_off();
                 return VIEW_REQUEST_POWER_OFF;
             default:
                 break;

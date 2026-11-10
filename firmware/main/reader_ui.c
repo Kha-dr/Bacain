@@ -433,7 +433,7 @@ void reader_ui_render_splash(const char *title, const char *subtitle) {
     s_rtc_canvas_valid = true;
 }
 
-void reader_ui_render_sleeping(void) {
+void reader_ui_render_power_off(void) {
     if (!s_canvas) return;
 
     epaper_power_on();
@@ -450,17 +450,14 @@ void reader_ui_render_sleeping(void) {
     // Title (Font16)
     ui_draw_centered_string(80, "BacaIn", &Font16);
 
-    // // Sleeping status (Font12)
-    // ui_draw_centered_string(104, "SLEEPING...", &Font12);
-
     // Divider line
     Paint_DrawLine(50, 126, 150, 126, BLACK, DOT_PIXEL_1X1, LINE_STYLE_SOLID);
 
-    // Wake instruction guide (Font12)
-    const char *wake_str = "Press ▲/▼";
-    int wake_x = (DISPLAY_WIDTH - ui_get_string_width(wake_str, &Font12)) / 2;
-    if (wake_x < 4) wake_x = 4;
-    ui_draw_string((UWORD)wake_x, 146, wake_str, &Font12, BLACK, WHITE);
+    // Turn-on instruction guide (Font12)
+    const char *arrow = button_get_inverted() ? "▲" : "▼";
+    char wake_str[32];
+    snprintf(wake_str, sizeof(wake_str), "Hold %s to turn on", arrow);
+    ui_draw_centered_string(146, wake_str, &Font12);
 
     epaper_port_display_full(s_canvas);
     memcpy(s_rtc_canvas, s_canvas, DISPLAY_BUFFER_SIZE);
