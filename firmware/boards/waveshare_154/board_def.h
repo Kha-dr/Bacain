@@ -152,7 +152,7 @@ extern "C" {
 #endif
 
 #ifndef BOARD_BATTERY_MAX_MV
-#define BOARD_BATTERY_MAX_MV        4180
+#define BOARD_BATTERY_MAX_MV        4140
 #endif
 
 #ifndef BOARD_BATTERY_OCV_TABLE
