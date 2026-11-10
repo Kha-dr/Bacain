@@ -281,7 +281,10 @@ void app_main(void)
         .min_freq_mhz = 80, // APB stays 80 MHz: SPI/UART unaffected
         .light_sleep_enable = true,
     };
-    ESP_ERROR_CHECK(esp_pm_configure(&pm));
+    esp_err_t pm_err = esp_pm_configure(&pm);
+    if (pm_err != ESP_OK) {
+        ESP_LOGE(TAG, "esp_pm_configure failed (0x%x), running without light sleep", pm_err);
+    }
 
     // 3. Settings, once. text_pager_init() first (font is applied to the pager);
     //    must run before reader_ui_init() (rotation is read there).
