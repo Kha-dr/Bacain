@@ -1,6 +1,7 @@
 #include "view_reading.h"
 #include <stdio.h>
 #include "esp_attr.h"
+#include "esp_log.h"
 #include "epaper_port.h"
 #include "GUI_Paint.h"
 #include "fonts.h"
@@ -10,6 +11,8 @@
 #include "power_mgr.h"
 #include "view_menu.h"
 #include "view_bookmarks.h"
+
+static const char *TAG = "view_reading";
 
 RTC_DATA_ATTR static uint32_t s_redraw_counter = 0;
 
@@ -47,7 +50,9 @@ void view_reading_render(bool full_refresh) {
     uint8_t *canvas = reader_ui_get_canvas();
     if (!canvas) return;
 
-    view_reading_ensure_book_open();
+    if (view_reading_ensure_book_open() != ESP_OK) {
+        ESP_LOGW(TAG, "No book open to render");
+    }
 
     epaper_power_on();
 

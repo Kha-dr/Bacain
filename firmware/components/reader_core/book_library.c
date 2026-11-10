@@ -1295,7 +1295,9 @@ esp_err_t book_library_set_book_offset(const char *filename, size_t offset) {
         reading_state_t copy = s_reading_state;
         xSemaphoreGive(s_mutex);
 
-        text_pager_seek(offset);
+        if (text_pager_is_book_open()) {
+            text_pager_seek(offset);
+        }
         return book_library_save_state(&copy);
     }
 
