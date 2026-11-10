@@ -174,6 +174,19 @@ void app_main(void) {
     status_led_init();
     status_led_trigger(STATUS_LED_EVT_WAKEUP);
 
+    wakeup_reason_t raw_wakeup = power_mgr_get_wakeup_cause();
+    bool is_cold_boot = (raw_wakeup == WAKEUP_REASON_COLD_BOOT || esp_reset_reason() != ESP_RST_DEEPSLEEP);
+
+    // Initialize buttons immediately on wake so user interactions (hold, double-click) are tracked
+    if (!is_cold_boot) {
+        if (raw_wakeup == WAKEUP_REASON_BOOT_BUTTON) {
+            button_seed_wakeup(BTN_ID_BOOT);
+        } else if (raw_wakeup == WAKEUP_REASON_PWR_BUTTON) {
+            button_seed_wakeup(BTN_ID_PWR);
+        }
+    }
+    ESP_ERROR_CHECK(button_init(&s_btn_queue));
+
     // 2. Initialize NVS
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -183,9 +196,6 @@ void app_main(void) {
     ESP_ERROR_CHECK(ret);
 
     ESP_LOGI(TAG, "Starting BacaIn firmware...");
-
-    wakeup_reason_t raw_wakeup = power_mgr_get_wakeup_cause();
-    bool is_cold_boot = (raw_wakeup == WAKEUP_REASON_COLD_BOOT || esp_reset_reason() != ESP_RST_DEEPSLEEP);
     app_settings_load(is_cold_boot);
 
     // 3. Initialize Peripherals
@@ -215,14 +225,6 @@ void app_main(void) {
     }
 
     ESP_ERROR_CHECK(reader_ui_init(is_cold_boot));
-    if (!is_cold_boot) {
-        if (raw_wakeup == WAKEUP_REASON_BOOT_BUTTON) {
-            button_seed_wakeup(BTN_ID_BOOT);
-        } else if (raw_wakeup == WAKEUP_REASON_PWR_BUTTON) {
-            button_seed_wakeup(BTN_ID_PWR);
-        }
-    }
-    ESP_ERROR_CHECK(button_init(&s_btn_queue));
 
     // 4. Initialize Reader Core
     book_library_init();
@@ -263,6 +265,7 @@ void app_main(void) {
             }
         }
     }
+
 
     if (is_cold_boot) {
         reader_ui_render_splash(NULL, NULL);

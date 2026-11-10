@@ -12,8 +12,8 @@
 // Configuration constants - can be modified according to your needs
 #define TICKS_INTERVAL          5    // ms - timer interrupt interval
 #define DEBOUNCE_TICKS          3    // MAX 7 (0 ~ 7) - debounce filter depth
-#define SHORT_TICKS             (180 / TICKS_INTERVAL)   // short press threshold
-#define LONG_TICKS              (1200 / TICKS_INTERVAL)  // 1200ms (>1.2s threshold)
+#define SHORT_TICKS             (350 / TICKS_INTERVAL)   // short press threshold (350ms double-click window)
+#define LONG_TICKS              (600 / TICKS_INTERVAL)   // 600ms hold threshold
 #define PRESS_REPEAT_MAX_NUM    15   // maximum repeat counter value
 
 // Forward declaration
