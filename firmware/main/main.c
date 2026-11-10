@@ -368,6 +368,8 @@ void app_main(void)
     // 1. Latch board power and cut audio rail (must stay first)
     power_mgr_early_init();
     WAKE_MARK("power_mgr_early_init");
+    ensure_nvs();
+    WAKE_MARK("nvs");
     status_led_init();
     status_led_trigger(STATUS_LED_EVT_WAKEUP); // background task, returns immediately
 
@@ -390,11 +392,7 @@ void app_main(void)
     ESP_ERROR_CHECK(button_init(&s_btn_queue));
     WAKE_MARK("button_init");
 
-    // 3. NVS
-    ensure_nvs();
-    WAKE_MARK("nvs");
-
-    // 4. Settings, once. text_pager_init() first (font is applied to the pager);
+    // 3. Settings, once. text_pager_init() first (font is applied to the pager);
     //    must run before reader_ui_init() (rotation is read there).
     text_pager_init();
     app_settings_load(is_cold_boot);
@@ -402,7 +400,7 @@ void app_main(void)
 
     ESP_LOGI(TAG, "Starting BacaIn firmware (wakeup=%d, cold=%d)...", raw_wakeup, is_cold_boot);
 
-    // 5. Storage
+    // 4. Storage
     esp_err_t flash_ret = flash_storage_init();
     if (flash_ret != ESP_OK)
     {
@@ -422,7 +420,7 @@ void app_main(void)
     }
     WAKE_MARK("sdcard_init");
 
-    // 6. Display
+    // 5. Display
     ESP_ERROR_CHECK(reader_ui_init(is_cold_boot));
     WAKE_MARK("reader_ui_init");
 
@@ -432,7 +430,7 @@ void app_main(void)
         reader_ui_render_splash(NULL, NULL);
     }
 
-    // 7. Reader core
+    // 6. Reader core
     book_library_init();
 #if CONFIG_BOARD_MUSHAF_ENABLE
     view_mushaf_init(is_cold_boot);
