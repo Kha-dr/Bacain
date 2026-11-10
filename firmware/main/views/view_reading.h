@@ -10,6 +10,7 @@ extern "C" {
 #endif
 
 void view_reading_reset_redraw_counter(void);
+esp_err_t view_reading_ensure_book_open(void);
 void view_reading_render(bool full_refresh);
 void view_reading_render_page_turn(void);
 reader_view_t view_reading_on_wake(void);

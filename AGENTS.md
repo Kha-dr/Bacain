@@ -58,9 +58,10 @@ For hardware design, electrical constraints, and embedded firmware rules, refer 
 To prevent context exhaustion, cognitive degradation, and hallucination:
 
 1. **Context Protection & KISS Triage (Orchestrator Boundary)**:
-   - **Golden Delegation Rule**: If a solution is stupid simple, do it yourself directly. If a task can be broken down into multiple distinct parts, delegate them.
    - Triage before delegation (KISS): If a bug, fix, or feature touches 1 to 2 files and has a localized solution, the primary orchestrator must implement and verify it directly. Do not spawn subagents for trivial edits that take seconds.
-   - Delegate when: exploring unfamiliar subsystems across >4 files, parallel multi-file refactoring, or running long-running build/test scripts.
+   - Delegate when:
+     - exploring unfamiliar subsystems across multiple files, parallel multi-file refactoring, or running long-running build/test scripts.
+     - If a solution is stupid simple, do it yourself directly. If a task can be broken down into multiple distinct parts, delegate them.
    - For exploratory tasks, the orchestrator formulates the specific objective and target files, then delegates exploration.
 2. **Strict Local Ground Truth (Anti-Rabbit-Hole)**:
    - The repository is 100% self-contained. Never use web search or external API queries for board pinouts, hardware schematics, or drivers.
@@ -110,8 +111,8 @@ Any agent navigating this codebase must consult this directory before exploring 
 | **Board Definition**    | `firmware/boards/<board_id>/board_def.h`<br>`firmware/boards/<board_id>/board.c`                | Defines physical pins, active polarities, power rails, display LUTs. Zero board defines allowed in core components.                                          |
 | **Power & Sleep**       | `firmware/components/power_mgr/power_mgr.c`                                                     | Deep sleep entry and wake. RTC IO domain must remain `ESP_PD_OPTION_ON` for wake pull-ups. GPIO holds deferred to sleep entry. Button release loops bounded. |
 | **Display & LUTs**      | `firmware/components/epaper/epaper_port.c`<br>`firmware/components/board_config/CMakeLists.txt` | EPD SPI bus and refresh sequencing. Archive linking requires explicit symbol extraction (`-u board_epd_get_lut_partial -u board_power_pre_sleep`).           |
-| **Status LED**          | `firmware/components/status_led/status_led.c`                                                   | Wake event must execute on a one-shot background task (0 ms wake delay). Sleep event is synchronous (500 ms) to finish before CPU powerdown.                 |
-| **UI Views**            | `firmware/main/views/`<br>`firmware/main/main.c`                                                | Views are fully decoupled event consumers (`button_event_t`). No view directly manages hardware sleep.                                                       |
+| **Status LED**          | `firmware/components/status_led/status_led.c`                                                   | Wake event must execute on a one-shot background task (0 ms wake delay). Sleep event is synchronous (150 ms) for visibility only                             |
+| **UI Views**            | `firmware/main/views/`<br>`firmware/main/main.c`                                                | Views never call sleep or power functions; they return VIEW_REQUEST_POWER_OFF and main.c performs it.                                                       |
 | **Storage & Library**   | `firmware/components/reader_core/`<br>`firmware/components/sdcard/`                             | SD card has priority; falls back to internal SPIFFS / Flash storage.                                                                                         |
 | **BLE Synchronization** | `firmware/components/ble_sync/`                                                                 | Binary frame transport for file upload and config sync. Companion client executes heavy processing.                                                          |
 

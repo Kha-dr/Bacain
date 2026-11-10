@@ -14,7 +14,6 @@
 #include "fonts.h"
 #include "app_config.h"
 #include "view_menu.h"
-#include "power_mgr.h"
 
 #define TAG "view_mushaf"
 
@@ -71,7 +70,7 @@ static void view_mushaf_render_menu(bool full_refresh) {
     Paint_DrawRectangle(0, 0, DISPLAY_WIDTH - 1, UI_HEADER_HEIGHT, BLACK, DOT_PIXEL_1X1, DRAW_FILL_FULL);
     Paint_DrawString_EN(8, 3, "Mushaf Menu", &Font12, WHITE, BLACK);
     char bat_str[16];
-    snprintf(bat_str, sizeof(bat_str), "%u%%", power_mgr_get_battery_percentage());
+    snprintf(bat_str, sizeof(bat_str), "%u%%", reader_ui_get_battery_percentage());
     Paint_DrawString_EN(165, 3, bat_str, &Font12, WHITE, BLACK);
     Paint_DrawLine(0, UI_HEADER_HEIGHT + 1, DISPLAY_WIDTH - 1, UI_HEADER_HEIGHT + 1, BLACK, DOT_PIXEL_1X1, LINE_STYLE_SOLID);
 
@@ -177,7 +176,7 @@ static void view_mushaf_render_reading(bool full_refresh) {
     Paint_DrawString_EN(128, 2, tag_str, &Font12, BLACK, WHITE);
 
     char bat_str[16];
-    snprintf(bat_str, sizeof(bat_str), "%u%%", power_mgr_get_battery_percentage());
+    snprintf(bat_str, sizeof(bat_str), "%u%%", reader_ui_get_battery_percentage());
     Paint_DrawString_EN(165, 2, bat_str, &Font12, BLACK, WHITE);
     Paint_DrawLine(0, 15, DISPLAY_WIDTH - 1, 15, BLACK, DOT_PIXEL_1X1, LINE_STYLE_SOLID);
 
@@ -230,7 +229,7 @@ static void view_mushaf_render_jump(bool full_refresh) {
     Paint_DrawRectangle(0, 0, DISPLAY_WIDTH - 1, UI_HEADER_HEIGHT, BLACK, DOT_PIXEL_1X1, DRAW_FILL_FULL);
     Paint_DrawString_EN(8, 3, "SUNNAH & JUZ JUMP", &Font12, WHITE, BLACK);
     char bat_str[16];
-    snprintf(bat_str, sizeof(bat_str), "%u%%", power_mgr_get_battery_percentage());
+    snprintf(bat_str, sizeof(bat_str), "%u%%", reader_ui_get_battery_percentage());
     Paint_DrawString_EN(165, 3, bat_str, &Font12, WHITE, BLACK);
     Paint_DrawLine(0, UI_HEADER_HEIGHT + 1, DISPLAY_WIDTH - 1, UI_HEADER_HEIGHT + 1, BLACK, DOT_PIXEL_1X1, LINE_STYLE_SOLID);
 
@@ -298,7 +297,7 @@ static void view_mushaf_render_bookmarks(bool full_refresh) {
     snprintf(title_buf, sizeof(title_buf), "BOOKMARKS (%u/8)", count);
     Paint_DrawString_EN(8, 3, title_buf, &Font12, WHITE, BLACK);
     char bat_str[16];
-    snprintf(bat_str, sizeof(bat_str), "%u%%", power_mgr_get_battery_percentage());
+    snprintf(bat_str, sizeof(bat_str), "%u%%", reader_ui_get_battery_percentage());
     Paint_DrawString_EN(165, 3, bat_str, &Font12, WHITE, BLACK);
     Paint_DrawLine(0, UI_HEADER_HEIGHT + 1, DISPLAY_WIDTH - 1, UI_HEADER_HEIGHT + 1, BLACK, DOT_PIXEL_1X1, LINE_STYLE_SOLID);
 
@@ -383,21 +382,14 @@ void view_mushaf_enter_menu(void) {
 reader_view_t view_mushaf_on_wake(void) {
     switch (s_rtc_mushaf_sub_view) {
     case VIEW_MUSHAF_READING:
-        view_mushaf_render_reading(false);
-        break;
     case VIEW_MUSHAF_JUMP:
-        view_mushaf_render_jump(false);
-        break;
     case VIEW_MUSHAF_BOOKMARKS:
-        view_mushaf_render_bookmarks(false);
-        break;
+        return s_rtc_mushaf_sub_view;
     case VIEW_MUSHAF_MENU:
     default:
         s_rtc_mushaf_sub_view = VIEW_MUSHAF_MENU;
-        view_mushaf_render_menu(false);
         return VIEW_MUSHAF_MENU;
     }
-    return s_rtc_mushaf_sub_view;
 }
 
 static reader_view_t mushaf_handle_event_internal(reader_view_t view, button_event_t evt) {

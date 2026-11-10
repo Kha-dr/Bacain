@@ -956,12 +956,25 @@ esp_err_t book_library_set_active_book(const char *book_path, bool reset_offset)
         return ESP_ERR_INVALID_ARG;
     }
 
-    book_library_flush_state();
+    char resolved_path[BOOK_PATH_MAX_LEN];
+    resolve_book_full_path(book_path, resolved_path, sizeof(resolved_path));
 
     xSemaphoreTake(s_mutex, portMAX_DELAY);
 
-    char resolved_path[BOOK_PATH_MAX_LEN];
-    resolve_book_full_path(book_path, resolved_path, sizeof(resolved_path));
+    if (s_reading_state.active_book_path[0] != '\0' &&
+        strcmp(s_reading_state.active_book_path, resolved_path) == 0) {
+        if (reset_offset) {
+            s_reading_state.byte_offset = 0;
+            s_state_dirty = true;
+        }
+        xSemaphoreGive(s_mutex);
+        return ESP_OK;
+    }
+    xSemaphoreGive(s_mutex);
+
+    book_library_flush_state();
+
+    xSemaphoreTake(s_mutex, portMAX_DELAY);
 
     if (s_reading_state.active_book_path[0] != '\0' &&
         strcmp(s_reading_state.active_book_path, resolved_path) != 0) {
@@ -1282,7 +1295,9 @@ esp_err_t book_library_set_book_offset(const char *filename, size_t offset) {
         reading_state_t copy = s_reading_state;
         xSemaphoreGive(s_mutex);
 
-        text_pager_seek(offset);
+        if (text_pager_is_book_open()) {
+            text_pager_seek(offset);
+        }
         return book_library_save_state(&copy);
     }
 

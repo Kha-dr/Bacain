@@ -289,11 +289,6 @@ void epaper_port_init_partial(void) {
     epaper_SendCommand(0x3C);
     epaper_SendData(0x80);
 
-    epaper_SendCommand(0x22);
-    epaper_SendData(0xC0);
-    epaper_SendCommand(0x20);
-    epaper_readbusyh();
-
     epaper_SendCommand(0x01);  // Driver output control
     epaper_SendData((uint8_t)(y_end_line & 0xFF));
     epaper_SendData((uint8_t)((y_end_line >> 8) & 0xFF));

@@ -132,6 +132,7 @@ reader_view_t view_bookmarks_handle_event(button_event_t evt) {
     } else if (evt.type == BTN_DOUBLE_CLICK) {
         if (count > 0 && s_rtc_bookmark_index >= 0 && s_rtc_bookmark_index < (int)count) {
             size_t target_offset = st->bookmarks[s_rtc_bookmark_index];
+            view_reading_ensure_book_open();
             text_pager_open_offset(target_offset);
             book_library_update_offset(target_offset);
         }
