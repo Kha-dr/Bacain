@@ -1,0 +1,54 @@
+name: Draft Release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  draft-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate Changelog with git-cliff
+        uses: orhun/git-cliff-action@v4
+        id: git-cliff
+        with:
+          config: cliff.toml
+          args: --bump --unreleased
+        env:
+          OUTPUT: changelog.md
+
+      - name: Create or Update Draft Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ steps.git-cliff.outputs.version }}
+        run: |
+          VERSION="${TAG_NAME}"
+          if [ -z "${VERSION}" ]; then
+            echo "No version calculated, skipping."
+            exit 0
+          fi
+
+          # Clean up any existing draft with a different version tag
+          EXISTING_DRAFT=$(gh release list --exclude-drafts=false | grep -i "Draft" | awk '{print $1}' | head -n 1)
+          if [ -n "${EXISTING_DRAFT}" ] && [ "${EXISTING_DRAFT}" != "${VERSION}" ]; then
+            echo "Removing superseded draft: ${EXISTING_DRAFT}"
+            gh release delete "${EXISTING_DRAFT}" --yes || true
+          fi
+
+          # Create or update draft release with latest conventional changelog
+          if gh release view "${VERSION}" >/dev/null 2>&1; then
+            echo "Updating existing draft release ${VERSION}"
+            gh release edit "${VERSION}" --title "${VERSION} (Draft)" --notes-file changelog.md --draft
+          else
+            echo "Creating draft release ${VERSION}"
+            gh release create "${VERSION}" --title "${VERSION} (Draft)" --notes-file changelog.md --draft
+          fi
