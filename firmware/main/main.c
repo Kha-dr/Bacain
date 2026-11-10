@@ -10,6 +10,7 @@
 #include "esp_attr.h"
 #include "esp_system.h"
 #include "esp_sleep.h"
+#include "esp_pm.h"
 #include "driver/gpio.h"
 
 #include "app_config.h"
@@ -274,6 +275,13 @@ void app_main(void)
         }
     }
     ESP_ERROR_CHECK(button_init(&s_btn_queue));
+
+    esp_pm_config_t pm = {
+        .max_freq_mhz = 240,
+        .min_freq_mhz = 80, // APB stays 80 MHz: SPI/UART unaffected
+        .light_sleep_enable = true,
+    };
+    ESP_ERROR_CHECK(esp_pm_configure(&pm));
 
     // 3. Settings, once. text_pager_init() first (font is applied to the pager);
     //    must run before reader_ui_init() (rotation is read there).

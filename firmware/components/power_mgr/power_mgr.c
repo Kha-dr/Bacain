@@ -223,6 +223,13 @@ void power_mgr_early_init(void) {
         };
         gpio_config(&pwr_conf);
         gpio_set_level((gpio_num_t)BOARD_PWR_LATCH_PIN, BOARD_PWR_LATCH_ACTIVE_LVL);
+        gpio_sleep_sel_dis((gpio_num_t)BOARD_PWR_LATCH_PIN);
+    }
+#endif
+
+#if defined(BOARD_EPD_PWR_PIN) && (BOARD_EPD_PWR_PIN >= 0)
+    if (GPIO_IS_VALID_OUTPUT_GPIO(BOARD_EPD_PWR_PIN)) {
+        gpio_sleep_sel_dis((gpio_num_t)BOARD_EPD_PWR_PIN);
     }
 #endif
 
@@ -237,6 +244,7 @@ void power_mgr_early_init(void) {
         };
         gpio_config(&audio_conf);
         gpio_set_level((gpio_num_t)BOARD_AUDIO_PWR_PIN, !BOARD_AUDIO_PWR_ACTIVE_LVL);
+        gpio_sleep_sel_dis((gpio_num_t)BOARD_AUDIO_PWR_PIN);
     }
 #endif
 
