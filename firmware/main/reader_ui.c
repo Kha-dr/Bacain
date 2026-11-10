@@ -466,3 +466,7 @@ void reader_ui_render_sleeping(void) {
     memcpy(s_rtc_canvas, s_canvas, DISPLAY_BUFFER_SIZE);
     s_rtc_canvas_valid = true;
 }
+
+uint8_t reader_ui_get_battery_percentage(void) {
+    return power_mgr_get_battery_percentage();
+}

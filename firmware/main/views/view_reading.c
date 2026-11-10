@@ -8,7 +8,6 @@
 #include "text_pager.h"
 #include "book_library.h"
 #include "app_config.h"
-#include "power_mgr.h"
 #include "view_menu.h"
 #include "view_bookmarks.h"
 
@@ -61,7 +60,7 @@ void view_reading_render(bool full_refresh) {
 
     // Add Battery & Status to top header right corner
     char bat_str[16];
-    snprintf(bat_str, sizeof(bat_str), "%u%%", power_mgr_get_battery_percentage());
+    snprintf(bat_str, sizeof(bat_str), "%u%%", reader_ui_get_battery_percentage());
     Paint_DrawString_EN(165, 2, bat_str, &Font12, BLACK, WHITE);
 
     reader_ui_flush_canvas(full_refresh);

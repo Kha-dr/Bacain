@@ -4,12 +4,12 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "board_config.h"
-#include <stdbool.h>
 #include "esp_err.h"
 #include "GUI_Paint.h"
 #include "fonts.h"
 #include "book_library.h"
 #include "text_pager.h"
+#include "views.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -18,21 +18,6 @@ extern "C" {
 #ifndef file_size
 #define file_size total_bytes
 #endif
-
-typedef enum {
-    VIEW_READING = 0,
-    VIEW_MENU,
-    VIEW_BOOK_LIST,
-    VIEW_BLE_SYNC,
-    VIEW_BOOKMARKS,
-    VIEW_NAV_HINTS,
-#if CONFIG_BOARD_MUSHAF_ENABLE || BOARD_MUSHAF_ENABLE
-    VIEW_MUSHAF_MENU,
-    VIEW_MUSHAF_READING,
-    VIEW_MUSHAF_JUMP,
-    VIEW_MUSHAF_BOOKMARKS,
-#endif
-} reader_view_t;
 
 typedef enum {
     MENU_ACTION_NONE = 0,
@@ -55,7 +40,7 @@ void      reader_ui_flush_canvas(bool full_refresh);
 void      app_settings_load(bool force_nvs_reload);
 void      app_settings_save_font_size(uint8_t font_size);
 void      app_settings_save_nav_hints(bool show);
-void      app_enter_deep_sleep(void);
+uint8_t   reader_ui_get_battery_percentage(void);
 
 void      reader_ui_set_rotation(uint8_t rotation);
 uint8_t   reader_ui_get_rotation(void);

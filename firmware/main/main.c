@@ -25,12 +25,8 @@
 #include "status_led.h"
 
 #include "views.h"
-#include "view_reading.h"
 #include "view_menu.h"
-#include "view_library.h"
 #include "view_ble_sync.h"
-#include "view_bookmarks.h"
-#include "view_nav_hints.h"
 #if CONFIG_BOARD_MUSHAF_ENABLE
 #include "view_mushaf.h"
 #endif
@@ -176,63 +172,6 @@ static void on_ble_sync_event(ble_sync_event_t event, const void *param, void *u
     if (should_refresh)
     {
         post_refresh_event();
-    }
-}
-
-static reader_view_t dispatch_wake_view(reader_view_t last_view)
-{
-    switch (last_view)
-    {
-    case VIEW_READING:
-        return view_reading_on_wake();
-    case VIEW_MENU:
-        return view_menu_on_wake();
-    case VIEW_BOOK_LIST:
-        return view_library_on_wake();
-    case VIEW_BOOKMARKS:
-        return view_bookmarks_on_wake();
-    case VIEW_NAV_HINTS:
-        return view_nav_hints_on_wake();
-    case VIEW_BLE_SYNC:
-        return view_ble_sync_on_wake();
-#if CONFIG_BOARD_MUSHAF_ENABLE
-    case VIEW_MUSHAF_MENU:
-    case VIEW_MUSHAF_READING:
-    case VIEW_MUSHAF_JUMP:
-    case VIEW_MUSHAF_BOOKMARKS:
-        return view_mushaf_on_wake();
-#endif
-    default:
-        view_menu_set_index(0);
-        return VIEW_MENU;
-    }
-}
-
-static reader_view_t dispatch_view_event(reader_view_t view, button_event_t evt)
-{
-    switch (view)
-    {
-    case VIEW_READING:
-        return view_reading_handle_event(evt);
-    case VIEW_MENU:
-        return view_menu_handle_event(evt);
-    case VIEW_BOOK_LIST:
-        return view_library_handle_event(evt);
-    case VIEW_BLE_SYNC:
-        return view_ble_sync_handle_event(evt);
-    case VIEW_BOOKMARKS:
-        return view_bookmarks_handle_event(evt);
-    case VIEW_NAV_HINTS:
-        return view_nav_hints_handle_event(evt);
-#if CONFIG_BOARD_MUSHAF_ENABLE
-    case VIEW_MUSHAF_MENU:
-    case VIEW_MUSHAF_READING:
-    case VIEW_MUSHAF_JUMP:
-    case VIEW_MUSHAF_BOOKMARKS:
-        return view_mushaf_handle_event(view, evt);
-#endif
-    default:
-        return view;
     }
 }
 
@@ -390,14 +329,18 @@ void app_main(void)
     }
     else
     {
-        reader_view_t view = dispatch_wake_view(s_rtc_last_view);
+        reader_view_t view = views_dispatch_wake(s_rtc_last_view);
         bool is_button_wake = (raw_wakeup == WAKEUP_REASON_BOOT_BUTTON ||
                                raw_wakeup == WAKEUP_REASON_PWR_BUTTON);
         if (!is_button_wake)
         {
             // Defensive: power_mgr currently enables only EXT1 button wake
             const button_event_t refresh_evt = {.button = BTN_ID_BOOT, .type = BTN_EVENT_CUSTOM_REFRESH};
-            view = dispatch_view_event(view, refresh_evt);
+            view = views_dispatch_event(view, refresh_evt);
+            if (view == VIEW_REQUEST_POWER_OFF)
+            {
+                app_enter_deep_sleep();
+            }
         }
         set_view(view);
     }
@@ -424,7 +367,11 @@ void app_main(void)
                 update_activity();
             }
             ESP_LOGD(TAG, "Btn evt: button=%d, type=%d, view=%d", evt.button, evt.type, view);
-            view = dispatch_view_event(view, evt);
+            view = views_dispatch_event(view, evt);
+            if (view == VIEW_REQUEST_POWER_OFF)
+            {
+                app_enter_deep_sleep();
+            }
             set_view(view);
 
             if (is_refresh)
