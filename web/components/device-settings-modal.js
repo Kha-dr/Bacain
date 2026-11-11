@@ -11,13 +11,13 @@
  */
 
 function escapeHtml(str) {
-  if (!str) return '';
+  if (!str) return "";
   return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
 class DeviceSettingsModal extends HTMLElement {
@@ -28,59 +28,62 @@ class DeviceSettingsModal extends HTMLElement {
     this._orientation = 0;
     this._buttonInvert = false;
     this._statusLed = true;
+    this._refreshInterval = 10;
+    this._refreshIntervalSupported = false;
     this._handleKeyDown = this._handleKeyDown.bind(this);
   }
 
   connectedCallback() {
-    if (!this.querySelector('#settingsModal')) {
+    if (!this.querySelector("#settingsModal")) {
       this.render();
     }
-    const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+    const currentTheme =
+      document.documentElement.getAttribute("data-theme") || "dark";
     this._updateThemeUI(currentTheme);
 
     try {
-      const savedRot = localStorage.getItem('bacain_orientation');
+      const savedRot = localStorage.getItem("bacain_orientation");
       if (savedRot !== null) {
         this.setOrientation(parseInt(savedRot, 10));
       } else {
         this.setOrientation(this._orientation);
       }
-      const savedBtnInv = localStorage.getItem('bacain_btn_invert');
+      const savedBtnInv = localStorage.getItem("bacain_btn_invert");
       if (savedBtnInv !== null) {
-        this.setButtonInvert(savedBtnInv === '1' || savedBtnInv === 'true');
+        this.setButtonInvert(savedBtnInv === "1" || savedBtnInv === "true");
       } else {
         this.setButtonInvert(this._buttonInvert);
       }
-      const savedStatusLed = localStorage.getItem('bacain_status_led');
+      const savedStatusLed = localStorage.getItem("bacain_status_led");
       if (savedStatusLed !== null) {
-        this.setStatusLed(savedStatusLed === '1' || savedStatusLed === 'true');
+        this.setStatusLed(savedStatusLed === "1" || savedStatusLed === "true");
       } else {
         this.setStatusLed(this._statusLed);
       }
-      const savedFont = localStorage.getItem('bacain_font');
+      const savedFont = localStorage.getItem("bacain_font");
       if (savedFont !== null) {
         this.setFont(parseInt(savedFont, 10));
       }
-      const savedSleep = localStorage.getItem('bacain_sleep_timeout');
+      const savedSleep = localStorage.getItem("bacain_sleep_timeout");
       if (savedSleep !== null) {
         this.setSleepTimeout(parseInt(savedSleep, 10));
       }
     } catch (err) {
-      console.warn('Failed to restore settings from localStorage:', err);
+      console.warn("Failed to restore settings from localStorage:", err);
     }
 
     this.bindEvents();
-    document.addEventListener('keydown', this._handleKeyDown);
+    document.addEventListener("keydown", this._handleKeyDown);
   }
 
   disconnectedCallback() {
-    document.removeEventListener('keydown', this._handleKeyDown);
+    document.removeEventListener("keydown", this._handleKeyDown);
   }
 
   _handleKeyDown(e) {
-    if (e.key === 'Escape') {
-      const modal = this.querySelector('#settingsModal');
-      if (modal && modal.classList.contains('active')) {
+    if (e.key === "Escape") {
+      const modal = this.querySelector("#settingsModal");
+      if (modal && modal.classList.contains("active")) {
         this.close();
       }
     }
@@ -193,6 +196,27 @@ class DeviceSettingsModal extends HTMLElement {
               </div>
             </div>
 
+            <!-- Full Refresh Interval -->
+            <div id="settingRefreshIntervalCard" class="control-card">
+              <div class="control-card-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;">
+                  <polyline points="23 4 23 10 17 10"></polyline>
+                  <polyline points="1 20 1 14 7 14"></polyline>
+                  <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                </svg>
+                Full Refresh
+              </div>
+              <div class="control-inline-row" style="justify-content: space-between;">
+                <label for="settingRefreshInterval" class="control-label">Full refresh every N pages</label>
+                <select id="settingRefreshInterval" class="control-select">
+                  <option value="0">Never</option>
+                  <option value="5">5 pages</option>
+                  <option value="10">10 pages</option>
+                  <option value="20">20 pages</option>
+                </select>
+              </div>
+            </div>
+
             <!-- Navigation Hints -->
             <div class="control-card">
               <div class="control-card-title">
@@ -274,7 +298,9 @@ class DeviceSettingsModal extends HTMLElement {
                 <div style="display: flex; align-items: center; gap: 0.5rem;">
                   <label for="sleepTimeoutSelect" class="control-label">Auto-Sleep:</label>
                   <select id="sleepTimeoutSelect" class="control-select">
-                    <option value="20" selected>20s (Default)</option>
+                    <option value="5" selected>5s (Default)</option>
+                    <option value="10">10s</option>
+                    <option value="20">20s</option>
                     <option value="30">30s</option>
                     <option value="60">60s</option>
                     <option value="120">2m</option>
@@ -343,34 +369,34 @@ class DeviceSettingsModal extends HTMLElement {
   }
 
   _updateThemeUI(theme) {
-    const lightBtn = this.querySelector('#themeLightBtn');
-    const darkBtn = this.querySelector('#themeDarkBtn');
-    if (lightBtn) lightBtn.classList.toggle('active', theme === 'light');
-    if (darkBtn) darkBtn.classList.toggle('active', theme === 'dark');
+    const lightBtn = this.querySelector("#themeLightBtn");
+    const darkBtn = this.querySelector("#themeDarkBtn");
+    if (lightBtn) lightBtn.classList.toggle("active", theme === "light");
+    if (darkBtn) darkBtn.classList.toggle("active", theme === "dark");
 
-    const sun = this.querySelector('#themeIconSun');
-    const moon = this.querySelector('#themeIconMoon');
+    const sun = this.querySelector("#themeIconSun");
+    const moon = this.querySelector("#themeIconMoon");
     if (sun && moon) {
-      if (theme === 'dark') {
-        sun.style.display = 'block';
-        moon.style.display = 'none';
+      if (theme === "dark") {
+        sun.style.display = "block";
+        moon.style.display = "none";
       } else {
-        sun.style.display = 'none';
-        moon.style.display = 'block';
+        sun.style.display = "none";
+        moon.style.display = "block";
       }
     }
   }
 
   bindEvents() {
-    const modal = this.querySelector('#settingsModal');
-    const closeBtn = this.querySelector('#closeSettingsBtn');
+    const modal = this.querySelector("#settingsModal");
+    const closeBtn = this.querySelector("#closeSettingsBtn");
 
     if (closeBtn) {
-      closeBtn.addEventListener('click', () => this.close());
+      closeBtn.addEventListener("click", () => this.close());
     }
 
     if (modal) {
-      modal.addEventListener('click', (e) => {
+      modal.addEventListener("click", (e) => {
         if (e.target === modal) {
           this.close();
         }
@@ -378,185 +404,226 @@ class DeviceSettingsModal extends HTMLElement {
     }
 
     // Appearance Theme
-    const themeBtn = this.querySelector('#themeToggleBtn');
+    const themeBtn = this.querySelector("#themeToggleBtn");
     if (themeBtn) {
-      themeBtn.addEventListener('click', () => {
+      themeBtn.addEventListener("click", () => {
         this.toggleTheme();
       });
     }
 
-    const themeLightBtn = this.querySelector('#themeLightBtn');
+    const themeLightBtn = this.querySelector("#themeLightBtn");
     if (themeLightBtn) {
-      themeLightBtn.addEventListener('click', () => {
-        this.setTheme('light');
+      themeLightBtn.addEventListener("click", () => {
+        this.setTheme("light");
       });
     }
 
-    const themeDarkBtn = this.querySelector('#themeDarkBtn');
+    const themeDarkBtn = this.querySelector("#themeDarkBtn");
     if (themeDarkBtn) {
-      themeDarkBtn.addEventListener('click', () => {
-        this.setTheme('dark');
+      themeDarkBtn.addEventListener("click", () => {
+        this.setTheme("dark");
       });
     }
 
     // Storage Destination Targets
-    const flashBtn = this.querySelector('#storageTargetFlashBtn');
-    const sdBtn = this.querySelector('#storageTargetSdBtn');
+    const flashBtn = this.querySelector("#storageTargetFlashBtn");
+    const sdBtn = this.querySelector("#storageTargetSdBtn");
 
     if (flashBtn) {
-      flashBtn.addEventListener('click', () => {
-        this.setStorageTarget(1);
+      flashBtn.addEventListener("click", () => {
+        this.setStorageTarget(1, true);
       });
     }
     if (sdBtn) {
-      sdBtn.addEventListener('click', () => {
+      sdBtn.addEventListener("click", () => {
         if (sdBtn.disabled || !this._sdAvailable) return;
-        this.setStorageTarget(0);
+        this.setStorageTarget(0, true);
       });
     }
 
     // Typography
-    const font16Btn = this.querySelector('#font16Btn');
-    const font12Btn = this.querySelector('#font12Btn');
-    const forceRefreshBtn = this.querySelector('#forceRefreshBtn');
+    const font16Btn = this.querySelector("#font16Btn");
+    const font12Btn = this.querySelector("#font12Btn");
+    const forceRefreshBtn = this.querySelector("#forceRefreshBtn");
 
     if (font16Btn && font12Btn) {
-      font16Btn.addEventListener('click', () => {
-        font16Btn.classList.add('active');
-        font12Btn.classList.remove('active');
-        this.dispatchEvent(new CustomEvent('font-change', {
-          detail: { font: 0 },
-          bubbles: true,
-          composed: true
-        }));
+      font16Btn.addEventListener("click", () => {
+        font16Btn.classList.add("active");
+        font12Btn.classList.remove("active");
+        this.dispatchEvent(
+          new CustomEvent("font-change", {
+            detail: { font: 0 },
+            bubbles: true,
+            composed: true,
+          }),
+        );
       });
 
-      font12Btn.addEventListener('click', () => {
-        font12Btn.classList.add('active');
-        font16Btn.classList.remove('active');
-        this.dispatchEvent(new CustomEvent('font-change', {
-          detail: { font: 1 },
-          bubbles: true,
-          composed: true
-        }));
+      font12Btn.addEventListener("click", () => {
+        font12Btn.classList.add("active");
+        font16Btn.classList.remove("active");
+        this.dispatchEvent(
+          new CustomEvent("font-change", {
+            detail: { font: 1 },
+            bubbles: true,
+            composed: true,
+          }),
+        );
       });
     }
 
     if (forceRefreshBtn) {
-      forceRefreshBtn.addEventListener('click', () => {
-        this.dispatchEvent(new CustomEvent('force-refresh', {
-          bubbles: true,
-          composed: true
-        }));
+      forceRefreshBtn.addEventListener("click", () => {
+        this.dispatchEvent(
+          new CustomEvent("force-refresh", {
+            bubbles: true,
+            composed: true,
+          }),
+        );
       });
     }
 
     // Navigation Hints
-    const navHintsShowBtn = this.querySelector('#navHintsShowBtn');
-    const navHintsHideBtn = this.querySelector('#navHintsHideBtn');
+    const navHintsShowBtn = this.querySelector("#navHintsShowBtn");
+    const navHintsHideBtn = this.querySelector("#navHintsHideBtn");
 
     if (navHintsShowBtn) {
-      navHintsShowBtn.addEventListener('click', () => {
-        this.dispatchEvent(new CustomEvent('nav-hints-change', {
-          detail: { show: true },
-          bubbles: true,
-          composed: true
-        }));
+      navHintsShowBtn.addEventListener("click", () => {
+        this.dispatchEvent(
+          new CustomEvent("nav-hints-change", {
+            detail: { show: true },
+            bubbles: true,
+            composed: true,
+          }),
+        );
       });
     }
 
     if (navHintsHideBtn) {
-      navHintsHideBtn.addEventListener('click', () => {
-        this.dispatchEvent(new CustomEvent('nav-hints-change', {
-          detail: { show: false },
-          bubbles: true,
-          composed: true
-        }));
+      navHintsHideBtn.addEventListener("click", () => {
+        this.dispatchEvent(
+          new CustomEvent("nav-hints-change", {
+            detail: { show: false },
+            bubbles: true,
+            composed: true,
+          }),
+        );
       });
     }
 
     // Screen Orientation
-    const settingOrientation = this.querySelector('#settingOrientation');
+    const settingOrientation = this.querySelector("#settingOrientation");
     if (settingOrientation) {
-      settingOrientation.addEventListener('change', () => {
+      settingOrientation.addEventListener("change", () => {
         const rot = parseInt(settingOrientation.value, 10);
         this._orientation = rot;
-        this.dispatchEvent(new CustomEvent('orientation-change', {
-          detail: { rotation: rot },
-          bubbles: true,
-          composed: true
-        }));
+        this.dispatchEvent(
+          new CustomEvent("orientation-change", {
+            detail: { rotation: rot },
+            bubbles: true,
+            composed: true,
+          }),
+        );
       });
     }
 
     // Button Navigation
-    const settingButtonInvert = this.querySelector('#settingButtonInvert');
+    const settingButtonInvert = this.querySelector("#settingButtonInvert");
     if (settingButtonInvert) {
-      settingButtonInvert.addEventListener('change', () => {
+      settingButtonInvert.addEventListener("change", () => {
         this._buttonInvert = settingButtonInvert.checked;
-        this.dispatchEvent(new CustomEvent('button-invert-change', {
-          detail: { inverted: settingButtonInvert.checked },
-          bubbles: true,
-          composed: true
-        }));
+        this.dispatchEvent(
+          new CustomEvent("button-invert-change", {
+            detail: { inverted: settingButtonInvert.checked },
+            bubbles: true,
+            composed: true,
+          }),
+        );
       });
     }
 
     // Status LED
-    const settingStatusLed = this.querySelector('#settingStatusLed');
+    const settingStatusLed = this.querySelector("#settingStatusLed");
     if (settingStatusLed) {
-      settingStatusLed.addEventListener('change', () => {
+      settingStatusLed.addEventListener("change", () => {
         this._statusLed = settingStatusLed.checked;
-        this.dispatchEvent(new CustomEvent('setting-changed', {
-          detail: { key: 'status_led', value: settingStatusLed.checked },
-          bubbles: true,
-          composed: true
-        }));
+        this.dispatchEvent(
+          new CustomEvent("setting-changed", {
+            detail: { key: "status_led", value: settingStatusLed.checked },
+            bubbles: true,
+            composed: true,
+          }),
+        );
+      });
+    }
+
+    // Full Refresh Interval
+    const settingRefreshInterval = this.querySelector(
+      "#settingRefreshInterval",
+    );
+    if (settingRefreshInterval) {
+      settingRefreshInterval.addEventListener("change", () => {
+        const val = parseInt(settingRefreshInterval.value, 10);
+        this._refreshInterval = val;
+        this.dispatchEvent(
+          new CustomEvent("setting-changed", {
+            detail: { key: "refresh_interval", value: val },
+            bubbles: true,
+            composed: true,
+          }),
+        );
       });
     }
 
     // Power Management
-    const sleepTimeoutSelect = this.querySelector('#sleepTimeoutSelect');
+    const sleepTimeoutSelect = this.querySelector("#sleepTimeoutSelect");
     if (sleepTimeoutSelect) {
-      sleepTimeoutSelect.addEventListener('change', () => {
-        this.dispatchEvent(new CustomEvent('sleep-timeout-change', {
-          detail: { timeout: Number(sleepTimeoutSelect.value) },
-          bubbles: true,
-          composed: true
-        }));
+      sleepTimeoutSelect.addEventListener("change", () => {
+        this.dispatchEvent(
+          new CustomEvent("sleep-timeout-change", {
+            detail: { timeout: Number(sleepTimeoutSelect.value) },
+            bubbles: true,
+            composed: true,
+          }),
+        );
       });
     }
 
     // Activity Log Controls
-    const logHeader = this.querySelector('#logHeader');
-    const activityLog = this.querySelector('#activityLog');
-    const logToggleIcon = this.querySelector('#logToggleIcon');
-    const clearLogBtn = this.querySelector('#clearLogBtn');
+    const logHeader = this.querySelector("#logHeader");
+    const activityLog = this.querySelector("#activityLog");
+    const logToggleIcon = this.querySelector("#logToggleIcon");
+    const clearLogBtn = this.querySelector("#clearLogBtn");
 
     if (logHeader && activityLog) {
-      logHeader.addEventListener('click', (e) => {
-        if (e.target === clearLogBtn || (clearLogBtn && clearLogBtn.contains(e.target))) {
+      logHeader.addEventListener("click", (e) => {
+        if (
+          e.target === clearLogBtn ||
+          (clearLogBtn && clearLogBtn.contains(e.target))
+        ) {
           return;
         }
-        const isCollapsed = activityLog.style.display === 'none';
-        activityLog.style.display = isCollapsed ? 'block' : 'none';
+        const isCollapsed = activityLog.style.display === "none";
+        activityLog.style.display = isCollapsed ? "block" : "none";
         if (logToggleIcon) {
-          logToggleIcon.textContent = isCollapsed ? '\u25BC' : '\u25B6';
+          logToggleIcon.textContent = isCollapsed ? "\u25BC" : "\u25B6";
         }
       });
     }
 
     if (clearLogBtn) {
-      clearLogBtn.addEventListener('click', (e) => {
+      clearLogBtn.addEventListener("click", (e) => {
         e.stopPropagation();
-        if (activityLog) activityLog.innerHTML = '';
+        if (activityLog) activityLog.innerHTML = "";
         this._logCount = 0;
-        const countBadge = this.querySelector('#logCountBadge');
-        if (countBadge) countBadge.textContent = '0';
-        this.dispatchEvent(new CustomEvent('clear-log', {
-          bubbles: true,
-          composed: true
-        }));
+        const countBadge = this.querySelector("#logCountBadge");
+        if (countBadge) countBadge.textContent = "0";
+        this.dispatchEvent(
+          new CustomEvent("clear-log", {
+            bubbles: true,
+            composed: true,
+          }),
+        );
       });
     }
   }
@@ -565,11 +632,13 @@ class DeviceSettingsModal extends HTMLElement {
    * Open Modal
    */
   open() {
-    const modal = this.querySelector('#settingsModal');
+    const modal = this.querySelector("#settingsModal");
     if (modal) {
-      modal.classList.add('active');
-      modal.setAttribute('aria-hidden', 'false');
-      this.dispatchEvent(new CustomEvent('modal-opened', { bubbles: true, composed: true }));
+      modal.classList.add("active");
+      modal.setAttribute("aria-hidden", "false");
+      this.dispatchEvent(
+        new CustomEvent("modal-opened", { bubbles: true, composed: true }),
+      );
     }
   }
 
@@ -577,11 +646,13 @@ class DeviceSettingsModal extends HTMLElement {
    * Close Modal
    */
   close() {
-    const modal = this.querySelector('#settingsModal');
+    const modal = this.querySelector("#settingsModal");
     if (modal) {
-      modal.classList.remove('active');
-      modal.setAttribute('aria-hidden', 'true');
-      this.dispatchEvent(new CustomEvent('modal-closed', { bubbles: true, composed: true }));
+      modal.classList.remove("active");
+      modal.setAttribute("aria-hidden", "true");
+      this.dispatchEvent(
+        new CustomEvent("modal-closed", { bubbles: true, composed: true }),
+      );
     }
   }
 
@@ -589,8 +660,9 @@ class DeviceSettingsModal extends HTMLElement {
    * Toggle Light/Dark Theme
    */
   toggleTheme() {
-    const current = document.documentElement.getAttribute('data-theme') || 'dark';
-    const next = current === 'dark' ? 'light' : 'dark';
+    const current =
+      document.documentElement.getAttribute("data-theme") || "dark";
+    const next = current === "dark" ? "light" : "dark";
     this.setTheme(next);
   }
 
@@ -599,18 +671,20 @@ class DeviceSettingsModal extends HTMLElement {
    * @param {'dark'|'light'} theme
    */
   setTheme(theme) {
-    document.documentElement.setAttribute('data-theme', theme);
+    document.documentElement.setAttribute("data-theme", theme);
     try {
-      localStorage.setItem('bacain_theme', theme);
+      localStorage.setItem("bacain_theme", theme);
     } catch (_) {}
 
     this._updateThemeUI(theme);
 
-    this.dispatchEvent(new CustomEvent('theme-change', {
-      detail: { theme },
-      bubbles: true,
-      composed: true
-    }));
+    this.dispatchEvent(
+      new CustomEvent("theme-change", {
+        detail: { theme },
+        bubbles: true,
+        composed: true,
+      }),
+    );
   }
 
   /**
@@ -619,22 +693,22 @@ class DeviceSettingsModal extends HTMLElement {
    */
   setSdCardAvailable(available) {
     this._sdAvailable = Boolean(available);
-    const sdBtn = this.querySelector('#storageTargetSdBtn');
-    const flashBtn = this.querySelector('#storageTargetFlashBtn');
+    const sdBtn = this.querySelector("#storageTargetSdBtn");
+    const flashBtn = this.querySelector("#storageTargetFlashBtn");
 
     if (sdBtn) {
       if (this._sdAvailable) {
-        sdBtn.removeAttribute('disabled');
+        sdBtn.removeAttribute("disabled");
         sdBtn.disabled = false;
-        sdBtn.title = '';
+        sdBtn.title = "";
       } else {
-        sdBtn.setAttribute('disabled', '');
+        sdBtn.setAttribute("disabled", "");
         sdBtn.disabled = true;
-        sdBtn.title = 'MicroSD card not available';
-        if (sdBtn.classList.contains('active')) {
-          sdBtn.classList.remove('active');
+        sdBtn.title = "MicroSD card not available";
+        if (sdBtn.classList.contains("active")) {
+          sdBtn.classList.remove("active");
           if (flashBtn) {
-            flashBtn.classList.add('active');
+            flashBtn.classList.add("active");
           }
         }
       }
@@ -643,30 +717,35 @@ class DeviceSettingsModal extends HTMLElement {
 
   /**
    * Set Storage Target (0 = MicroSD, 1 = Flash)
-   * @param {number} target
+   * @param {number|string} target
+   * @param {boolean} emitEvent Only dispatch event when initiated by user interaction
    */
-  setStorageTarget(target) {
+  setStorageTarget(target, emitEvent = false) {
     const numTarget = Number(target) === 1 ? 1 : 0;
     if (numTarget === 0 && !this._sdAvailable) {
       return;
     }
 
-    const flashBtn = this.querySelector('#storageTargetFlashBtn');
-    const sdBtn = this.querySelector('#storageTargetSdBtn');
-    const desc = this.querySelector('#storageTargetDesc');
+    const flashBtn = this.querySelector("#storageTargetFlashBtn");
+    const sdBtn = this.querySelector("#storageTargetSdBtn");
+    const desc = this.querySelector("#storageTargetDesc");
 
-    if (sdBtn) sdBtn.classList.toggle('active', numTarget === 0);
-    if (flashBtn) flashBtn.classList.toggle('active', numTarget === 1);
+    if (sdBtn) sdBtn.classList.toggle("active", numTarget === 0);
+    if (flashBtn) flashBtn.classList.toggle("active", numTarget === 1);
 
     if (desc) {
-      desc.textContent = 'Target storage for books and progress.';
+      desc.textContent = "Target storage for books and progress.";
     }
 
-    this.dispatchEvent(new CustomEvent('storage-target-change', {
-      detail: { target: numTarget },
-      bubbles: true,
-      composed: true
-    }));
+    if (emitEvent) {
+      this.dispatchEvent(
+        new CustomEvent("storage-target-change", {
+          detail: { target: numTarget },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+    }
   }
 
   /**
@@ -674,7 +753,7 @@ class DeviceSettingsModal extends HTMLElement {
    * @param {number} target
    */
   setStorageTargetBadge(target) {
-    this.setStorageTarget(target);
+    this.setStorageTarget(target, false);
   }
 
   /**
@@ -682,16 +761,16 @@ class DeviceSettingsModal extends HTMLElement {
    * @param {number} fontId (0 = Font 16, 1 = Font 12)
    */
   setFont(fontId) {
-    const id = typeof fontId === 'string' ? parseInt(fontId, 10) : fontId;
-    const font12Btn = this.querySelector('#font12Btn');
-    const font16Btn = this.querySelector('#font16Btn');
+    const id = typeof fontId === "string" ? parseInt(fontId, 10) : fontId;
+    const font12Btn = this.querySelector("#font12Btn");
+    const font16Btn = this.querySelector("#font16Btn");
 
     if (id === 1) {
-      if (font12Btn) font12Btn.classList.add('active');
-      if (font16Btn) font16Btn.classList.remove('active');
+      if (font12Btn) font12Btn.classList.add("active");
+      if (font16Btn) font16Btn.classList.remove("active");
     } else if (id === 0) {
-      if (font16Btn) font16Btn.classList.add('active');
-      if (font12Btn) font12Btn.classList.remove('active');
+      if (font16Btn) font16Btn.classList.add("active");
+      if (font12Btn) font12Btn.classList.remove("active");
     }
   }
 
@@ -700,15 +779,15 @@ class DeviceSettingsModal extends HTMLElement {
    * @param {boolean} show
    */
   setNavHints(show) {
-    const showBtn = this.querySelector('#navHintsShowBtn');
-    const hideBtn = this.querySelector('#navHintsHideBtn');
+    const showBtn = this.querySelector("#navHintsShowBtn");
+    const hideBtn = this.querySelector("#navHintsHideBtn");
 
     if (show === true) {
-      if (showBtn) showBtn.classList.add('active');
-      if (hideBtn) hideBtn.classList.remove('active');
+      if (showBtn) showBtn.classList.add("active");
+      if (hideBtn) hideBtn.classList.remove("active");
     } else if (show === false) {
-      if (showBtn) showBtn.classList.remove('active');
-      if (hideBtn) hideBtn.classList.add('active');
+      if (showBtn) showBtn.classList.remove("active");
+      if (hideBtn) hideBtn.classList.add("active");
     }
   }
 
@@ -719,7 +798,7 @@ class DeviceSettingsModal extends HTMLElement {
   setOrientation(rotation) {
     const val = parseInt(rotation, 10);
     this._orientation = isNaN(val) ? 0 : val;
-    const select = this.querySelector('#settingOrientation');
+    const select = this.querySelector("#settingOrientation");
     if (select) {
       select.value = String(this._orientation);
     }
@@ -730,7 +809,7 @@ class DeviceSettingsModal extends HTMLElement {
    * @returns {number}
    */
   getOrientation() {
-    const select = this.querySelector('#settingOrientation');
+    const select = this.querySelector("#settingOrientation");
     if (select) {
       return parseInt(select.value, 10);
     }
@@ -751,7 +830,7 @@ class DeviceSettingsModal extends HTMLElement {
    */
   setButtonInvert(inverted) {
     this._buttonInvert = Boolean(inverted);
-    const checkbox = this.querySelector('#settingButtonInvert');
+    const checkbox = this.querySelector("#settingButtonInvert");
     if (checkbox) {
       checkbox.checked = this._buttonInvert;
     }
@@ -762,7 +841,7 @@ class DeviceSettingsModal extends HTMLElement {
    * @returns {boolean}
    */
   getButtonInvert() {
-    const checkbox = this.querySelector('#settingButtonInvert');
+    const checkbox = this.querySelector("#settingButtonInvert");
     if (checkbox) {
       return checkbox.checked;
     }
@@ -783,7 +862,7 @@ class DeviceSettingsModal extends HTMLElement {
    */
   setStatusLed(enabled) {
     this._statusLed = Boolean(enabled);
-    const checkbox = this.querySelector('#settingStatusLed');
+    const checkbox = this.querySelector("#settingStatusLed");
     if (checkbox) {
       checkbox.checked = this._statusLed;
     }
@@ -794,7 +873,7 @@ class DeviceSettingsModal extends HTMLElement {
    * @returns {boolean}
    */
   getStatusLed() {
-    const checkbox = this.querySelector('#settingStatusLed');
+    const checkbox = this.querySelector("#settingStatusLed");
     if (checkbox) {
       return checkbox.checked;
     }
@@ -814,10 +893,76 @@ class DeviceSettingsModal extends HTMLElement {
    * @param {number|string} seconds
    */
   setSleepTimeout(seconds) {
-    const select = this.querySelector('#sleepTimeoutSelect');
+    const select = this.querySelector("#sleepTimeoutSelect");
     if (select) {
       select.value = String(seconds);
     }
+  }
+
+  /**
+   * Set Full Refresh Interval
+   * @param {number|string} val
+   * @param {boolean} supported
+   */
+  setRefreshInterval(val, supported = true) {
+    this._refreshIntervalSupported = Boolean(supported);
+    const card = this.querySelector("#settingRefreshIntervalCard");
+
+    const num = Number(val);
+    const isValidInteger =
+      typeof val !== "boolean" &&
+      val !== null &&
+      val !== undefined &&
+      String(val).trim() !== "" &&
+      Number.isInteger(num) &&
+      num >= 0 &&
+      num <= 100;
+
+    if (!isValidInteger) {
+      console.error("Invalid full refresh interval value:", val);
+      if (card) {
+        card.style.display = "none";
+      }
+      return;
+    }
+
+    this._refreshInterval = num;
+    if (card) {
+      card.style.display = "";
+    }
+    const select = this.querySelector("#settingRefreshInterval");
+    if (select) {
+      select.disabled = !this._refreshIntervalSupported;
+      const standardValues = ["0", "5", "10", "20"];
+      const strVal = String(this._refreshInterval);
+      Array.from(select.querySelectorAll("option")).forEach((opt) => {
+        if (!standardValues.includes(opt.value) && opt.value !== strVal) {
+          opt.remove();
+        }
+      });
+      if (
+        !standardValues.includes(strVal) &&
+        !select.querySelector(`option[value="${strVal}"]`)
+      ) {
+        const opt = document.createElement("option");
+        opt.value = strVal;
+        opt.textContent = `${strVal} pages`;
+        select.appendChild(opt);
+      }
+      select.value = strVal;
+    }
+  }
+
+  /**
+   * Get Full Refresh Interval
+   * @returns {number}
+   */
+  getRefreshInterval() {
+    const select = this.querySelector("#settingRefreshInterval");
+    if (select) {
+      return parseInt(select.value, 10);
+    }
+    return this._refreshInterval;
   }
 
   /**
@@ -825,7 +970,7 @@ class DeviceSettingsModal extends HTMLElement {
    * @returns {number}
    */
   getSleepTimeout() {
-    const select = this.querySelector('#sleepTimeoutSelect');
+    const select = this.querySelector("#sleepTimeoutSelect");
     if (select) {
       return parseInt(select.value, 10);
     }
@@ -845,41 +990,67 @@ class DeviceSettingsModal extends HTMLElement {
    * @param {Object} config
    */
   updateConfig(config) {
-    if (!config || typeof config !== 'object') return;
+    if (!config || typeof config !== "object") return;
 
     const fontVal = config.font !== undefined ? config.font : config.fontSize;
     if (fontVal !== undefined) {
-      this.setFont(typeof fontVal === 'string' ? parseInt(fontVal, 10) : fontVal);
+      this.setFont(
+        typeof fontVal === "string" ? parseInt(fontVal, 10) : fontVal,
+      );
     }
 
-    const navHintsVal = config.nav_hints !== undefined ? config.nav_hints : config.navHints;
+    const navHintsVal =
+      config.nav_hints !== undefined ? config.nav_hints : config.navHints;
     if (navHintsVal !== undefined) {
-      this.setNavHints(typeof navHintsVal === 'boolean' ? navHintsVal : navHintsVal !== 0);
+      this.setNavHints(
+        typeof navHintsVal === "boolean" ? navHintsVal : navHintsVal !== 0,
+      );
     }
 
-    const storageVal = config.storage_target !== undefined ? config.storage_target : config.storageTarget;
+    const storageVal =
+      config.storage_target !== undefined
+        ? config.storage_target
+        : config.storageTarget;
     if (storageVal !== undefined) {
-      this.setStorageTarget(storageVal);
+      this.setStorageTarget(storageVal, false);
     }
 
     if (config.orientation !== undefined) {
       this.setOrientation(config.orientation);
     }
 
-    const buttonInvertVal = config.button_invert !== undefined ? config.button_invert : config.buttonInvert;
+    const buttonInvertVal =
+      config.button_invert !== undefined
+        ? config.button_invert
+        : config.buttonInvert;
     if (buttonInvertVal !== undefined) {
       this.setButtonInvert(buttonInvertVal);
     }
 
-    const statusLedVal = config.status_led !== undefined ? config.status_led : config.statusLed;
+    const statusLedVal =
+      config.status_led !== undefined ? config.status_led : config.statusLed;
     if (statusLedVal !== undefined) {
       this.setStatusLed(statusLedVal);
     }
 
-    const sleepTimeoutVal = config.sleep_timeout !== undefined ? config.sleep_timeout : config.sleepTimeout;
+    const sleepTimeoutVal =
+      config.sleep_timeout !== undefined
+        ? config.sleep_timeout
+        : config.sleepTimeout;
     if (sleepTimeoutVal !== undefined) {
       this.setSleepTimeout(sleepTimeoutVal);
     }
+
+    const intervalVal =
+      config.refresh_interval !== undefined
+        ? config.refresh_interval
+        : config.refreshInterval !== undefined
+          ? config.refreshInterval
+          : 10;
+    this.setRefreshInterval(
+      intervalVal,
+      config.refreshIntervalSupported !== false,
+    );
   }
 
   /**
@@ -887,33 +1058,33 @@ class DeviceSettingsModal extends HTMLElement {
    * @param {string} msg
    * @param {'info'|'success'|'warning'|'error'} type
    */
-  appendLog(msg, type = 'info') {
-    const logBody = this.querySelector('#activityLog');
+  appendLog(msg, type = "info") {
+    const logBody = this.querySelector("#activityLog");
     if (!logBody) return;
 
     this._logCount++;
-    const countBadge = this.querySelector('#logCountBadge');
+    const countBadge = this.querySelector("#logCountBadge");
     if (countBadge) countBadge.textContent = String(this._logCount);
 
     const now = new Date();
     const timeStr = [
-      String(now.getHours()).padStart(2, '0'),
-      String(now.getMinutes()).padStart(2, '0'),
-      String(now.getSeconds()).padStart(2, '0')
-    ].join(':');
+      String(now.getHours()).padStart(2, "0"),
+      String(now.getMinutes()).padStart(2, "0"),
+      String(now.getSeconds()).padStart(2, "0"),
+    ].join(":");
 
-    const entry = document.createElement('div');
+    const entry = document.createElement("div");
     entry.className = `log-entry log-${type}`;
-    entry.style.fontFamily = 'var(--font-mono)';
-    entry.style.fontSize = '0.78rem';
-    entry.style.padding = '0.2rem 0';
-    entry.style.borderBottom = '1px solid var(--border-subtle)';
-    entry.style.lineHeight = '1.4';
+    entry.style.fontFamily = "var(--font-mono)";
+    entry.style.fontSize = "0.78rem";
+    entry.style.padding = "0.2rem 0";
+    entry.style.borderBottom = "1px solid var(--border-subtle)";
+    entry.style.lineHeight = "1.4";
 
-    let colorStyle = 'var(--text-secondary)';
-    if (type === 'success') colorStyle = 'var(--success-color)';
-    else if (type === 'warning') colorStyle = 'var(--warning-color)';
-    else if (type === 'error') colorStyle = 'var(--danger-color)';
+    let colorStyle = "var(--text-secondary)";
+    if (type === "success") colorStyle = "var(--success-color)";
+    else if (type === "warning") colorStyle = "var(--warning-color)";
+    else if (type === "error") colorStyle = "var(--danger-color)";
 
     entry.innerHTML = `
       <span style="color: var(--text-muted); margin-right: 0.4rem;">[${timeStr}]</span>
@@ -931,9 +1102,9 @@ class DeviceSettingsModal extends HTMLElement {
   }
 }
 
-if (!customElements.get('device-settings-modal')) {
-  customElements.define('device-settings-modal', DeviceSettingsModal);
+if (!customElements.get("device-settings-modal")) {
+  customElements.define("device-settings-modal", DeviceSettingsModal);
 }
-if (typeof window !== 'undefined') {
+if (typeof window !== "undefined") {
   window.DeviceSettingsModal = DeviceSettingsModal;
 }

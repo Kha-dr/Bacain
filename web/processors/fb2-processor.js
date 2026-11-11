@@ -126,7 +126,7 @@ function extractBlockContent(el) {
   return pieces.join('\n\n');
 }
 
-async function convertFb2ToTxt(textOrBuffer) {
+async function convertFb2ToTxt(textOrBuffer, options = {}) {
   let xmlString;
 
   if (typeof textOrBuffer === 'string') {
@@ -313,13 +313,21 @@ async function convertFb2ToTxt(textOrBuffer) {
 
   const fullRawText = metaPrefix + sectionChunks.join('\n\n');
   const cleaner = getCleanPlainTextFn();
-  const cleanBookText = cleaner(fullRawText);
+  const cleanBookText = cleaner(fullRawText, options);
 
   return cleanBookText;
 }
 
 if (typeof window !== 'undefined') {
   window.convertFb2ToTxt = convertFb2ToTxt;
+  window.Fb2Processor = {
+    process: async (file, options = {}) => {
+      const buf = typeof file.arrayBuffer === 'function' ? await file.arrayBuffer() : file;
+      const cleanTxt = await convertFb2ToTxt(buf, options);
+      const baseName = (file.name || 'book').replace(/\.fb2$/i, '');
+      return new File([cleanTxt], `${baseName}.txt`, { type: 'text/plain' });
+    }
+  };
 }
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { convertFb2ToTxt };

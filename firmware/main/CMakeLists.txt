@@ -1,6 +1,7 @@
 set(MAIN_SRCS
     "main.c"
     "reader_ui.c"
+    "views/views.c"
     "views/view_reading.c"
     "views/view_menu.c"
     "views/view_library.c"

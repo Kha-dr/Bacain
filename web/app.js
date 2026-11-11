@@ -14,6 +14,7 @@
     statusDot: document.getElementById("statusDot"),
     settingsBtn: document.getElementById("settingsBtn"),
     githubBtn: document.getElementById("githubBtn"),
+    installBtn: document.getElementById("installBtn"),
 
     // Views
     onboardingView: document.getElementById("onboardingView"),
@@ -63,6 +64,7 @@
   let cancelUploadRequested = false;
   let bookPendingDelete = null;
   let remoteBooks = [];
+  let deferredInstallPrompt = null;
 
   // ============================================================================
   // Utilities & Feedback
@@ -169,9 +171,18 @@
 
       if (
         el.statusDashboard &&
-        typeof el.statusDashboard.updateConnectionStatus === "function"
+        typeof el.statusDashboard.updateDeviceStatus === "function"
       ) {
-        el.statusDashboard.updateConnectionStatus(true);
+        el.statusDashboard.updateDeviceStatus({
+          state: true,
+          name: deviceName || (window.BleClient && window.BleClient.getDeviceName()) || "BacaIn",
+        });
+      }
+      if (
+        el.bookLibrary &&
+        typeof el.bookLibrary.setDeviceConnected === "function"
+      ) {
+        el.bookLibrary.setDeviceConnected(true);
       }
     } else {
       if (el.connectBtnText) el.connectBtnText.textContent = "Connect Device";
@@ -187,9 +198,15 @@
 
       if (
         el.statusDashboard &&
-        typeof el.statusDashboard.updateConnectionStatus === "function"
+        typeof el.statusDashboard.updateDeviceStatus === "function"
       ) {
-        el.statusDashboard.updateConnectionStatus(false);
+        el.statusDashboard.updateDeviceStatus({ state: false });
+      }
+      if (
+        el.bookLibrary &&
+        typeof el.bookLibrary.setDeviceConnected === "function"
+      ) {
+        el.bookLibrary.setDeviceConnected(false);
       }
       unmountMushafBuilder();
     }
@@ -234,7 +251,7 @@
         (book) => {
           remoteBooks.push(book);
           if (el.bookLibrary && typeof el.bookLibrary.setBooks === "function") {
-            el.bookLibrary.setBooks(remoteBooks);
+            el.bookLibrary.setBooks(remoteBooks, "/spiflash/books/");
           }
         },
         () => {
@@ -243,6 +260,18 @@
             typeof el.bookLibrary.setLoading === "function"
           ) {
             el.bookLibrary.setLoading(false);
+          }
+          if (
+            el.bookLibrary &&
+            typeof el.bookLibrary.setDeviceConnected === "function"
+          ) {
+            el.bookLibrary.setDeviceConnected(true);
+          }
+          if (
+            el.bookLibrary &&
+            typeof el.bookLibrary.renderBooks === "function"
+          ) {
+            el.bookLibrary.renderBooks(remoteBooks, "/spiflash/books/");
           }
           log(`Book list updated: ${remoteBooks.length} items.`, "info");
         },
@@ -420,8 +449,19 @@
 
       if (qb) {
         qb.style.display = "block";
-        if (typeof qb.configureGeometry === "function") {
-          qb.configureGeometry(width, height);
+        const isConn = window.BleClient && typeof window.BleClient.isConnected === "function"
+          ? window.BleClient.isConnected()
+          : false;
+        if (typeof qb.setDisplayGeometry === "function") {
+          qb.setDisplayGeometry(width, height);
+        }
+        if (typeof qb.setDeviceCapabilities === "function") {
+          qb.setDeviceCapabilities({
+            supported: true,
+            isConnected: isConn,
+            screenW: width,
+            screenH: height,
+          });
         }
       }
     } catch (err) {
@@ -479,6 +519,36 @@
         console.warn("[SW] Registration failed:", err);
       });
     }
+  }
+
+  // ============================================================================
+  // PWA Installation
+  // ============================================================================
+  function setupPwaInstall() {
+    if (window.matchMedia("(display-mode: standalone)").matches) {
+      return;
+    }
+
+    window.addEventListener("beforeinstallprompt", (e) => {
+      // Allow the browser's native mini-infobar while keeping prompt reference
+      deferredInstallPrompt = e;
+      if (el.installBtn) el.installBtn.style.display = "inline-flex";
+    });
+
+    if (el.installBtn) {
+      el.installBtn.addEventListener("click", async () => {
+        if (!deferredInstallPrompt) return;
+        deferredInstallPrompt.prompt();
+        await deferredInstallPrompt.userChoice;
+        deferredInstallPrompt = null;
+        el.installBtn.style.display = "none";
+      });
+    }
+
+    window.addEventListener("appinstalled", () => {
+      deferredInstallPrompt = null;
+      if (el.installBtn) el.installBtn.style.display = "none";
+    });
   }
 
   // ============================================================================
@@ -628,12 +698,19 @@
       );
 
       el.deviceSettingsModal.addEventListener("setting-changed", async (e) => {
-        if (e.detail?.key === "status-led") {
+        if (e.detail?.key === "status-led" || e.detail?.key === "status_led") {
           try {
             await window.BleClient.sendSetStatusLed(e.detail.value);
             showToast("Status LED updated", "success");
           } catch (err) {
             showToast(`Status LED failed: ${err.message}`, "error");
+          }
+        } else if (e.detail?.key === "refresh_interval" || e.detail?.key === "refresh-interval") {
+          try {
+            await window.BleClient.sendSetRefreshInterval(e.detail.value);
+            showToast("Full refresh interval updated", "success");
+          } catch (err) {
+            showToast(`Full refresh interval failed: ${err.message}`, "error");
           }
         }
       });
@@ -705,6 +782,10 @@
     window.addEventListener("ble-connection-changed", (e) => {
       const { isConnected, isConnecting, name } = e.detail;
       updateConnectionUI(isConnected, isConnecting, name);
+      const qb = el.mushafBuilder || document.querySelector("mushaf-builder");
+      if (qb && typeof qb.setDeviceCapabilities === "function") {
+        qb.setDeviceCapabilities({ isConnected });
+      }
     });
 
     window.addEventListener("ble-status-changed", (e) => {
@@ -730,6 +811,17 @@
 
     window.addEventListener("ble-config-changed", (e) => {
       const cfg = e.detail;
+      if (cfg.storageTarget !== undefined) {
+        if (el.statusDashboard && typeof el.statusDashboard.setStorageTarget === "function") {
+          el.statusDashboard.setStorageTarget(cfg.storageTarget);
+        } else if (el.statusDashboard) {
+          el.statusDashboard.currentStorageTarget = cfg.storageTarget;
+        }
+        if (el.bookLibrary && typeof el.bookLibrary.setStorageTargetBadge === "function") {
+          el.bookLibrary.setStorageTargetBadge(cfg.storageTarget);
+        }
+      }
+
       if (
         el.deviceSettingsModal &&
         typeof el.deviceSettingsModal.updateConfig === "function"
@@ -767,7 +859,14 @@
     initTheme();
     checkBluetoothCompatibility();
     setupEventListeners();
+    if (el.statusDashboard && typeof el.statusDashboard.setStorageTarget === "function") {
+      el.statusDashboard.setStorageTarget(1);
+    }
+    if (el.bookLibrary && typeof el.bookLibrary.setStorageTargetBadge === "function") {
+      el.bookLibrary.setStorageTargetBadge(1);
+    }
     registerServiceWorker();
+    setupPwaInstall();
     log("BacaIn Web Client initialized.", "info");
   }
 

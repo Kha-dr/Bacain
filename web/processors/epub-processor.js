@@ -220,7 +220,12 @@ async function extractZipEntries(uint8Array) {
   return entries;
 }
 
-async function convertEpubToTxt(arrayBuffer, progressCallback) {
+async function convertEpubToTxt(arrayBuffer, options = {}, progressCallback) {
+  if (typeof options === 'function') {
+    progressCallback = options;
+    options = {};
+  }
+
   let uint8Array;
   if (arrayBuffer instanceof Uint8Array) {
     uint8Array = arrayBuffer;
@@ -449,7 +454,7 @@ async function convertEpubToTxt(arrayBuffer, progressCallback) {
 
   const rawBookText = chapters.join('\n\n');
   const cleaner = getCleanPlainTextFn();
-  const cleanBookText = cleaner(rawBookText);
+  const cleanBookText = cleaner(rawBookText, options);
 
   if (typeof progressCallback === 'function') {
     progressCallback(1.0, 'Konversi EPUB selesai');
@@ -460,6 +465,18 @@ async function convertEpubToTxt(arrayBuffer, progressCallback) {
 
 if (typeof window !== 'undefined') {
   window.convertEpubToTxt = convertEpubToTxt;
+  window.EpubProcessor = {
+    process: async (file, options = {}, progressCallback) => {
+      if (typeof options === 'function') {
+        progressCallback = options;
+        options = {};
+      }
+      const buf = typeof file.arrayBuffer === 'function' ? await file.arrayBuffer() : file;
+      const cleanTxt = await convertEpubToTxt(buf, options, progressCallback);
+      const baseName = (file.name || 'book').replace(/\.epub$/i, '');
+      return new File([cleanTxt], `${baseName}.txt`, { type: 'text/plain' });
+    }
+  };
 }
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { convertEpubToTxt };

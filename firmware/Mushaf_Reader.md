@@ -11,6 +11,10 @@ Arabic script requires complex contextual glyph shaping and ligatures that are h
 - **Bookmarks**: 8 persistent bookmark slots stored in NVS.
 - **Zero Overhead**: Zero flash and RAM footprint when disabled in standard builds (`CONFIG_BOARD_MUSHAF_ENABLE=n`).
 
+<div align="center">
+  <img src="../assets/ui-mushaf.png" width="220" alt="1-Bit Mushaf View" />
+</div>
+
 ## Build & Flash
 
 Build the factory binary with Docker Compose:
@@ -52,6 +56,10 @@ Two-button navigation using **UP** (BOOT, GPIO 0) and **DOWN** (PWR, GPIO 18).
 
 ## Companion Web Builder (`mushaf.bqm`)
 
+<div align="center">
+  <img src="../assets/mushaf-builder.png" width="100%" alt="Companion Web Builder" />
+</div>
+
 1. Connect device in [BacaIn PWA](https://bacain.khadr.dev).
 2. Open Mushaf Builder, select script (Madinah Uthmani or IndoPak), layers, and Surah or Juz range.
 3. Generate binary file and upload to internal flash (`/spiflash/books/mushaf.bqm`) or MicroSD (`/sdcard/books/mushaf.bqm`).
@@ -80,11 +88,11 @@ Pre-rendered binary container (`BQM1`) designed for zero-heap streaming:
 
 Mushaf extensions for the BacaIn BLE GATT service (`0000fe60-0000-1000-8000-00805f9b34fb`):
 
-| OpCode | Name               | Payload (Request / Response)                                                                     | Purpose                                                 |
-| :----- | :----------------- | :----------------------------------------------------------------------------------------------- | :------------------------------------------------------ |
-| `0x19` | `GET_CONFIG`       | Req: `[0x19]`<br>Resp: standard config + `caps`                                                  | Bit 0 (`0x01`) in `caps` signals Mushaf feature support |
+| OpCode | Name               | Payload (Request / Response)                                                                    | Purpose                                                 |
+| :----- | :----------------- | :---------------------------------------------------------------------------------------------- | :------------------------------------------------------ |
+| `0x19` | `GET_CONFIG`       | Req: `[0x19]`<br>Resp: standard config + `caps`                                                 | Bit 0 (`0x01`) in `caps` signals Mushaf feature support |
 | `0x20` | `GET_MUSHAF_STATE` | Req: `[0x20]`<br>Resp: `[0x20, status, started, surah, ayah(2B), layer, count, bookmarks[0-7]]` | Query active cursor and 8 bookmarks                     |
-| `0x21` | `SET_MUSHAF_STATE` | Req: `[0x21, sub, data]`<br>Resp: `[0x21, status]`                                               | Mutate cursor (`sub=1`) or bookmarks (`sub=2`) in NVS   |
+| `0x21` | `SET_MUSHAF_STATE` | Req: `[0x21, sub, data]`<br>Resp: `[0x21, status]`                                              | Mutate cursor (`sub=1`) or bookmarks (`sub=2`) in NVS   |
 
 ## Acknowledgments
 

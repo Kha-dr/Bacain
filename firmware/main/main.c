@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include <stdatomic.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
@@ -8,6 +9,8 @@
 #include "esp_timer.h"
 #include "esp_attr.h"
 #include "esp_system.h"
+#include "esp_sleep.h"
+#include "esp_pm.h"
 #include "driver/gpio.h"
 
 #include "app_config.h"
@@ -23,322 +26,388 @@
 #include "status_led.h"
 
 #include "views.h"
-#include "view_reading.h"
 #include "view_menu.h"
-#include "view_library.h"
 #include "view_ble_sync.h"
-#include "view_bookmarks.h"
-#include "view_nav_hints.h"
 #if CONFIG_BOARD_MUSHAF_ENABLE
 #include "view_mushaf.h"
 #endif
 
 #define TAG "MAIN"
 
+#define LOOP_MAX_WAIT_MS 60000       // keeps pdMS_TO_TICKS within 32 bits; bounds staleness of BLE-changed timeout
+#define BLE_RX_REFRESH_MIN_US 500000
+
 static QueueHandle_t s_btn_queue = NULL;
-static reader_view_t s_current_view = VIEW_MENU;
+static atomic_int s_current_view = VIEW_MENU; // written by main task, read by BLE task
 static int64_t s_last_activity_us = 0;
+static bool s_nvs_ready = false;             // main task only
 
 RTC_DATA_ATTR static reader_view_t s_rtc_last_view = VIEW_MENU;
 RTC_DATA_ATTR static bool s_rtc_has_sdcard = false;
 RTC_DATA_ATTR static storage_target_t s_rtc_storage_target = STORAGE_TARGET_FLASH;
 
-static void update_activity(void) {
+static inline reader_view_t get_view(void)
+{
+    return (reader_view_t)atomic_load(&s_current_view);
+}
+
+static inline void set_view(reader_view_t view)
+{
+    atomic_store(&s_current_view, (int)view);
+    s_rtc_last_view = view;
+}
+
+static inline void update_activity(void)
+{
     s_last_activity_us = esp_timer_get_time();
 }
 
-void app_enter_deep_sleep(void) {
-    s_rtc_last_view = s_current_view;
-    reading_state_t state;
-    if (book_library_get_current_state(&state) == ESP_OK && state.active_book_path[0] != '\0') {
-        if (strncmp(state.active_book_path, "/sdcard", 7) == 0) {
-            s_rtc_storage_target = STORAGE_TARGET_SDCARD;
-        } else {
-            s_rtc_storage_target = STORAGE_TARGET_FLASH;
-        }
-    } else {
-        s_rtc_storage_target = book_library_get_storage_target();
-    }
-    book_library_update_offset(text_pager_get_current_offset());
-    book_library_flush_state();
-#if CONFIG_BOARD_MUSHAF_ENABLE
-    view_mushaf_save_before_sleep();
-#endif
-    status_led_trigger(STATUS_LED_EVT_SLEEP);
-    epaper_port_sleep();
-    epaper_power_off();
-    power_mgr_enter_deep_sleep(0);
-}
-
-static void on_ble_sync_event(ble_sync_event_t event, const void *param, void *user_data) {
-    (void)param;
-    (void)user_data;
-
-    if (event == BLE_SYNC_EVT_REQUEST_REFRESH) {
-        if (s_btn_queue) {
-            button_event_t evt = { .button = BTN_ID_BOOT, .type = BTN_EVENT_CUSTOM_REFRESH };
-            xQueueSend(s_btn_queue, &evt, 0);
-        }
+static void ensure_nvs(void)
+{
+    if (s_nvs_ready)
+    {
         return;
     }
-
-    if (event == BLE_SYNC_EVT_REQUEST_SLEEP) {
-        app_enter_deep_sleep();
-        return;
-    }
-
-    if (s_btn_queue && (s_current_view == VIEW_BLE_SYNC
-#if CONFIG_BOARD_MUSHAF_ENABLE
-        || s_current_view == VIEW_MUSHAF_MENU
-#endif
-    )) {
-        bool should_refresh = false;
-        if (event == BLE_SYNC_EVT_CONNECTED || event == BLE_SYNC_EVT_DISCONNECTED ||
-            event == BLE_SYNC_EVT_UPLOAD_COMPLETE || event == BLE_SYNC_EVT_FILE_DELETED) {
-            should_refresh = true;
-        } else if (s_current_view == VIEW_BLE_SYNC) {
-            if (event == BLE_SYNC_EVT_UPLOAD_START || event == BLE_SYNC_EVT_UPLOAD_ABORTED) {
-                should_refresh = true;
-            } else if (event == BLE_SYNC_EVT_UPLOAD_PROGRESS) {
-                static int64_t s_last_rx_refresh_us = 0;
-                int64_t now_us = esp_timer_get_time();
-                if (now_us - s_last_rx_refresh_us >= 500000) {
-                    s_last_rx_refresh_us = now_us;
-                    should_refresh = true;
-                }
-            }
-        }
-        if (should_refresh) {
-            button_event_t evt = { .button = BTN_ID_BOOT, .type = BTN_EVENT_CUSTOM_REFRESH };
-            xQueueSend(s_btn_queue, &evt, 0);
-        }
-    }
-}
-
-static reader_view_t dispatch_wake_view(reader_view_t last_view) {
-    switch (last_view) {
-        case VIEW_READING:
-            return view_reading_on_wake();
-        case VIEW_MENU:
-            return view_menu_on_wake();
-        case VIEW_BOOK_LIST:
-            return view_library_on_wake();
-        case VIEW_BOOKMARKS:
-            return view_bookmarks_on_wake();
-        case VIEW_NAV_HINTS:
-            return view_nav_hints_on_wake();
-        case VIEW_BLE_SYNC:
-            return view_ble_sync_on_wake();
-#if CONFIG_BOARD_MUSHAF_ENABLE
-        case VIEW_MUSHAF_MENU:
-        case VIEW_MUSHAF_READING:
-        case VIEW_MUSHAF_JUMP:
-        case VIEW_MUSHAF_BOOKMARKS:
-            return view_mushaf_on_wake();
-#endif
-        default:
-            view_menu_set_index(0);
-            return VIEW_MENU;
-    }
-}
-
-static reader_view_t dispatch_view_event(reader_view_t view, button_event_t evt) {
-    switch (view) {
-        case VIEW_READING:
-            return view_reading_handle_event(evt);
-        case VIEW_MENU:
-            return view_menu_handle_event(evt);
-        case VIEW_BOOK_LIST:
-            return view_library_handle_event(evt);
-        case VIEW_BLE_SYNC:
-            return view_ble_sync_handle_event(evt);
-        case VIEW_BOOKMARKS:
-            return view_bookmarks_handle_event(evt);
-        case VIEW_NAV_HINTS:
-            return view_nav_hints_handle_event(evt);
-#if CONFIG_BOARD_MUSHAF_ENABLE
-        case VIEW_MUSHAF_MENU:
-        case VIEW_MUSHAF_READING:
-        case VIEW_MUSHAF_JUMP:
-        case VIEW_MUSHAF_BOOKMARKS:
-            return view_mushaf_handle_event(view, evt);
-#endif
-        default:
-            return view;
-    }
-}
-
-void app_main(void) {
-    // 1. Critical: Latch board power and cut audio rail
-    power_mgr_early_init();
-    status_led_init();
-    status_led_trigger(STATUS_LED_EVT_WAKEUP);
-
-    // 2. Initialize NVS
     esp_err_t ret = nvs_flash_init();
-    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
+    {
         ESP_ERROR_CHECK(nvs_flash_erase());
         ret = nvs_flash_init();
     }
     ESP_ERROR_CHECK(ret);
+    s_nvs_ready = true;
+}
 
-    ESP_LOGI(TAG, "Starting BacaIn firmware...");
+static void post_refresh_event(void)
+{
+    if (s_btn_queue)
+    {
+        const button_event_t evt = {.button = BTN_ID_BOOT, .type = BTN_EVENT_CUSTOM_REFRESH};
+        xQueueSend(s_btn_queue, &evt, 0);
+    }
+}
+
+static void prepare_power_down(void)
+{
+    ensure_nvs(); // no-op unless sleep happens before deferred init ran
+    s_rtc_last_view = get_view();
+
+    reading_state_t state;
+    if (book_library_get_current_state(&state) == ESP_OK && state.active_book_path[0] != '\0')
+    {
+        s_rtc_storage_target =
+            (strncmp(state.active_book_path, SDCARD_MOUNT_POINT, sizeof(SDCARD_MOUNT_POINT) - 1) == 0)
+                ? STORAGE_TARGET_SDCARD
+                : STORAGE_TARGET_FLASH;
+    }
+    else
+    {
+        s_rtc_storage_target = book_library_get_storage_target();
+    }
+    if (text_pager_is_book_open())
+    {
+        book_library_update_offset(text_pager_get_current_offset());
+    }
+    book_library_flush_state(); // no write if state not dirty
+#if CONFIG_BOARD_MUSHAF_ENABLE
+    view_mushaf_save_before_sleep();
+#endif
+    status_led_trigger(STATUS_LED_EVT_SLEEP); // synchronous 150 ms; no-op if LED disabled
+    epaper_port_sleep();
+    epaper_power_off();
+    esp_deep_sleep_disable_rom_logging(); // silences ROM banner on next wake only; no eFuse burn
+}
+
+void app_enter_deep_sleep(void)
+{
+    prepare_power_down();
+    power_mgr_enter_deep_sleep(0);
+}
+
+static void app_power_off(void)
+{
+    prepare_power_down();
+    power_mgr_power_off(); // falls back to deep sleep if the rail stays up (USB)
+}
+
+// Runs in the NimBLE host task: never touch peripherals here, only signal the main task.
+static void on_ble_sync_event(ble_sync_event_t event, const void *param, void *user_data)
+{
+    (void)param;
+    (void)user_data;
+
+    if (event == BLE_SYNC_EVT_REQUEST_REFRESH)
+    {
+        post_refresh_event();
+        return;
+    }
+
+    const reader_view_t view = get_view(); // single snapshot
+    const bool in_ble = (view == VIEW_BLE_SYNC);
+    bool in_mushaf_menu = false;
+#if CONFIG_BOARD_MUSHAF_ENABLE
+    in_mushaf_menu = (view == VIEW_MUSHAF_MENU);
+#endif
+    if (!in_ble && !in_mushaf_menu)
+    {
+        return;
+    }
+
+    bool should_refresh = false;
+    switch (event)
+    {
+    case BLE_SYNC_EVT_CONNECTED:
+    case BLE_SYNC_EVT_DISCONNECTED:
+    case BLE_SYNC_EVT_UPLOAD_COMPLETE:
+    case BLE_SYNC_EVT_FILE_DELETED:
+        should_refresh = true;
+        break;
+    case BLE_SYNC_EVT_UPLOAD_START:
+    case BLE_SYNC_EVT_UPLOAD_ABORTED:
+        should_refresh = in_ble;
+        break;
+    case BLE_SYNC_EVT_UPLOAD_PROGRESS:
+        if (in_ble)
+        {
+            static int64_t s_last_rx_refresh_us = 0; // BLE task only
+            int64_t now_us = esp_timer_get_time();
+            if (now_us - s_last_rx_refresh_us >= BLE_RX_REFRESH_MIN_US)
+            {
+                s_last_rx_refresh_us = now_us;
+                should_refresh = true;
+            }
+        }
+        break;
+    default:
+        break;
+    }
+    if (should_refresh)
+    {
+        post_refresh_event();
+    }
+}
+
+static bool inactivity_expired(void)
+{
+    uint16_t timeout_sec = ble_sync_get_sleep_timeout();
+    if (timeout_sec == 0)
+    {
+        return false;
+    }
+    return (esp_timer_get_time() - s_last_activity_us) >= (int64_t)timeout_sec * 1000000LL;
+}
+
+static TickType_t compute_wait_ticks(reader_view_t view)
+{
+    if (view == VIEW_BLE_SYNC)
+    {
+        return view_ble_sync_get_wait_ticks();
+    }
+    int64_t wait_ms = LOOP_MAX_WAIT_MS;
+    uint16_t timeout_sec = ble_sync_get_sleep_timeout();
+    if (timeout_sec > 0)
+    {
+        int64_t remaining_us = (int64_t)timeout_sec * 1000000LL - (esp_timer_get_time() - s_last_activity_us);
+        if (remaining_us <= 0)
+        {
+            return 0;
+        }
+        int64_t remaining_ms = (remaining_us + 999) / 1000; // round up: avoid 0-tick spins
+        if (remaining_ms < wait_ms)
+        {
+            wait_ms = remaining_ms;
+        }
+    }
+    TickType_t ticks = pdMS_TO_TICKS((uint32_t)wait_ms);
+    return ticks > 0 ? ticks : 1;
+}
+
+static void wait_for_splash_dismiss(void)
+{
+    button_event_t evt;
+    for (;;)
+    {
+        uint16_t timeout_sec = ble_sync_get_sleep_timeout();
+        // seconds * tick rate: avoids the 32-bit overflow of pdMS_TO_TICKS(sec * 1000)
+        TickType_t wait = (timeout_sec > 0)
+                              ? (TickType_t)timeout_sec * configTICK_RATE_HZ
+                              : portMAX_DELAY;
+        if (xQueueReceive(s_btn_queue, &evt, wait) != pdTRUE)
+        {
+            ESP_LOGI(TAG, "No input on splash. Entering deep sleep...");
+            app_enter_deep_sleep();
+        }
+        if (evt.type != BTN_EVENT_CUSTOM_REFRESH)
+        {
+            break; // only a real button press dismisses the splash
+        }
+    }
+    while (gpio_get_level((gpio_num_t)BOARD_BTN_UP_PIN) == 0 ||
+           gpio_get_level((gpio_num_t)BOARD_BTN_DOWN_PIN) == 0)
+    {
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+    xQueueReset(s_btn_queue);
+}
+
+void app_main(void)
+{
+    // 1. Latch board power and cut audio rail (must stay first)
+    power_mgr_early_init();
+    ensure_nvs();
+    status_led_init();
+    status_led_trigger(STATUS_LED_EVT_WAKEUP); // background task, returns immediately
 
     wakeup_reason_t raw_wakeup = power_mgr_get_wakeup_cause();
-    bool is_cold_boot = (raw_wakeup == WAKEUP_REASON_COLD_BOOT || esp_reset_reason() != ESP_RST_DEEPSLEEP);
-    app_settings_load(is_cold_boot);
+    bool is_cold_boot = (raw_wakeup == WAKEUP_REASON_COLD_BOOT ||
+                         esp_reset_reason() != ESP_RST_DEEPSLEEP);
 
-    // 3. Initialize Peripherals
-    esp_err_t flash_ret = flash_storage_init();
-    if (flash_ret == ESP_OK) {
-        ESP_LOGI(TAG, "Flash storage ready at /spiflash");
-    } else {
-        ESP_LOGE(TAG, "Internal Flash storage initialization failed (0x%x)", flash_ret);
-    }
-
-    ESP_LOGI(TAG, "Wakeup reason: %d", raw_wakeup);
-
-    if (is_cold_boot) {
-        ret = sdcard_init();
-        if (ret == ESP_OK) {
-            s_rtc_has_sdcard = true;
-        } else {
-            s_rtc_has_sdcard = false;
-            ESP_LOGI(TAG, "MicroSD not detected, using internal Flash storage");
-        }
-    } else if (s_rtc_has_sdcard && s_rtc_storage_target == STORAGE_TARGET_SDCARD) {
-        ret = sdcard_init();
-        if (ret != ESP_OK) {
-            s_rtc_has_sdcard = false;
-            ESP_LOGI(TAG, "MicroSD not detected, using internal Flash storage");
-        }
-    }
-
-    ESP_ERROR_CHECK(reader_ui_init(is_cold_boot));
-    if (!is_cold_boot) {
-        if (raw_wakeup == WAKEUP_REASON_BOOT_BUTTON) {
+    // 2. Buttons: the wake stub's classified gesture is pushed to the queue here
+    if (!is_cold_boot)
+    {
+        if (raw_wakeup == WAKEUP_REASON_BOOT_BUTTON)
+        {
             button_seed_wakeup(BTN_ID_BOOT);
-        } else if (raw_wakeup == WAKEUP_REASON_PWR_BUTTON) {
+        }
+        else if (raw_wakeup == WAKEUP_REASON_PWR_BUTTON)
+        {
             button_seed_wakeup(BTN_ID_PWR);
         }
     }
     ESP_ERROR_CHECK(button_init(&s_btn_queue));
 
-    // 4. Initialize Reader Core
+    // 3. Settings, once. text_pager_init() first (font is applied to the pager);
+    //    must run before reader_ui_init() (rotation is read there).
+    text_pager_init();
+    app_settings_load(is_cold_boot);
+
+    ESP_LOGI(TAG, "Starting BacaIn firmware (wakeup=%d, cold=%d)...", raw_wakeup, is_cold_boot);
+
+    // 4. Storage
+    esp_err_t flash_ret = flash_storage_init();
+    if (flash_ret != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Internal flash storage init failed (0x%x)", flash_ret);
+    }
+
+    // Retry SD whenever it is the target: no card-detect pin, so a reinserted
+    // card is only found by probing (~20 ms when absent).
+    if (is_cold_boot || s_rtc_storage_target == STORAGE_TARGET_SDCARD)
+    {
+        s_rtc_has_sdcard = (sdcard_init() == ESP_OK);
+        if (!s_rtc_has_sdcard)
+        {
+            ESP_LOGI(TAG, "MicroSD not detected, using internal flash storage");
+        }
+    }
+
+    // 5. Display
+    ESP_ERROR_CHECK(reader_ui_init(is_cold_boot));
+
+    // Protect all board output lines from floating in light sleep before enabling PM
+    board_light_sleep_pins_init();
+
+    esp_pm_config_t pm = {
+        .max_freq_mhz = 240,
+        .min_freq_mhz = 80, // APB stays 80 MHz: SPI/UART unaffected
+        .light_sleep_enable = true,
+    };
+    esp_err_t pm_err = esp_pm_configure(&pm);
+    if (pm_err != ESP_OK) {
+        ESP_LOGE(TAG, "esp_pm_configure failed (0x%x), running without light sleep", pm_err);
+    }
+
+    // Show splash before the slow library scan so the screen updates sooner
+    if (is_cold_boot)
+    {
+        reader_ui_render_splash(NULL, NULL);
+    }
+
+    // 6. Reader core
     book_library_init();
 #if CONFIG_BOARD_MUSHAF_ENABLE
     view_mushaf_init(is_cold_boot);
 #endif
-    storage_target_t active_target = (s_rtc_has_sdcard && s_rtc_storage_target == STORAGE_TARGET_SDCARD) ? STORAGE_TARGET_SDCARD : STORAGE_TARGET_FLASH;
+    storage_target_t active_target =
+        (s_rtc_has_sdcard && s_rtc_storage_target == STORAGE_TARGET_SDCARD)
+            ? STORAGE_TARGET_SDCARD
+            : STORAGE_TARGET_FLASH;
     book_library_set_storage_target(active_target);
     ble_sync_set_storage_target(active_target);
-    if (is_cold_boot) {
+    if (is_cold_boot)
+    {
         book_library_scan();
     }
-    text_pager_init();
-    app_settings_load(false);
-
-    // 5. Register BLE sync callback
     ble_sync_register_callback(on_ble_sync_event, NULL);
 
-    // 6. Restore reading state or open first available book
+    // 8. Restore reading state metadata
     reading_state_t state;
-    bool opened = false;
-    if (book_library_load_state(&state) == ESP_OK && strlen(state.active_book_path) > 0) {
-        if (text_pager_open_book(state.active_book_path, state.byte_offset) == ESP_OK) {
-            opened = true;
-        }
-    }
+    (void)book_library_load_state(&state);
 
-    if (!opened) {
-        size_t count = book_library_get_count();
-        for (size_t i = 0; i < count; i++) {
-            const book_info_t *first_book = book_library_get_book(i);
-            if (first_book && first_book->type == LIBRARY_ENTRY_FILE) {
-                if (text_pager_open_book(first_book->path, 0) == ESP_OK) {
-                    book_library_set_active_book(first_book->path, true);
-                    opened = true;
-                    break;
-                }
-            }
-        }
-    }
-
-    if (is_cold_boot) {
-        reader_ui_render_splash(NULL, NULL);
-
-        button_event_t boot_evt;
-        xQueueReceive(s_btn_queue, &boot_evt, portMAX_DELAY);
-        while (gpio_get_level((gpio_num_t)BOARD_BTN_UP_PIN) == 0 || gpio_get_level((gpio_num_t)BOARD_BTN_DOWN_PIN) == 0) {
-            vTaskDelay(pdMS_TO_TICKS(10));
-        }
-        if (s_btn_queue) {
-            xQueueReset(s_btn_queue);
-        }
-
-        s_current_view = VIEW_MENU;
+    // 9. Initial view
+    if (is_cold_boot)
+    {
+        wait_for_splash_dismiss();
+        set_view(VIEW_MENU);
         view_menu_set_index(0);
         view_menu_render(false);
-        ESP_LOGI(TAG, "Cold boot started into view %d", s_current_view);
-    } else {
-        s_current_view = dispatch_wake_view(s_rtc_last_view);
-        bool is_button_wake = (raw_wakeup == WAKEUP_REASON_BOOT_BUTTON || raw_wakeup == WAKEUP_REASON_PWR_BUTTON);
-        if (!is_button_wake) {
-            button_event_t refresh_evt = { .button = BTN_ID_BOOT, .type = BTN_EVENT_CUSTOM_REFRESH };
-            s_current_view = dispatch_view_event(s_current_view, refresh_evt);
+    }
+    else
+    {
+        reader_view_t view = views_dispatch_wake(s_rtc_last_view);
+        bool is_button_wake = (raw_wakeup == WAKEUP_REASON_BOOT_BUTTON ||
+                               raw_wakeup == WAKEUP_REASON_PWR_BUTTON);
+        if (!is_button_wake)
+        {
+            // Defensive: power_mgr currently enables only EXT1 button wake
+            const button_event_t refresh_evt = {.button = BTN_ID_BOOT, .type = BTN_EVENT_CUSTOM_REFRESH};
+            view = views_dispatch_event(view, refresh_evt);
+            if (view == VIEW_REQUEST_POWER_OFF)
+            {
+                app_power_off();
+            }
         }
-        s_rtc_last_view = s_current_view;
-        ESP_LOGI(TAG, "Wake view %d restored.", s_current_view);
+        set_view(view);
     }
 
     update_activity();
 
-    // 7. Event Loop
-    button_event_t evt;
-    for (;;) {
-        TickType_t wait_ticks = pdMS_TO_TICKS(5000);
-        if (s_current_view == VIEW_BLE_SYNC) {
-            wait_ticks = view_ble_sync_get_wait_ticks();
-        } else {
-            uint16_t timeout_sec = ble_sync_get_sleep_timeout();
-            if (timeout_sec > 0) {
-                int64_t elapsed_us = esp_timer_get_time() - s_last_activity_us;
-                int64_t total_us = (int64_t)timeout_sec * 1000000LL;
-                if (elapsed_us >= total_us) {
-                    ESP_LOGI(TAG, "Inactivity timeout reached. Entering deep sleep...");
-                    app_enter_deep_sleep();
-                }
-                int64_t remaining_ms = (total_us - elapsed_us) / 1000LL;
-                if (remaining_ms <= 0) {
-                    wait_ticks = 0;
-                } else if (remaining_ms > 5000) {
-                    wait_ticks = pdMS_TO_TICKS(5000);
-                } else {
-                    wait_ticks = pdMS_TO_TICKS(remaining_ms);
-                }
-            }
+    // 10. Event loop (main task is the only writer of s_current_view)
+    for (;;)
+    {
+        reader_view_t view = get_view();
+        if (view != VIEW_BLE_SYNC && inactivity_expired())
+        {
+            ESP_LOGI(TAG, "Inactivity timeout reached. Entering deep sleep...");
+            app_enter_deep_sleep();
         }
 
-        if (xQueueReceive(s_btn_queue, &evt, wait_ticks) == pdTRUE) {
-            update_activity();
-            ESP_LOGI(TAG, "Btn evt: button=%d, type=%d, view=%d", evt.button, evt.type, s_current_view);
-            s_current_view = dispatch_view_event(s_current_view, evt);
-            s_rtc_last_view = s_current_view;
-            if (evt.type == BTN_EVENT_CUSTOM_REFRESH) {
+        button_event_t evt;
+        if (xQueueReceive(s_btn_queue, &evt, compute_wait_ticks(view)) == pdTRUE)
+        {
+            bool is_refresh = (evt.type == BTN_EVENT_CUSTOM_REFRESH);
+            // Background refreshes count as activity only during BLE sync (keeps uploads alive)
+            if (!is_refresh || view == VIEW_BLE_SYNC)
+            {
+                update_activity();
+            }
+            ESP_LOGD(TAG, "Btn evt: button=%d, type=%d, view=%d", evt.button, evt.type, view);
+            view = views_dispatch_event(view, evt);
+            if (view == VIEW_REQUEST_POWER_OFF)
+            {
+                app_power_off();
+            }
+            set_view(view);
+
+            if (is_refresh)
+            {
                 continue;
             }
         }
 
-        if (s_current_view == VIEW_BLE_SYNC) {
-            s_current_view = view_ble_sync_check_timeout(&s_last_activity_us);
-            s_rtc_last_view = s_current_view;
-        } else {
-            int64_t elapsed_sec = (esp_timer_get_time() - s_last_activity_us) / 1000000LL;
-            uint16_t timeout_sec = ble_sync_get_sleep_timeout();
-            if (timeout_sec > 0 && elapsed_sec >= timeout_sec) {
-                ESP_LOGI(TAG, "Inactivity timeout (%llds >= %us). Entering deep sleep...", elapsed_sec, timeout_sec);
-                app_enter_deep_sleep();
-            }
+        if (view == VIEW_BLE_SYNC)
+        {
+            set_view(view_ble_sync_check_timeout(&s_last_activity_us));
         }
     }
 }

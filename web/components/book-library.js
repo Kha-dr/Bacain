@@ -152,6 +152,26 @@ class BookLibrary extends HTMLElement {
   }
 
   /**
+   * Set loading state
+   * @param {boolean} loading
+   */
+  setLoading(loading) {
+    this._isLoading = !!loading;
+    const refreshBtn = this.querySelector('#refreshBooksBtn');
+    if (refreshBtn) {
+      if (loading) refreshBtn.classList.add('loading');
+      else refreshBtn.classList.remove('loading');
+    }
+  }
+
+  /**
+   * Alias for renderBooks
+   */
+  setBooks(booksArray = [], currentPath = '/') {
+    this.renderBooks(booksArray, currentPath);
+  }
+
+  /**
    * Render books list
    * @param {Array<{name: string, size: number, progress?: number, path?: string}>} booksArray
    * @param {string} currentPath

@@ -7,7 +7,6 @@
 #include "text_pager.h"
 #include "book_library.h"
 #include "app_config.h"
-#include "power_mgr.h"
 #include "view_reading.h"
 #include "view_library.h"
 #include "view_ble_sync.h"
@@ -69,7 +68,7 @@ void view_menu_render(bool full_refresh) {
     Paint_DrawString_EN(8, 3, "READER MENU", &Font12, WHITE, BLACK);
 
     char bat_str[16];
-    snprintf(bat_str, sizeof(bat_str), "%u%%", power_mgr_get_battery_percentage());
+    snprintf(bat_str, sizeof(bat_str), "%u%%", reader_ui_get_battery_percentage());
     Paint_DrawString_EN(165, 3, bat_str, &Font12, WHITE, BLACK);
 
     Paint_DrawLine(0, UI_HEADER_HEIGHT + 1, DISPLAY_WIDTH - 1, UI_HEADER_HEIGHT + 1, BLACK, DOT_PIXEL_1X1, LINE_STYLE_SOLID);
@@ -204,13 +203,11 @@ reader_view_t view_menu_handle_event(button_event_t evt) {
                 view_nav_hints_render();
                 return VIEW_NAV_HINTS;
             case MENU_ITEM_REFRESH:
-                view_reading_reset_redraw_counter();
                 view_menu_render(true);
                 return VIEW_MENU;
             case MENU_ITEM_POWER_OFF:
-                reader_ui_render_sleeping();
-                app_enter_deep_sleep();
-                return VIEW_MENU;
+                reader_ui_render_power_off();
+                return VIEW_REQUEST_POWER_OFF;
             default:
                 break;
         }

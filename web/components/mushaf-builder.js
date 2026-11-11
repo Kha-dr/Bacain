@@ -85,6 +85,15 @@ class MushafBuilder extends BaseElement {
   connectedCallback() {
     document.addEventListener("mushaf-upload-status", this._onUploadStatus);
     document.addEventListener("mushaf-status", this._onUploadStatus);
+    this._onBleConnectionChange = (e) => {
+      const isConn = Boolean(e && e.detail && e.detail.isConnected);
+      this._isConnected = isConn;
+      this.updateConnectionStateUI();
+    };
+    window.addEventListener("ble-connection-changed", this._onBleConnectionChange);
+    if (typeof window !== "undefined" && window.BleClient && typeof window.BleClient.isConnected === "function") {
+      this._isConnected = window.BleClient.isConnected();
+    }
     if (!this.querySelector(".mushaf-section")) {
       this.render();
       this.bindEvents();
@@ -92,12 +101,17 @@ class MushafBuilder extends BaseElement {
       this.updateSizeEstimate();
       this.setBuilderControlsDisabled(true);
       this.preloadAssets();
+    } else {
+      this.updateConnectionStateUI();
     }
   }
 
   disconnectedCallback() {
     document.removeEventListener("mushaf-upload-status", this._onUploadStatus);
     document.removeEventListener("mushaf-status", this._onUploadStatus);
+    if (this._onBleConnectionChange) {
+      window.removeEventListener("ble-connection-changed", this._onBleConnectionChange);
+    }
   }
 
   _onUploadStatus(e) {
@@ -234,6 +248,10 @@ class MushafBuilder extends BaseElement {
     this.updateGeometryBadge();
     this.updateConnectionStateUI();
     this.renderAyahPreview();
+  }
+
+  configureGeometry(width, height) {
+    this.setDisplayGeometry(width, height);
   }
 
   setDisplayGeometry(width, height) {

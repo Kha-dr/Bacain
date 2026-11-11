@@ -62,7 +62,7 @@ class EspWebFlasher extends HTMLElement {
       cfg?.repoSlug ||
       (cfg?.repo
         ? cfg.repo.replace(/^https?:\/\/github\.com\//i, "").replace(/\/+$/, "")
-        : "khad1r/BacaIn");
+        : "Kha-dr/BacaIn");
 
     // Settings
     this.selectedBaudrate = cfg?.flasher?.baud || 460800;
@@ -759,7 +759,7 @@ class EspWebFlasher extends HTMLElement {
       cfg?.repoSlug ||
       (cfg?.repo
         ? cfg.repo.replace(/^https?:\/\/github\.com\//i, "").replace(/\/+$/, "")
-        : "khad1r/BacaIn");
+        : "Kha-dr/BacaIn");
     const targetRepo = (repo && repo.trim()) || fallbackRepo;
     this.isFetchingReleasesList = true;
     this.updateUI();
@@ -923,7 +923,7 @@ class EspWebFlasher extends HTMLElement {
       cfg?.repoSlug ||
       (cfg?.repo
         ? cfg.repo.replace(/^https?:\/\/github\.com\//i, "").replace(/\/+$/, "")
-        : "khad1r/BacaIn");
+        : "Kha-dr/BacaIn");
     const targetRepo = (repo && repo.trim()) || fallbackRepo;
     const targetTag =
       typeof tag === "string" && tag.trim().length > 0 ? tag.trim() : null;

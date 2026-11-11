@@ -257,7 +257,18 @@ class BookUploader extends HTMLElement {
           this.hideProgress();
         }
       } else if (isTxt) {
-        convertedFiles.push(file);
+        try {
+          const rawText = typeof file.text === 'function' ? await file.text() : await new Response(file).text();
+          const cleaner = (typeof window !== 'undefined' && typeof window.cleanPlainText === 'function')
+            ? window.cleanPlainText
+            : (typeof cleanPlainText === 'function' ? cleanPlainText : null);
+          const cleanTxt = cleaner ? cleaner(rawText) : rawText;
+          const convertedFile = new File([cleanTxt], file.name, { type: 'text/plain' });
+          convertedFiles.push(convertedFile);
+        } catch (err) {
+          console.warn(`Text cleaner fallback for "${file.name}":`, err);
+          convertedFiles.push(file);
+        }
       }
     }
 

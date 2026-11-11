@@ -1,7 +1,7 @@
 # BacaIn
 
 <div align="center">
-  <img src="./web/icon.svg" alt="BacaIn" width="25%" />
+  <img src="./assets/device-hero-placeholder.png" alt="BacaIn Hardware" width="100%" />
 
 Mini E-reader firmware for ESP32-S3 e-paper devices with PWA management via Web Bluetooth.
 
@@ -22,23 +22,36 @@ Developed on [Waveshare ESP32-S3-ePaper-1.54](https://github.com/waveshareteam/E
 - **Power**: 20s auto-sleep, instant page turn on wake.
 - **Al-Quran (Optional)**: Offline Mushaf reader (see [firmware/Mushaf_Reader.md](firmware/Mushaf_Reader.md)).
 
+### E-Paper Display Interface
+
+<div align="center">
+
+|                             Reading View                             |                           Reader Menu                            |                           Sync Screen                            |
+| :------------------------------------------------------------------: | :--------------------------------------------------------------: | :--------------------------------------------------------------: |
+| <img src="./assets/ui-reading.png" width="220" alt="Reading View" /> | <img src="./assets/ui-menu.png" width="220" alt="Reader Menu" /> | <img src="./assets/ui-sync.png" width="220" alt="Sync Screen" /> |
+
+</div>
+
 ## Controls
 
 Two-button navigation using **UP** (BOOT, GPIO 0) and **DOWN** (PWR, GPIO 18).
 
-| Context                        | Action               | Button            | Function            |
-| :----------------------------- | :------------------- | :---------------- | :------------------ |
-| **Wake / Start**               | Click                | **UP** / **DOWN** | Wake up             |
-| **Force Reboot**               | Hold together (2.0s) | **UP** + **DOWN** | Force reboot        |
-| **Reading**                    | Click                | **UP**            | Previous page       |
-|                                | Click                | **DOWN**          | Next page           |
-|                                | Double Click         | **UP**            | Toggle bookmark     |
-|                                | Double Click         | **DOWN**          | Open bookmarks list |
-|                                | Hold (>1.2s)         | **UP** / **DOWN** | Open reader menu    |
-| **Menu / Library / Bookmarks** | Click                | **UP** / **DOWN** | Navigate items      |
-|                                | Double Click         | **UP** / **DOWN** | Select or open      |
-|                                | Hold (>1.2s)         | **UP** / **DOWN** | Back / Exit         |
-| **Sync View**                  | Hold (>1.2s)         | **UP** / **DOWN** | Exit sync           |
+<div align="center">
+  
+  | Context                        | Action               | Button            | Function            |
+  | :----------------------------- | :------------------- | :---------------- | :------------------ |
+  | **Wake / Start**               | Click                | **UP** / **DOWN** | Wake up             |
+  | **Force Reboot**               | Hold together (2.0s) | **UP** + **DOWN** | Force reboot        |
+  | **Reading**                    | Click                | **UP**            | Previous page       |
+  |                                | Click                | **DOWN**          | Next page           |
+  |                                | Double Click         | **UP**            | Toggle bookmark     |
+  |                                | Double Click         | **DOWN**          | Open bookmarks list |
+  |                                | Hold (>1.2s)         | **UP** / **DOWN** | Open reader menu    |
+  | **Menu / Library / Bookmarks** | Click                | **UP** / **DOWN** | Navigate items      |
+  |                                | Double Click         | **UP** / **DOWN** | Select or open      |
+  |                                | Hold (>1.2s)         | **UP** / **DOWN** | Back / Exit         |
+  | **Sync View**                  | Hold (>1.2s)         | **UP** / **DOWN** | Exit sync           |
+</div>
 
 ## Reader Menu
 
@@ -54,6 +67,15 @@ Access the 7-item menu by holding (>1.2s) UP or DOWN while reading:
 
 ## Quick Start
 
+### Web Companion & Flasher
+
+<div align="center">
+  
+  |                             Mobile Companion                             |                              Web Dashboard                               |                             Web Serial Flasher                              |
+  | :----------------------------------------------------------------------: | :----------------------------------------------------------------------: | :-------------------------------------------------------------------------: |
+  | <img src="./assets/pwa-mobile.png" width="200" alt="Mobile Companion" /> | <img src="./assets/pwa-dashboard.png" width="300" alt="Web Dashboard" /> | <img src="./assets/web-flasher.png" width="300" alt="Web Serial Flasher" /> |
+</div>
+
 ### 1. Flash Firmware
 
 Open [bacain.khadr.dev/flasher.html](https://bacain.khadr.dev/flasher.html) in Chrome or Edge, connect the device via USB-C, and flash. To build from source, see [firmware/README.md](firmware/README.md).
@@ -68,15 +90,24 @@ Open [bacain.khadr.dev/flasher.html](https://bacain.khadr.dev/flasher.html) in C
 
 ```text
 .
-├── firmware/       # ESP-IDF firmware source, drivers, and board profiles
-├── web/            # Companion PWA, text processors, and Web Serial flasher
-├── .github/        # Build and deployment workflows
-├── LICENSE         # CC BY-NC-SA 4.0 license
+├── .github/
+│   └── workflows/          # CI build matrices and GitHub Pages deployment
+├── assets/                 # UI screenshots, documentation assets, and hardware photos
+├── firmware/               # ESP-IDF firmware source, drivers, and board profiles
+│   ├── boards/             # Board definitions, pinouts, and e-paper LUTs
+│   ├── components/         # Modular drivers (epaper, ble_sync, power_mgr, reader_core)
+│   └── main/               # Application lifecycle, view controllers, and UI state machine
+├── web/                    # Companion PWA, text processors, and Web Serial flasher
+│   ├── components/         # Custom UI elements (book-uploader, device-manager)
+│   ├── processors/         # Ingestion pipeline (epub-processor, fb2-processor, text-cleaner)
+│   └── services/           # Web Bluetooth GATT client and storage manager
+├── LICENSE                 # CC BY-NC-SA 4.0 license
 └── README.md
 ```
 
 ## Acknowledgments
 
+- Paul Lagier (for inspiring me): [I Built a Tiny E-Reader](https://www.youtube.com/watch?v=49U3f7eV1AI)
 - Hardware reference: [Waveshare ESP32-S3-ePaper-1.54](https://github.com/waveshareteam/ESP32-S3-ePaper-1.54)
 - Serial flashing: [esptool-js](https://github.com/espressif/esptool-js)
 - Wireless transfer: [Web Bluetooth API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Bluetooth_API)

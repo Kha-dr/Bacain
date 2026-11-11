@@ -119,11 +119,16 @@ function parseConfigPayload(val) {
   const screenW = rotation % 2 === 1 ? rawH : rawW;
   const screenH = rotation % 2 === 1 ? rawW : rawH;
   const mushafSupported = (caps & OPCODES.CAP_MUSHAF) !== 0;
+  const refreshIntervalSupported = val.byteLength >= 16 && (caps & OPCODES.CAP_REFRESH_INTERVAL) !== 0;
 
   configObj.caps = caps;
   configObj.screenW = screenW;
   configObj.screenH = screenH;
   configObj.mushafSupported = mushafSupported;
+  configObj.refreshIntervalSupported = refreshIntervalSupported;
+  if (refreshIntervalSupported) {
+    configObj.refreshInterval = val.getUint8(15);
+  }
 
   return configObj;
 }
@@ -346,6 +351,18 @@ async function connect() {
     isConnecting = false;
     dispatchConnectionChange();
 
+    // Query active hardware ground truth (NVS config & initial status)
+    try {
+      await readDeviceStatus();
+    } catch (e) {
+      console.warn("Initial status read error:", e);
+    }
+    try {
+      await requestDeviceConfig();
+    } catch (e) {
+      console.warn("Initial config read error:", e);
+    }
+
     return bleDevice;
   } catch (error) {
     isConnecting = false;
@@ -363,11 +380,31 @@ function disconnect() {
   }
 }
 
+let gattOpQueue = Promise.resolve();
+
+function enqueueGattOp(fn) {
+  const next = gattOpQueue.then(fn, fn);
+  gattOpQueue = next.catch(() => {});
+  return next;
+}
+
+async function writeControl(packet) {
+  return enqueueGattOp(async () => {
+    if (!controlChar) {
+      throw new Error("Not connected to BacaIn");
+    }
+    if (controlChar.writeValueWithResponse) {
+      return await controlChar.writeValueWithResponse(packet);
+    }
+    return await controlChar.writeValue(packet);
+  });
+}
+
 async function readDeviceStatus() {
   if (!statusChar) {
     throw new Error("Not connected to BacaIn");
   }
-  const val = await statusChar.readValue();
+  const val = await enqueueGattOp(() => statusChar.readValue());
   return parseStatusValue(val);
 }
 
@@ -377,11 +414,7 @@ async function requestDeviceConfig() {
   }
   const respPromise = waitForControlResponse(OPCODES.GET_CONFIG, 5000);
   const packet = new Uint8Array([OPCODES.GET_CONFIG]);
-  if (controlChar.writeValueWithResponse) {
-    await controlChar.writeValueWithResponse(packet);
-  } else {
-    await controlChar.writeValue(packet);
-  }
+  await writeControl(packet);
 
   const { status, dataView: val } = await respPromise;
   if (status === 0x00 && val) {
@@ -439,11 +472,7 @@ function queryBooksList(onBookReceived, onComplete, onError) {
     }, 4000);
 
     const req = new Uint8Array([OPCODES.LIST_BOOKS]);
-    const writePromise = controlChar.writeValueWithResponse
-      ? controlChar.writeValueWithResponse(req)
-      : controlChar.writeValue(req);
-
-    writePromise.catch((err) => {
+    writeControl(req).catch((err) => {
       if (listBooksTimeout) {
         clearTimeout(listBooksTimeout);
         listBooksTimeout = null;
@@ -470,7 +499,7 @@ async function deleteBook(filename) {
   packet[1 + nameBytes.length] = 0;
 
   const respPromise = waitForControlResponse(OPCODES.DELETE_BOOK, 6000);
-  await controlChar.writeValueWithResponse(packet);
+  await writeControl(packet);
   const { status } = await respPromise;
   if (status !== 0) {
     throw new Error(`Device reported error code: ${status}`);
@@ -491,7 +520,7 @@ async function queryBookBookmarks(filename) {
   packet[1 + nameBytes.length] = 0;
 
   const respPromise = waitForControlResponse(OPCODES.GET_BOOKMARKS, 4000);
-  await controlChar.writeValueWithResponse(packet);
+  await writeControl(packet);
   const { status, dataView: val } = await respPromise;
 
   if (status !== 0 || !val || val.byteLength < 11) {
@@ -528,7 +557,7 @@ async function addBookBookmark(filename, byteOffset) {
   }
   const packet = buildOffsetAndFilenamePacket(OPCODES.ADD_BOOKMARK, byteOffset, filename);
   const respPromise = waitForControlResponse(OPCODES.ADD_BOOKMARK, 4000);
-  await controlChar.writeValueWithResponse(packet);
+  await writeControl(packet);
   const { status } = await respPromise;
   if (status !== 0) {
     throw new Error(`Failed to add bookmark (status ${status})`);
@@ -542,7 +571,7 @@ async function deleteBookBookmark(filename, byteOffset) {
   }
   const packet = buildOffsetAndFilenamePacket(OPCODES.DELETE_BOOKMARK, byteOffset, filename);
   const respPromise = waitForControlResponse(OPCODES.DELETE_BOOKMARK, 4000);
-  await controlChar.writeValueWithResponse(packet);
+  await writeControl(packet);
   const { status } = await respPromise;
   if (status !== 0) {
     throw new Error(`Failed to delete bookmark (status ${status})`);
@@ -556,7 +585,7 @@ async function setBookReadingOffset(filename, byteOffset) {
   }
   const packet = buildOffsetAndFilenamePacket(OPCODES.SET_BOOK_OFFSET, byteOffset, filename);
   const respPromise = waitForControlResponse(OPCODES.SET_BOOK_OFFSET, 4000);
-  await controlChar.writeValueWithResponse(packet);
+  await writeControl(packet);
   const { status } = await respPromise;
   if (status !== 0) {
     throw new Error(`Failed to set reading offset (status ${status})`);
@@ -613,7 +642,7 @@ async function executeFileUpload(file, options = {}) {
   startPacket[5 + nameBytes.length] = 0;
 
   const startRespPromise = waitForControlResponse(OPCODES.START_UPLOAD, 10000);
-  await controlChar.writeValueWithResponse(startPacket);
+  await writeControl(startPacket);
   const startResp = await startRespPromise;
 
   if (startResp.status !== 0) {
@@ -674,7 +703,7 @@ async function executeFileUpload(file, options = {}) {
 
     const finishPacket = new Uint8Array([OPCODES.FINISH_UPLOAD]);
     const finishRespPromise = waitForControlResponse(OPCODES.FINISH_UPLOAD, 30000);
-    await controlChar.writeValueWithResponse(finishPacket);
+    await writeControl(finishPacket);
     const finishResp = await finishRespPromise;
 
     if (finishResp.status !== 0) {
@@ -692,7 +721,7 @@ async function executeFileUpload(file, options = {}) {
     if (controlChar && isConnected) {
       try {
         const abortPacket = new Uint8Array([OPCODES.ABORT_UPLOAD]);
-        await controlChar.writeValueWithResponse(abortPacket);
+        await writeControl(abortPacket);
       } catch (abortErr) {
         console.error("Failed to send abort packet:", abortErr);
       }
@@ -707,11 +736,7 @@ async function sendSetStorageTarget(target) {
   }
   const packet = new Uint8Array([OPCODES.SET_STORAGE_TARGET, target]);
   const waitPromise = waitForControlResponse(OPCODES.SET_STORAGE_TARGET, 3500);
-  if (controlChar.writeValueWithResponse) {
-    await controlChar.writeValueWithResponse(packet);
-  } else {
-    await controlChar.writeValue(packet);
-  }
+  await writeControl(packet);
   const resp = await waitPromise;
   let status = 0;
   if (resp && typeof resp.status === "number") {
@@ -727,11 +752,7 @@ async function sendSetFont(fontId) {
     throw new Error("Not connected to BacaIn");
   }
   const packet = new Uint8Array([OPCODES.SET_FONT, fontId]);
-  if (controlChar.writeValueWithResponse) {
-    await controlChar.writeValueWithResponse(packet);
-  } else {
-    await controlChar.writeValue(packet);
-  }
+  await writeControl(packet);
   return true;
 }
 
@@ -740,11 +761,7 @@ async function sendSetNavHints(enabled) {
     throw new Error("Not connected to BacaIn");
   }
   const packet = new Uint8Array([OPCODES.SET_NAV_HINTS, enabled ? 1 : 0]);
-  if (controlChar.writeValueWithResponse) {
-    await controlChar.writeValueWithResponse(packet);
-  } else {
-    await controlChar.writeValue(packet);
-  }
+  await writeControl(packet);
   return true;
 }
 
@@ -753,11 +770,7 @@ async function sendSetRotation(rot) {
     throw new Error("Not connected to BacaIn");
   }
   const packet = new Uint8Array([OPCODES.SET_ROTATION, rot]);
-  if (controlChar.writeValueWithResponse) {
-    await controlChar.writeValueWithResponse(packet);
-  } else {
-    await controlChar.writeValue(packet);
-  }
+  await writeControl(packet);
   return true;
 }
 
@@ -766,11 +779,7 @@ async function sendSetButtonInvert(inverted) {
     throw new Error("Not connected to BacaIn");
   }
   const packet = new Uint8Array([OPCODES.SET_BUTTON_INVERT, inverted ? 1 : 0]);
-  if (controlChar.writeValueWithResponse) {
-    await controlChar.writeValueWithResponse(packet);
-  } else {
-    await controlChar.writeValue(packet);
-  }
+  await writeControl(packet);
   return true;
 }
 
@@ -780,11 +789,7 @@ async function sendSetStatusLed(enabled) {
   }
   const respPromise = waitForControlResponse(OPCODES.SET_STATUS_LED, 5000);
   const packet = new Uint8Array([OPCODES.SET_STATUS_LED, enabled ? 1 : 0]);
-  if (controlChar.writeValueWithResponse) {
-    await controlChar.writeValueWithResponse(packet);
-  } else {
-    await controlChar.writeValue(packet);
-  }
+  await writeControl(packet);
   const { status } = await respPromise;
   return status;
 }
@@ -798,10 +803,20 @@ async function sendSetSleepTimeout(seconds) {
     seconds & 0xff,
     (seconds >> 8) & 0xff,
   ]);
-  if (controlChar.writeValueWithResponse) {
-    await controlChar.writeValueWithResponse(packet);
-  } else {
-    await controlChar.writeValue(packet);
+  await writeControl(packet);
+  return true;
+}
+
+async function sendSetRefreshInterval(interval) {
+  if (!isConnected || !controlChar) {
+    throw new Error("Not connected to BacaIn");
+  }
+  const respPromise = waitForControlResponse(OPCODES.SET_REFRESH_INTERVAL, 5000);
+  const packet = new Uint8Array([OPCODES.SET_REFRESH_INTERVAL, interval]);
+  await writeControl(packet);
+  const { status } = await respPromise;
+  if (status !== 0x00) {
+    throw new Error(`Device replied with error status: 0x${status.toString(16)}`);
   }
   return true;
 }
@@ -811,11 +826,7 @@ async function sendTriggerSleep() {
     throw new Error("Not connected to BacaIn");
   }
   const packet = new Uint8Array([OPCODES.TRIGGER_SLEEP]);
-  if (controlChar.writeValueWithResponse) {
-    await controlChar.writeValueWithResponse(packet);
-  } else {
-    await controlChar.writeValue(packet);
-  }
+  await writeControl(packet);
   return true;
 }
 
@@ -824,11 +835,7 @@ async function sendTriggerRefresh() {
     throw new Error("Not connected to BacaIn");
   }
   const packet = new Uint8Array([OPCODES.FORCE_REFRESH]);
-  if (controlChar.writeValueWithResponse) {
-    await controlChar.writeValueWithResponse(packet);
-  } else {
-    await controlChar.writeValue(packet);
-  }
+  await writeControl(packet);
   return true;
 }
 
@@ -838,11 +845,7 @@ async function requestMushafState() {
   }
   const respPromise = waitForControlResponse(OPCODES.GET_MUSHAF_STATE, 5000);
   const packet = new Uint8Array([OPCODES.GET_MUSHAF_STATE]);
-  if (controlChar.writeValueWithResponse) {
-    await controlChar.writeValueWithResponse(packet);
-  } else {
-    await controlChar.writeValue(packet);
-  }
+  await writeControl(packet);
   const { status, dataView: val } = await respPromise;
   if (status !== 0x00 || !val) {
     throw new Error(`Mushaf state request returned status: 0x${(status || 0).toString(16)}`);
@@ -871,11 +874,7 @@ async function setMushafCursor(surah, ayah, layer = 0) {
     (a >> 8) & 0xff,
     l,
   ]);
-  if (controlChar.writeValueWithResponse) {
-    await controlChar.writeValueWithResponse(packet);
-  } else {
-    await controlChar.writeValue(packet);
-  }
+  await writeControl(packet);
   const { status } = await respPromise;
   if (status !== 0x00) {
     throw new Error(`Device returned status 0x${status.toString(16)} setting cursor`);
@@ -904,11 +903,7 @@ async function setMushafBookmarks(bookmarks) {
   }
 
   const respPromise = waitForControlResponse(OPCODES.SET_MUSHAF_STATE, 5000);
-  if (controlChar.writeValueWithResponse) {
-    await controlChar.writeValueWithResponse(packet);
-  } else {
-    await controlChar.writeValue(packet);
-  }
+  await writeControl(packet);
   const { status } = await respPromise;
   if (status !== 0x00) {
     throw new Error(`Device returned status 0x${status.toString(16)} setting bookmarks`);
@@ -939,6 +934,7 @@ const BleClient = {
   sendSetButtonInvert,
   sendSetStatusLed,
   sendSetSleepTimeout,
+  sendSetRefreshInterval,
   sendTriggerSleep,
   sendTriggerRefresh,
   requestMushafState,

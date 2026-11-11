@@ -7,10 +7,13 @@
  * and e-paper hard page breaks (\f).
  */
 
-function cleanPlainText(rawText) {
+function cleanPlainText(rawText, options = {}) {
   if (rawText === null || rawText === undefined) {
     return '';
   }
+
+  const paragraphStyle = options.paragraphStyle || 'book'; // 'book' (default) or 'block'
+  const indentSpaces = typeof options.indentSpaces === 'number' ? options.indentSpaces : 2;
 
   let text = String(rawText);
   if (!text) return '';
@@ -31,6 +34,45 @@ function cleanPlainText(rawText) {
   // Non-breaking space (u00A0) and invisible formatting chars -> standard space or stripped
   text = text.replace(/\u00A0/g, ' ');
   text = text.replace(/[\u200B-\u200D\uFEFF]/g, '');
+
+  // Helper for joining blocks according to paragraph style
+  function joinBlocks(blocks) {
+    if (blocks.length === 0) return '';
+    if (paragraphStyle === 'block') {
+      return blocks.map(b => b.text).join('\n\n');
+    }
+
+    // Book style: 2-space indent for regular paragraphs, single \n between paragraphs,
+    // \n\n around headers and scene dividers.
+    const indent = ' '.repeat(indentSpaces);
+    let out = '';
+
+    for (let i = 0; i < blocks.length; i++) {
+      const cur = blocks[i];
+      let content = cur.text;
+
+      if (cur.isSpecial) {
+        if (i > 0) {
+          out += '\n\n';
+        }
+        out += content;
+      } else {
+        content = indent + content;
+        if (i === 0) {
+          out += content;
+        } else {
+          const prev = blocks[i - 1];
+          if (prev.isSpecial) {
+            out += '\n\n' + content;
+          } else {
+            out += '\n' + content;
+          }
+        }
+      }
+    }
+
+    return out;
+  }
 
   // Helper for reflowing a single segment (between \f boundaries)
   function reflowSegment(segment) {
@@ -54,7 +96,7 @@ function cleanPlainText(rawText) {
             }
           }
         }
-        blocks.push(merged);
+        blocks.push({ text: merged, isSpecial: false });
         currentBlock = [];
       }
     }
@@ -69,14 +111,14 @@ function cleanPlainText(rawText) {
       }
 
       // Preserve chapter headings (=== ... ===) and markdown headings (# ...)
-      const isHeader = /^\s*===.*===\s*$/.test(trimmed) || /^\s*#{1,6}\s+/.test(trimmed);
+      const isHeader = /^\s*===.*===\s*$/.test(trimmed) || /^\s*#{1,6}\s+/.test(trimmed) || /^\s*---\s+.*\s+---\s*$/.test(trimmed);
 
       // Preserve scene dividers / horizontal rules (e.g. * * *, ---, ___)
       const isDivider = /^([*_\-–—]\s*){3,}$/.test(trimmed);
 
       if (isHeader || isDivider) {
         flushBlock();
-        blocks.push(trimmed);
+        blocks.push({ text: trimmed, isSpecial: true });
         continue;
       }
 
@@ -84,7 +126,7 @@ function cleanPlainText(rawText) {
     }
 
     flushBlock();
-    return blocks.join('\n\n');
+    return joinBlocks(blocks);
   }
 
   // 3. Handle hard page break \f (0x0C)
@@ -121,6 +163,13 @@ function cleanPlainText(rawText) {
 
 if (typeof window !== 'undefined') {
   window.cleanPlainText = cleanPlainText;
+  window.TextCleaner = {
+    clean: async (file, options = {}) => {
+      const raw = typeof file.text === 'function' ? await file.text() : String(file);
+      const clean = cleanPlainText(raw, options);
+      return new File([clean], file.name || 'cleaned.txt', { type: 'text/plain' });
+    }
+  };
 }
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { cleanPlainText };
