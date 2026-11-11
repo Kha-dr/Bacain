@@ -648,7 +648,7 @@
     if (el.deviceSettingsModal) {
       el.deviceSettingsModal.addEventListener("font-change", async (e) => {
         try {
-          await window.BleClient.sendSetFont(e.detail?.fontId);
+          await window.BleClient.sendSetFont(e.detail?.font);
           showToast("Font updated", "success");
         } catch (err) {
           showToast(`Font update failed: ${err.message}`, "error");
@@ -827,7 +827,7 @@
         typeof el.deviceSettingsModal.updateConfig === "function"
       ) {
         el.deviceSettingsModal.updateConfig({
-          font: cfg.pwaFontId,
+          font: cfg.font,
           navHints: cfg.navHints !== 0,
           orientation: cfg.rotation,
           buttonInvert: cfg.buttonInvert !== 0,

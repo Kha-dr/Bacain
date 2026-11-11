@@ -730,7 +730,7 @@ export async function renderAyahPreviewToCanvas(canvas, options = {}) {
   const screenW = options.screenW || options.displayWidth || canvas.width || 200;
   const screenH = options.screenH || options.displayHeight || canvas.height || 200;
   const ayahFontSize = options.ayahFontSize || options.mushafFontSize || 24;
-  const latinFontId = options.latinFontId || 0;
+  const latinFontId = options.font || options.latinFontId || 0;
 
   canvas.width = screenW;
   canvas.height = screenH;
@@ -916,7 +916,7 @@ export async function buildBqmPackage(options = {}, onProgress = null) {
   const translationId = options.translationId ?? (options.translationEdition === 'en_saheeh' ? 2 : (options.translationEdition === 'id_kemenag' ? 1 : 1));
   const tafsirId = options.tafsirId ?? (options.tafsirEdition === 'jalalayn' ? 2 : (options.tafsirEdition === 'id_kemenag_ringkas' ? 1 : 1));
   const ayahFontSize = options.ayahFontSize ?? options.mushafFontSize ?? 24;
-  const latinFontId = options.latinFontId ?? 0;
+  const latinFontId = options.font ?? options.latinFontId ?? 0;
   const screenW = options.screenW ?? options.displayWidth ?? 200;
   const screenH = options.screenH ?? options.displayHeight ?? 200;
 

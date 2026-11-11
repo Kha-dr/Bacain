@@ -693,6 +693,18 @@ class MushafBuilder extends BaseElement {
         }
         const surah = parseInt(curSurahSelect?.value || "1", 10);
         const ayah = parseInt(curAyahInput?.value || "1", 10);
+
+        const rangeType = this.querySelector("#mushafRangeSelect")?.value || "full";
+        const customStart = parseInt(this.querySelector("#customStartSurah")?.value || "1", 10);
+        const customEnd = parseInt(this.querySelector("#customEndSurah")?.value || "114", 10);
+        const startSurah = rangeType === "custom" ? Math.min(customStart, customEnd) : (rangeType === "juz30" ? 78 : 1);
+        const endSurah = rangeType === "custom" ? Math.max(customStart, customEnd) : 114;
+
+        if (surah < startSurah || surah > endSurah) {
+          this.setStatusText(`Cannot bookmark Surah ${surah} (outside configured range ${startSurah}-${endSurah}).`, true);
+          return;
+        }
+
         const juz = getJuzForAyah(surah, ayah);
         bookmarks.push({ surah, ayah, juz });
         this.dispatchEvent(
@@ -711,6 +723,17 @@ class MushafBuilder extends BaseElement {
         const surah = parseInt(btn.getAttribute("data-surah"), 10);
         const ayah = parseInt(btn.getAttribute("data-ayah"), 10);
         const layer = parseInt(curLayerSelect?.value || "0", 10);
+
+        const rangeType = this.querySelector("#mushafRangeSelect")?.value || "full";
+        const customStart = parseInt(this.querySelector("#customStartSurah")?.value || "1", 10);
+        const customEnd = parseInt(this.querySelector("#customEndSurah")?.value || "114", 10);
+        const startSurah = rangeType === "custom" ? Math.min(customStart, customEnd) : (rangeType === "juz30" ? 78 : 1);
+        const endSurah = rangeType === "custom" ? Math.max(customStart, customEnd) : 114;
+
+        if (surah < startSurah || surah > endSurah) {
+          this.setStatusText(`Cannot jump to Surah ${surah} (outside configured range ${startSurah}-${endSurah}).`, true);
+          return;
+        }
 
         if (curSurahSelect) curSurahSelect.value = String(surah);
         if (curAyahInput) {
@@ -918,6 +941,7 @@ class MushafBuilder extends BaseElement {
         scriptStyle,
         scriptId: scriptStyle,
         mushafFontSize,
+        font: this._deviceState?.font || 0,
         displayWidth: this._screenW,
         displayHeight: this._screenH,
         translationEdition,
@@ -983,6 +1007,7 @@ class MushafBuilder extends BaseElement {
       scriptStyle,
       scriptId: scriptStyle,
       mushafFontSize,
+      font: this._deviceState?.font || 0,
       rangeType,
       startSurah:
         rangeType === "custom"

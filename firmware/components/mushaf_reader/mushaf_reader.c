@@ -234,6 +234,15 @@ esp_err_t mushaf_reader_set_cursor(uint8_t surah, uint16_t ayah, uint8_t layer) 
         if (ayah < 1 || ayah > s_surahs[surah - 1].ayah_count) {
             return ESP_ERR_INVALID_ARG;
         }
+
+        uint8_t old_layer = s_state.layer;
+        s_state.layer = layer;
+        uint8_t subpages = mushaf_reader_get_subpage_count();
+        s_state.layer = old_layer;
+
+        if (subpages == 0) {
+            return ESP_ERR_NOT_FOUND;
+        }
     }
 
     s_state.started = true;
@@ -323,6 +332,18 @@ esp_err_t mushaf_reader_add_bookmark(uint8_t surah, uint16_t ayah) {
         bqm_ayah_entry_t ayah_entry;
         if (mushaf_reader_get_ayah(surah, ayah, &ayah_entry, NULL) == ESP_OK) {
             juz = ayah_entry.juz;
+            uint8_t old_surah = s_state.surah;
+            uint16_t old_ayah = s_state.ayah;
+            s_state.surah = surah;
+            s_state.ayah = ayah;
+            uint8_t subpages = mushaf_reader_get_subpage_count();
+            s_state.surah = old_surah;
+            s_state.ayah = old_ayah;
+            if (subpages == 0) {
+                return ESP_ERR_NOT_FOUND;
+            }
+        } else {
+            return ESP_ERR_NOT_FOUND;
         }
     }
 
@@ -347,13 +368,23 @@ esp_err_t mushaf_reader_delete_bookmark(uint8_t index) {
     return mushaf_reader_save_state();
 }
 
+static uint8_t get_subpage_count_for(uint8_t surah, uint16_t ayah) {
+    uint8_t old_surah = s_state.surah;
+    uint16_t old_ayah = s_state.ayah;
+
+    s_state.surah = surah;
+    s_state.ayah = ayah;
+    uint8_t count = mushaf_reader_get_subpage_count();
+
+    s_state.surah = old_surah;
+    s_state.ayah = old_ayah;
+
+    return count;
+}
+
 esp_err_t mushaf_reader_step_page(int8_t dir) {
-    if (dir == 0) {
-        return ESP_OK;
-    }
-    if (!s_has_bqm) {
-        return ESP_ERR_INVALID_STATE;
-    }
+    if (dir == 0) return ESP_OK;
+    if (!s_has_bqm) return ESP_ERR_INVALID_STATE;
 
     if (s_state.surah < 1 || s_state.surah > MUSHAF_TOTAL_SURAHS) {
         s_state.surah = 1;
@@ -361,51 +392,74 @@ esp_err_t mushaf_reader_step_page(int8_t dir) {
         s_state.subpage = 0;
     }
 
-    uint16_t ayah_count = s_surahs[s_state.surah - 1].ayah_count;
-    uint8_t subpage_count = mushaf_reader_get_subpage_count();
+    uint8_t current_surah = s_state.surah;
+    uint16_t current_ayah = s_state.ayah;
+    uint8_t current_subpage = s_state.subpage;
+
+    uint8_t subpage_count = get_subpage_count_for(current_surah, current_ayah);
+
     if (subpage_count == 0) {
         subpage_count = 1;
     }
 
     if (dir > 0) {
-        if (s_state.subpage + 1 < subpage_count) {
-            s_state.subpage++;
-        } else {
-            s_state.subpage = 0;
-            if (s_state.ayah < ayah_count) {
-                s_state.ayah++;
-            } else {
-                if (s_state.surah < MUSHAF_TOTAL_SURAHS) {
-                    s_state.surah++;
-                    s_state.ayah = 1;
-                } else {
+        if (current_subpage + 1 < subpage_count) {
+            s_state.subpage = current_subpage + 1;
+            s_state.started = true;
+            return mushaf_reader_save_state();
+        }
+
+        while (current_surah <= MUSHAF_TOTAL_SURAHS) {
+            uint16_t ayah_count = s_surahs[current_surah - 1].ayah_count;
+            current_ayah++;
+
+            if (current_ayah > ayah_count) {
+                current_surah++;
+                current_ayah = 1;
+                if (current_surah > MUSHAF_TOTAL_SURAHS) {
                     return ESP_ERR_NOT_FOUND;
                 }
             }
+
+            uint8_t next_subpage_count = get_subpage_count_for(current_surah, current_ayah);
+            if (next_subpage_count > 0) {
+                s_state.surah = current_surah;
+                s_state.ayah = current_ayah;
+                s_state.subpage = 0;
+                s_state.started = true;
+                return mushaf_reader_save_state();
+            }
         }
     } else {
-        if (s_state.subpage > 0) {
-            s_state.subpage--;
-        } else {
-            if (s_state.ayah > 1) {
-                s_state.ayah--;
-                uint8_t prev_subpages = mushaf_reader_get_subpage_count();
-                s_state.subpage = (prev_subpages > 0) ? (prev_subpages - 1) : 0;
-            } else {
-                if (s_state.surah > 1) {
-                    s_state.surah--;
-                    s_state.ayah = s_surahs[s_state.surah - 1].ayah_count;
-                    uint8_t prev_subpages = mushaf_reader_get_subpage_count();
-                    s_state.subpage = (prev_subpages > 0) ? (prev_subpages - 1) : 0;
-                } else {
+        if (current_subpage > 0) {
+            s_state.subpage = current_subpage - 1;
+            s_state.started = true;
+            return mushaf_reader_save_state();
+        }
+
+        while (current_surah >= 1) {
+            current_ayah--;
+
+            if (current_ayah < 1) {
+                current_surah--;
+                if (current_surah < 1) {
                     return ESP_ERR_NOT_FOUND;
                 }
+                current_ayah = s_surahs[current_surah - 1].ayah_count;
+            }
+
+            uint8_t prev_subpage_count = get_subpage_count_for(current_surah, current_ayah);
+            if (prev_subpage_count > 0) {
+                s_state.surah = current_surah;
+                s_state.ayah = current_ayah;
+                s_state.subpage = prev_subpage_count - 1;
+                s_state.started = true;
+                return mushaf_reader_save_state();
             }
         }
     }
 
-    s_state.started = true;
-    return mushaf_reader_save_state();
+    return ESP_ERR_NOT_FOUND;
 }
 
 esp_err_t mushaf_reader_cycle_layer(void) {
@@ -580,6 +634,9 @@ esp_err_t mushaf_reader_render_subpage(uint8_t *canvas_buf) {
             return ESP_FAIL;
         }
 
+        text_pager_font_size_t font_size = text_pager_get_font_size();
+        sFONT *font = (font_size == TEXT_PAGER_FONT_16) ? &Font16 : &Font12;
+
         UWORD y = 18;
         char line_buf[128];
         for (uint8_t l = 0; l < line_count; l++) {
@@ -600,10 +657,10 @@ esp_err_t mushaf_reader_render_subpage(uint8_t *canvas_buf) {
             if (line_len > to_read) {
                 fseek(fp, line_len - to_read, SEEK_CUR);
             }
-            if (y + Font12.Height < BOARD_DISPLAY_HEIGHT - 16) {
-                Paint_DrawString_EN(4, y, line_buf, &Font12, BLACK, WHITE);
+            if (y + font->Height < BOARD_DISPLAY_HEIGHT - 16) {
+                Paint_DrawString_EN(4, y, line_buf, font, BLACK, WHITE);
             }
-            y += Font12.Height + 2;
+            y += font->Height + 2;
         }
     } else {
         fclose(fp);
