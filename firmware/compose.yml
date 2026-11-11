@@ -29,8 +29,9 @@ services:
     working_dir: /project/firmware
     privileged: true
     environment:
+      - BOARD=${BOARD:-${BOARD_NAME:-waveshare_154}}
       - ESP_PORT=${ESP_PORT:-/dev/ttyACM0}
     volumes:
       - ..:/project
     command: >
-      bash -c "idf.py -B /project/build -p $${ESP_PORT} flash"
+      bash -c "idf.py -B /project/build/$${BOARD:-waveshare_154} -p $${ESP_PORT} flash"

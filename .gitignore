@@ -8,11 +8,13 @@ build/
 firmware/build/
 firmware/sdkconfig
 firmware/sdkconfig.old
+firmware/sdkconfig.local
 # firmware/sdkconfig*
 firmware/dependencies.lock
 firmware/managed_components/
 **/sdkconfig
 **/sdkconfig.old
+**/sdkconfig.local
 **/dependencies.lock
 **/managed_components/
 

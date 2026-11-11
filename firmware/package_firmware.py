@@ -253,20 +253,51 @@ def main(argv: list | None = None) -> int:
         build_dir = Path(__file__).parent / args.build_dir
     build_dir = build_dir.resolve()
 
-    if not args.build and not build_dir.is_dir():
-        sys.stderr.write(f"Error: Directory build '{build_dir}' not found.\n")
+    target_build_dir = build_dir if build_dir.name == board_id else (build_dir / board_id)
+
+    if not args.build and not target_build_dir.is_dir() and not build_dir.is_dir():
+        sys.stderr.write(f"Error: Directory build '{target_build_dir}' not found.\n")
         return 1
 
+    firmware_dir = Path(__file__).resolve().parent
+    defaults_file = firmware_dir / "sdkconfig.defaults"
+    local_defaults = firmware_dir / "sdkconfig.local"
+    defaults_files = [defaults_file]
+    if local_defaults.is_file():
+        defaults_files.append(local_defaults)
+    defaults_arg = ";".join(str(f.resolve()) for f in defaults_files)
+
     if args.build:
+        target_build_dir.mkdir(parents=True, exist_ok=True)
+        target_sdkconfig = target_build_dir / "sdkconfig"
+
+        if target_sdkconfig.is_file():
+            target_mtime = target_sdkconfig.stat().st_mtime
+            stale_defaults = [
+                df.name for df in defaults_files if df.is_file() and df.stat().st_mtime > target_mtime
+            ]
+            if stale_defaults:
+                print(
+                    f"[package_firmware] {', '.join(stale_defaults)} is newer than {target_sdkconfig.name}; "
+                    f"deleting stale sdkconfig to regenerate for {board_id}"
+                )
+                target_sdkconfig.unlink()
+
         extra_args_list = shlex.split(extra_idf_args) if extra_idf_args else []
-        board_id_file = build_dir / ".board_id"
+        config_args = []
+        if not any(arg.startswith("-DSDKCONFIG=") or arg == "-DSDKCONFIG" for arg in extra_args_list):
+            config_args.append(f"-DSDKCONFIG={str(target_sdkconfig.resolve())}")
+        if not any(arg.startswith("-DSDKCONFIG_DEFAULTS=") or arg == "-DSDKCONFIG_DEFAULTS" for arg in extra_args_list):
+            config_args.append(f"-DSDKCONFIG_DEFAULTS={defaults_arg}")
+
+        board_id_file = target_build_dir / ".board_id"
         config_signature = f"{board_id} {extra_idf_args}".strip()
 
         if args.clean:
-            print(f"[package_firmware] Cleaning build directory: {build_dir}")
-            shutil.rmtree(build_dir, ignore_errors=True)
-            build_dir.mkdir(parents=True, exist_ok=True)
-            cmd_target = ["idf.py", "-B", str(build_dir)] + extra_args_list + ["set-target", chip]
+            print(f"[package_firmware] Cleaning build directory: {target_build_dir}")
+            shutil.rmtree(target_build_dir, ignore_errors=True)
+            target_build_dir.mkdir(parents=True, exist_ok=True)
+            cmd_target = ["idf.py", "-B", str(target_build_dir)] + config_args + extra_args_list + ["set-target", chip]
             print(f"[package_firmware] Running: {' '.join(cmd_target)}")
             subprocess.run(cmd_target, check=True)
         else:
@@ -275,21 +306,22 @@ def main(argv: list | None = None) -> int:
                 cached_signature = board_id_file.read_text(encoding="utf-8").strip()
             if cached_signature != config_signature:
                 print(f"[package_firmware] Board configuration changed ({cached_signature} -> {config_signature}), clearing CMakeCache.txt")
-                cache_file = build_dir / "CMakeCache.txt"
+                cache_file = target_build_dir / "CMakeCache.txt"
                 if cache_file.is_file():
                     cache_file.unlink()
 
-        cmd_build = ["idf.py", "-B", str(build_dir)] + extra_args_list + ["build"]
+        cmd_build = ["idf.py", "-B", str(target_build_dir)] + config_args + extra_args_list + ["build"]
         print(f"[package_firmware] Running: {' '.join(cmd_build)}")
         subprocess.run(cmd_build, check=True)
 
-        build_dir.mkdir(parents=True, exist_ok=True)
+        target_build_dir.mkdir(parents=True, exist_ok=True)
         board_id_file.write_text(config_signature, encoding="utf-8")
 
     flash_size = resolve_board_flash_size(board_query, output_name, args.flash_size)
     flash_size_bytes = parse_flash_size_bytes(flash_size)
 
-    segments = resolve_flash_segments(build_dir)
+    search_dir = target_build_dir if (target_build_dir / "bacain.bin").is_file() else build_dir
+    segments = resolve_flash_segments(search_dir)
     for i in range(0, len(segments) - 1, 2):
         if int(segments[i], 16) == 0x8000:
             adjust_partition_table_for_flash_size(Path(segments[i + 1]), flash_size_bytes)
@@ -307,6 +339,10 @@ def main(argv: list | None = None) -> int:
 
     print(f"[package_firmware] Running: {' '.join(cmd)}")
     subprocess.run(cmd, check=True)
+
+    if build_dir != target_build_dir:
+        target_factory_bin = target_build_dir / output_name
+        shutil.copy2(factory_bin, target_factory_bin)
 
     print(f"[package_firmware] Finished: {factory_bin.name}")
     return 0
