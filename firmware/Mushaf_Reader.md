@@ -88,11 +88,11 @@ Pre-rendered binary container (`BQM1`) designed for zero-heap streaming:
 
 Mushaf extensions for the BacaIn BLE GATT service (`0000fe60-0000-1000-8000-00805f9b34fb`):
 
-| OpCode | Name               | Payload (Request / Response)                                                                     | Purpose                                                 |
-| :----- | :----------------- | :----------------------------------------------------------------------------------------------- | :------------------------------------------------------ |
-| `0x19` | `GET_CONFIG`       | Req: `[0x19]`<br>Resp: standard config + `caps`                                                  | Bit 0 (`0x01`) in `caps` signals Mushaf feature support |
+| OpCode | Name               | Payload (Request / Response)                                                                    | Purpose                                                 |
+| :----- | :----------------- | :---------------------------------------------------------------------------------------------- | :------------------------------------------------------ |
+| `0x19` | `GET_CONFIG`       | Req: `[0x19]`<br>Resp: standard config + `caps`                                                 | Bit 0 (`0x01`) in `caps` signals Mushaf feature support |
 | `0x20` | `GET_MUSHAF_STATE` | Req: `[0x20]`<br>Resp: `[0x20, status, started, surah, ayah(2B), layer, count, bookmarks[0-7]]` | Query active cursor and 8 bookmarks                     |
-| `0x21` | `SET_MUSHAF_STATE` | Req: `[0x21, sub, data]`<br>Resp: `[0x21, status]`                                               | Mutate cursor (`sub=1`) or bookmarks (`sub=2`) in NVS   |
+| `0x21` | `SET_MUSHAF_STATE` | Req: `[0x21, sub, data]`<br>Resp: `[0x21, status]`                                              | Mutate cursor (`sub=1`) or bookmarks (`sub=2`) in NVS   |
 
 ## Acknowledgments
 
