@@ -13,12 +13,6 @@
 
 static const char *TAG = "view_reading";
 
-RTC_DATA_ATTR static uint32_t s_redraw_counter = 0;
-
-void view_reading_reset_redraw_counter(void) {
-    s_redraw_counter = 0;
-}
-
 esp_err_t view_reading_ensure_book_open(void) {
     if (text_pager_is_book_open()) {
         return ESP_OK;
@@ -79,18 +73,12 @@ void reader_ui_render_reading_force_full(void) {
 }
 
 void view_reading_render_page_turn(void) {
-    s_redraw_counter++;
-    if (APP_FULL_REFRESH_INTERVAL > 0 && s_redraw_counter >= APP_FULL_REFRESH_INTERVAL) {
-        s_redraw_counter = 0;
-        view_reading_render(true);
-    } else {
-        view_reading_render(false);
-    }
+    bool full = reader_ui_page_turn_needs_full();
+    view_reading_render(full);
 }
 
 reader_view_t view_reading_on_wake(void) {
     if (view_reading_ensure_book_open() == ESP_OK && text_pager_get_current_page() != NULL) {
-        s_redraw_counter = 0;
         return VIEW_READING;
     }
 

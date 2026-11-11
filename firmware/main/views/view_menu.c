@@ -203,7 +203,6 @@ reader_view_t view_menu_handle_event(button_event_t evt) {
                 view_nav_hints_render();
                 return VIEW_NAV_HINTS;
             case MENU_ITEM_REFRESH:
-                view_reading_reset_redraw_counter();
                 view_menu_render(true);
                 return VIEW_MENU;
             case MENU_ITEM_POWER_OFF:

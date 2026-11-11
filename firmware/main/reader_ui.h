@@ -40,6 +40,10 @@ void      reader_ui_flush_canvas(bool full_refresh);
 void      app_settings_load(bool force_nvs_reload);
 void      app_settings_save_font_size(uint8_t font_size);
 void      app_settings_save_nav_hints(bool show);
+void      app_settings_save_refresh_interval(uint8_t interval);
+uint8_t   reader_ui_get_full_refresh_interval(void);
+bool      reader_ui_page_turn_needs_full(void);
+void      reader_ui_note_full_refresh(void);
 uint8_t   reader_ui_get_battery_percentage(void);
 
 void      reader_ui_set_rotation(uint8_t rotation);

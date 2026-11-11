@@ -33,6 +33,8 @@ static RTC_DATA_ATTR uint8_t s_rtc_rot = BOARD_DISPLAY_ROTATION;
 static RTC_DATA_ATTR uint8_t s_rtc_btn_invert = 0;
 static RTC_DATA_ATTR uint8_t s_rtc_font_size = 0;
 static RTC_DATA_ATTR uint8_t s_rtc_show_hints = 1;
+static RTC_DATA_ATTR uint8_t s_rtc_full_refresh_interval = APP_FULL_REFRESH_INTERVAL;
+RTC_DATA_ATTR static uint8_t s_rtc_page_turns_since_full = 0;
 
 void app_settings_load(bool force_nvs_reload) {
     if (!s_rtc_settings_cached || force_nvs_reload) {
@@ -50,12 +52,16 @@ void app_settings_load(bool force_nvs_reload) {
             if (nvs_get_u8(nvs_handle, "nav_hints", &s_rtc_show_hints) != ESP_OK) {
                 s_rtc_show_hints = 1;
             }
+            if (nvs_get_u8(nvs_handle, "full_refresh_n", &s_rtc_full_refresh_interval) != ESP_OK) {
+                s_rtc_full_refresh_interval = APP_FULL_REFRESH_INTERVAL;
+            }
             nvs_close(nvs_handle);
         } else {
             s_rtc_rot = BOARD_DISPLAY_ROTATION;
             s_rtc_btn_invert = 0;
             s_rtc_font_size = 0;
             s_rtc_show_hints = 1;
+            s_rtc_full_refresh_interval = APP_FULL_REFRESH_INTERVAL;
         }
         s_rtc_settings_cached = true;
     }
@@ -88,6 +94,38 @@ void app_settings_save_nav_hints(bool show) {
     } else {
         ESP_LOGE(TAG, "Failed to open NVS settings to save nav_hints");
     }
+}
+
+void app_settings_save_refresh_interval(uint8_t interval) {
+    if (interval > 100) {
+        interval = 100;
+    }
+    s_rtc_full_refresh_interval = interval;
+    nvs_handle_t h;
+    if (nvs_open("settings", NVS_READWRITE, &h) == ESP_OK) {
+        nvs_set_u8(h, "full_refresh_n", s_rtc_full_refresh_interval);
+        nvs_commit(h);
+        nvs_close(h);
+    } else {
+        ESP_LOGE(TAG, "Failed to open NVS settings to save full_refresh_n");
+    }
+}
+
+uint8_t reader_ui_get_full_refresh_interval(void) {
+    return s_rtc_full_refresh_interval;
+}
+
+void reader_ui_note_full_refresh(void) {
+    s_rtc_page_turns_since_full = 0;
+}
+
+bool reader_ui_page_turn_needs_full(void) {
+    s_rtc_page_turns_since_full++;
+    if (s_rtc_full_refresh_interval > 0 && s_rtc_page_turns_since_full >= s_rtc_full_refresh_interval) {
+        s_rtc_page_turns_since_full = 0;
+        return true;
+    }
+    return false;
 }
 
 void reader_ui_set_rotation(uint8_t rotation) {
@@ -391,6 +429,7 @@ void reader_ui_flush_canvas(bool full_refresh) {
     if (!s_canvas) return;
 
     if (full_refresh) {
+        reader_ui_note_full_refresh();
         epaper_port_display_full(s_canvas);
         s_is_wake_frame = false;
     } else if (s_is_wake_frame && s_rtc_canvas_valid) {
@@ -428,6 +467,7 @@ void reader_ui_render_splash(const char *title, const char *subtitle) {
     const char *sub = (subtitle && subtitle[0] != '\0') ? subtitle : "Press ▲/▼";
     ui_draw_centered_string(126, sub, &Font12);
 
+    reader_ui_note_full_refresh();
     epaper_port_display_full(s_canvas);
     memcpy(s_rtc_canvas, s_canvas, DISPLAY_BUFFER_SIZE);
     s_rtc_canvas_valid = true;
@@ -459,6 +499,7 @@ void reader_ui_render_power_off(void) {
     snprintf(wake_str, sizeof(wake_str), "Hold %s to turn on", arrow);
     ui_draw_centered_string(146, wake_str, &Font12);
 
+    reader_ui_note_full_refresh();
     epaper_port_display_full(s_canvas);
     memcpy(s_rtc_canvas, s_canvas, DISPLAY_BUFFER_SIZE);
     s_rtc_canvas_valid = true;

@@ -35,7 +35,7 @@ For hardware design, electrical constraints, and embedded firmware rules, refer 
    - Strict binary framing: avoid text-based serialization (JSON, XML) over constrained wireless or serial links.
    - Use compact binary structs with explicit little-endian byte orders and single-byte command opcodes.
 3. **Device NVS Ground Truth & Immediate Persistence**:
-   - Hardware NVS is authoritative ground truth: on link establishment, query active hardware configuration (`GET_CONFIG` opcode 0x19) before rendering controls or applying local caches.
+   - Hardware NVS is authoritative ground truth: on link establishment, query active hardware configuration (`GET_CONFIG` opcode 0x19, 16-byte response payload including full refresh interval at offset 15) before rendering controls or applying local caches. Use opcode 0x1A (`SET_REFRESH_INTERVAL`) to configure the full refresh page interval (0 = never, 1 to 100 pages).
    - Immediate non-volatile persistence: every configuration mutation pushed by the client must commit immediately to device non-volatile storage, ensuring standalone continuity across resets and sleep cycles.
 4. **High Signal-to-Noise UI Hygiene**:
    - Eliminate zero-metric clutter: suppress uninformative indicators for unstarted items (hide '0% read' on untouched items). Display metadata only until measurable progress occurs.
@@ -114,7 +114,7 @@ Any agent navigating this codebase must consult this directory before exploring 
 | **Status LED**          | `firmware/components/status_led/status_led.c`                                                   | Wake event must execute on a one-shot background task (0 ms wake delay). Sleep event is synchronous (150 ms) for visibility only                             |
 | **UI Views**            | `firmware/main/views/`<br>`firmware/main/main.c`                                                | Views never call sleep or power functions; they return VIEW_REQUEST_POWER_OFF and main.c performs it.                                                       |
 | **Storage & Library**   | `firmware/components/reader_core/`<br>`firmware/components/sdcard/`                             | SD card has priority; falls back to internal SPIFFS / Flash storage.                                                                                         |
-| **BLE Synchronization** | `firmware/components/ble_sync/`                                                                 | Binary frame transport for file upload and config sync. Companion client executes heavy processing.                                                          |
+| **BLE Synchronization** | `firmware/components/ble_sync/`                                                                 | Binary frame transport for file upload and config sync. Companion client executes heavy processing. Opcode 0x19 returns 16-byte GET_CONFIG; opcode 0x1A sets full refresh interval. |
 
 ## 7. Build & Verification Cookbook
 

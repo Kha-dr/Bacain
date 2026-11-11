@@ -119,11 +119,16 @@ function parseConfigPayload(val) {
   const screenW = rotation % 2 === 1 ? rawH : rawW;
   const screenH = rotation % 2 === 1 ? rawW : rawH;
   const mushafSupported = (caps & OPCODES.CAP_MUSHAF) !== 0;
+  const refreshIntervalSupported = val.byteLength >= 16 && (caps & OPCODES.CAP_REFRESH_INTERVAL) !== 0;
 
   configObj.caps = caps;
   configObj.screenW = screenW;
   configObj.screenH = screenH;
   configObj.mushafSupported = mushafSupported;
+  configObj.refreshIntervalSupported = refreshIntervalSupported;
+  if (refreshIntervalSupported) {
+    configObj.refreshInterval = val.getUint8(15);
+  }
 
   return configObj;
 }
@@ -818,6 +823,24 @@ async function sendSetSleepTimeout(seconds) {
   return true;
 }
 
+async function sendSetRefreshInterval(interval) {
+  if (!isConnected || !controlChar) {
+    throw new Error("Not connected to BacaIn");
+  }
+  const respPromise = waitForControlResponse(OPCODES.SET_REFRESH_INTERVAL, 5000);
+  const packet = new Uint8Array([OPCODES.SET_REFRESH_INTERVAL, interval]);
+  if (controlChar.writeValueWithResponse) {
+    await controlChar.writeValueWithResponse(packet);
+  } else {
+    await controlChar.writeValue(packet);
+  }
+  const { status } = await respPromise;
+  if (status !== 0x00) {
+    throw new Error(`Device replied with error status: 0x${status.toString(16)}`);
+  }
+  return true;
+}
+
 async function sendTriggerSleep() {
   if (!isConnected || !controlChar) {
     throw new Error("Not connected to BacaIn");
@@ -951,6 +974,7 @@ const BleClient = {
   sendSetButtonInvert,
   sendSetStatusLed,
   sendSetSleepTimeout,
+  sendSetRefreshInterval,
   sendTriggerSleep,
   sendTriggerRefresh,
   requestMushafState,

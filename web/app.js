@@ -687,12 +687,19 @@
       );
 
       el.deviceSettingsModal.addEventListener("setting-changed", async (e) => {
-        if (e.detail?.key === "status-led") {
+        if (e.detail?.key === "status-led" || e.detail?.key === "status_led") {
           try {
             await window.BleClient.sendSetStatusLed(e.detail.value);
             showToast("Status LED updated", "success");
           } catch (err) {
             showToast(`Status LED failed: ${err.message}`, "error");
+          }
+        } else if (e.detail?.key === "refresh_interval" || e.detail?.key === "refresh-interval") {
+          try {
+            await window.BleClient.sendSetRefreshInterval(e.detail.value);
+            showToast("Full refresh interval updated", "success");
+          } catch (err) {
+            showToast(`Full refresh interval failed: ${err.message}`, "error");
           }
         }
       });

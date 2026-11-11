@@ -51,6 +51,8 @@
 #else
 extern void reader_ui_set_show_nav_hints(bool show);
 extern bool reader_ui_get_show_nav_hints(void);
+extern uint8_t reader_ui_get_full_refresh_interval(void);
+extern void app_settings_save_refresh_interval(uint8_t interval);
 #endif
 extern void reader_ui_set_rotation(uint8_t rotation);
 extern void button_set_inverted(bool inverted);
@@ -60,7 +62,8 @@ extern void button_set_inverted(bool inverted);
 #include "mushaf_reader.h"
 #endif
 
-_Static_assert(sizeof(ble_sync_config_response_t) == 15, "ble_sync_config_response_t must be 15 bytes");
+_Static_assert(sizeof(ble_sync_config_response_t) == 16, "GET_CONFIG payload");
+_Static_assert(sizeof(ble_sync_status_payload_t) == 12, "status payload");
 
 static const char *TAG = "ble_sync";
 
@@ -1404,11 +1407,25 @@ static int ble_sync_control_access_cb(uint16_t conn_handle, uint16_t attr_handle
         break;
     }
 
+    case BLE_SYNC_OP_SET_REFRESH_INTERVAL: {
+        if (copied < 2 || buf[1] > 100) {
+            ESP_LOGE(TAG, "SET_REFRESH_INTERVAL invalid payload (len=%u, val=%u)", copied, (copied >= 2) ? buf[1] : 0);
+            uint8_t resp[2] = { BLE_SYNC_OP_SET_REFRESH_INTERVAL, BLE_SYNC_STATUS_ERROR };
+            ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
+            break;
+        }
+        app_settings_save_refresh_interval(buf[1]);
+        uint8_t resp[2] = { BLE_SYNC_OP_SET_REFRESH_INTERVAL, BLE_SYNC_STATUS_OK };
+        ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
+        break;
+    }
+
     case BLE_SYNC_OP_GET_CONFIG: {
         uint8_t nvs_font = 0;
         uint8_t nav_hints = 1;
         uint8_t rotation = 0;
         uint8_t btn_invert = 0;
+        uint8_t refresh_interval = reader_ui_get_full_refresh_interval();
         uint16_t sleep_timeout = BLE_SYNC_DEFAULT_SLEEP_TIMEOUT_SEC;
         nvs_handle_t nvs_hdl;
         if (nvs_open("settings", NVS_READONLY, &nvs_hdl) == ESP_OK) {
@@ -1418,6 +1435,9 @@ static int ble_sync_control_access_cb(uint16_t conn_handle, uint16_t attr_handle
             }
             nvs_get_u8(nvs_hdl, "rotation", &rotation);
             nvs_get_u8(nvs_hdl, "btn_invert", &btn_invert);
+            if (nvs_get_u8(nvs_hdl, "full_refresh_n", &refresh_interval) != ESP_OK) {
+                refresh_interval = reader_ui_get_full_refresh_interval();
+            }
             if (nvs_get_u16(nvs_hdl, "sleep_timeout", &sleep_timeout) != ESP_OK) {
                 sleep_timeout = BLE_SYNC_DEFAULT_SLEEP_TIMEOUT_SEC;
             }
@@ -1425,6 +1445,7 @@ static int ble_sync_control_access_cb(uint16_t conn_handle, uint16_t attr_handle
         } else {
             nav_hints = reader_ui_get_show_nav_hints() ? 1 : 0;
             sleep_timeout = BLE_SYNC_DEFAULT_SLEEP_TIMEOUT_SEC;
+            refresh_interval = reader_ui_get_full_refresh_interval();
         }
         s_sleep_timeout_sec = sleep_timeout;
         s_sleep_timeout_loaded = true;
@@ -1432,11 +1453,11 @@ static int ble_sync_control_access_cb(uint16_t conn_handle, uint16_t attr_handle
         uint8_t status_led = status_led_is_enabled() ? 1 : 0;
         uint8_t storage_target = (s_storage_target == STORAGE_TARGET_FLASH) ? 1 : 0;
 
-        uint8_t caps = 0;
+        uint8_t caps = BLE_SYNC_CAP_REFRESH_INTERVAL;
 #if CONFIG_BOARD_MUSHAF_ENABLE || BOARD_MUSHAF_ENABLE
         caps |= BLE_SYNC_CAP_MUSHAF;
 #endif
-        uint8_t resp[15] = {
+        uint8_t resp[16] = {
             BLE_SYNC_OP_GET_CONFIG,
             BLE_SYNC_STATUS_OK,
             pwa_font_id,
@@ -1451,7 +1472,8 @@ static int ble_sync_control_access_cb(uint16_t conn_handle, uint16_t attr_handle
             (uint8_t)(BOARD_DISPLAY_WIDTH & 0xFF),
             (uint8_t)((BOARD_DISPLAY_WIDTH >> 8) & 0xFF),
             (uint8_t)(BOARD_DISPLAY_HEIGHT & 0xFF),
-            (uint8_t)((BOARD_DISPLAY_HEIGHT >> 8) & 0xFF)
+            (uint8_t)((BOARD_DISPLAY_HEIGHT >> 8) & 0xFF),
+            refresh_interval
         };
         ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
         break;

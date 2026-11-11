@@ -29,7 +29,6 @@ RTC_DATA_ATTR static mushaf_state_t s_rtc_mushaf_state;
 RTC_DATA_ATTR static int s_rtc_mushaf_menu_idx = 0;
 RTC_DATA_ATTR static int s_rtc_mushaf_jump_idx = 0;
 RTC_DATA_ATTR static int s_rtc_mushaf_bm_idx = 0;
-RTC_DATA_ATTR static uint32_t s_mushaf_redraw_counter = 0;
 RTC_DATA_ATTR static reader_view_t s_rtc_mushaf_sub_view = VIEW_MUSHAF_MENU;
 
 static const struct {
@@ -451,9 +450,7 @@ static reader_view_t mushaf_handle_event_internal(reader_view_t view, button_eve
             } else if (evt.button == BTN_ID_BOOT) {
                 mushaf_reader_step_page(-1);
             }
-            s_mushaf_redraw_counter++;
-            bool full = (APP_FULL_REFRESH_INTERVAL > 0 && s_mushaf_redraw_counter >= APP_FULL_REFRESH_INTERVAL);
-            if (full) s_mushaf_redraw_counter = 0;
+            bool full = reader_ui_page_turn_needs_full();
             view_mushaf_render_reading(full);
             return VIEW_MUSHAF_READING;
         } else if (evt.type == BTN_DOUBLE_CLICK) {

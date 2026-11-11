@@ -28,6 +28,8 @@ class DeviceSettingsModal extends HTMLElement {
     this._orientation = 0;
     this._buttonInvert = false;
     this._statusLed = true;
+    this._refreshInterval = 10;
+    this._refreshIntervalSupported = false;
     this._handleKeyDown = this._handleKeyDown.bind(this);
   }
 
@@ -190,6 +192,27 @@ class DeviceSettingsModal extends HTMLElement {
               <div class="control-inline-row" style="justify-content: space-between;">
                 <span class="control-label">Screen</span>
                 <button id="forceRefreshBtn" class="btn-secondary" type="button">Clean Screen</button>
+              </div>
+            </div>
+
+            <!-- Full Refresh Interval -->
+            <div id="settingRefreshIntervalCard" class="control-card" style="display: none;">
+              <div class="control-card-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;">
+                  <polyline points="23 4 23 10 17 10"></polyline>
+                  <polyline points="1 20 1 14 7 14"></polyline>
+                  <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                </svg>
+                Full Refresh
+              </div>
+              <div class="control-inline-row" style="justify-content: space-between;">
+                <label for="settingRefreshInterval" class="control-label">Full refresh every N pages</label>
+                <select id="settingRefreshInterval" class="control-select">
+                  <option value="0">Never</option>
+                  <option value="5">5 pages</option>
+                  <option value="10">10 pages</option>
+                  <option value="20">20 pages</option>
+                </select>
               </div>
             </div>
 
@@ -515,6 +538,20 @@ class DeviceSettingsModal extends HTMLElement {
       });
     }
 
+    // Full Refresh Interval
+    const settingRefreshInterval = this.querySelector('#settingRefreshInterval');
+    if (settingRefreshInterval) {
+      settingRefreshInterval.addEventListener('change', () => {
+        const val = parseInt(settingRefreshInterval.value, 10);
+        this._refreshInterval = val;
+        this.dispatchEvent(new CustomEvent('setting-changed', {
+          detail: { key: 'refresh_interval', value: val },
+          bubbles: true,
+          composed: true
+        }));
+      });
+    }
+
     // Power Management
     const sleepTimeoutSelect = this.querySelector('#sleepTimeoutSelect');
     if (sleepTimeoutSelect) {
@@ -821,6 +858,62 @@ class DeviceSettingsModal extends HTMLElement {
   }
 
   /**
+   * Set Full Refresh Interval
+   * @param {number|string} val
+   * @param {boolean} supported
+   */
+  setRefreshInterval(val, supported = true) {
+    this._refreshIntervalSupported = Boolean(supported);
+    const card = this.querySelector('#settingRefreshIntervalCard');
+
+    const num = Number(val);
+    const isValidInteger = typeof val !== 'boolean' && val !== null && val !== undefined &&
+      String(val).trim() !== '' && Number.isInteger(num) && num >= 0 && num <= 100;
+
+    if (!isValidInteger) {
+      console.error('Invalid full refresh interval value:', val);
+      if (card) {
+        card.style.display = 'none';
+      }
+      return;
+    }
+
+    this._refreshInterval = num;
+    if (card) {
+      card.style.display = this._refreshIntervalSupported ? '' : 'none';
+    }
+    const select = this.querySelector('#settingRefreshInterval');
+    if (select) {
+      const standardValues = ['0', '5', '10', '20'];
+      const strVal = String(this._refreshInterval);
+      Array.from(select.querySelectorAll('option')).forEach(opt => {
+        if (!standardValues.includes(opt.value) && opt.value !== strVal) {
+          opt.remove();
+        }
+      });
+      if (!standardValues.includes(strVal) && !select.querySelector(`option[value="${strVal}"]`)) {
+        const opt = document.createElement('option');
+        opt.value = strVal;
+        opt.textContent = `${strVal} pages`;
+        select.appendChild(opt);
+      }
+      select.value = strVal;
+    }
+  }
+
+  /**
+   * Get Full Refresh Interval
+   * @returns {number}
+   */
+  getRefreshInterval() {
+    const select = this.querySelector('#settingRefreshInterval');
+    if (select) {
+      return parseInt(select.value, 10);
+    }
+    return this._refreshInterval;
+  }
+
+  /**
    * Get Auto-Sleep Timeout
    * @returns {number}
    */
@@ -879,6 +972,13 @@ class DeviceSettingsModal extends HTMLElement {
     const sleepTimeoutVal = config.sleep_timeout !== undefined ? config.sleep_timeout : config.sleepTimeout;
     if (sleepTimeoutVal !== undefined) {
       this.setSleepTimeout(sleepTimeoutVal);
+    }
+
+    if (config.refreshIntervalSupported) {
+      const intervalVal = config.refresh_interval !== undefined ? config.refresh_interval : config.refreshInterval;
+      this.setRefreshInterval(intervalVal !== undefined ? intervalVal : 10, true);
+    } else {
+      this.setRefreshInterval(10, false);
     }
   }
 
