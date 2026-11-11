@@ -449,8 +449,19 @@
 
       if (qb) {
         qb.style.display = "block";
-        if (typeof qb.configureGeometry === "function") {
-          qb.configureGeometry(width, height);
+        const isConn = window.BleClient && typeof window.BleClient.isConnected === "function"
+          ? window.BleClient.isConnected()
+          : false;
+        if (typeof qb.setDisplayGeometry === "function") {
+          qb.setDisplayGeometry(width, height);
+        }
+        if (typeof qb.setDeviceCapabilities === "function") {
+          qb.setDeviceCapabilities({
+            supported: true,
+            isConnected: isConn,
+            screenW: width,
+            screenH: height,
+          });
         }
       }
     } catch (err) {
@@ -771,6 +782,10 @@
     window.addEventListener("ble-connection-changed", (e) => {
       const { isConnected, isConnecting, name } = e.detail;
       updateConnectionUI(isConnected, isConnecting, name);
+      const qb = el.mushafBuilder || document.querySelector("mushaf-builder");
+      if (qb && typeof qb.setDeviceCapabilities === "function") {
+        qb.setDeviceCapabilities({ isConnected });
+      }
     });
 
     window.addEventListener("ble-status-changed", (e) => {
