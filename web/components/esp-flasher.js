@@ -453,7 +453,7 @@ class EspWebFlasher extends HTMLElement {
         <!-- Browser Compatibility Notice -->
         <div id="serialCompatAlert" class="alert-banner alert-warning" style="display: ${isSupported ? "none" : "flex"};" role="alert">
           <div>
-            <strong>Web Serial not supported:</strong> Use Chrome, Edge, or Opera on desktop to flash firmware over USB.
+            <strong>Web Serial not supported:</strong> Use Chrome, Edge, or Opera on desktop to flash firmware over USB or Bluetooth.
           </div>
         </div>
 
@@ -1087,6 +1087,7 @@ class EspWebFlasher extends HTMLElement {
       try {
         port = await navigator.serial.requestPort({
           filters: SERIAL_DEVICE_FILTERS,
+          allowedBluetoothServiceClassIds: ["00001101-0000-1000-8000-00805f9b34fb"]
         });
       } catch (filterErr) {
         if (filterErr.name === "NotFoundError") {
@@ -1098,7 +1099,9 @@ class EspWebFlasher extends HTMLElement {
           this.updateUI();
           return;
         }
-        port = await navigator.serial.requestPort();
+        port = await navigator.serial.requestPort({
+          allowedBluetoothServiceClassIds: ["00001101-0000-1000-8000-00805f9b34fb"]
+        });
       }
 
       this.port = port;
