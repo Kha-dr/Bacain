@@ -67,38 +67,34 @@ _Static_assert(sizeof(ble_sync_status_payload_t) == 12, "status payload");
 
 static const char *TAG = "ble_sync";
 
-#define RINGBUF_SIZE     (64 * 1024)
-#define CMD_QUEUE_LEN    16
+#define RINGBUF_SIZE (64 * 1024)
+#define CMD_QUEUE_LEN 16
 #define WORKER_TASK_STACK_SIZE 8192
 
 /* 128-bit Service and Characteristic UUIDs (stored little-endian in NimBLE) */
 /* Service: 0000fe60-0000-1000-8000-00805f9b34fb */
 static const ble_uuid128_t s_svc_uuid = {
-    .u = { .type = BLE_UUID_TYPE_128 },
-    .value = { 0xfb, 0x34, 0x9b, 0x5f, 0x80, 0x00, 0x00, 0x80,
-               0x00, 0x10, 0x00, 0x00, 0x60, 0xfe, 0x00, 0x00 }
-};
+    .u = {.type = BLE_UUID_TYPE_128},
+    .value = {0xfb, 0x34, 0x9b, 0x5f, 0x80, 0x00, 0x00, 0x80,
+              0x00, 0x10, 0x00, 0x00, 0x60, 0xfe, 0x00, 0x00}};
 
 /* Control Characteristic: 0000fe61-0000-1000-8000-00805f9b34fb */
 static const ble_uuid128_t s_chr_control_uuid = {
-    .u = { .type = BLE_UUID_TYPE_128 },
-    .value = { 0xfb, 0x34, 0x9b, 0x5f, 0x80, 0x00, 0x00, 0x80,
-               0x00, 0x10, 0x00, 0x00, 0x61, 0xfe, 0x00, 0x00 }
-};
+    .u = {.type = BLE_UUID_TYPE_128},
+    .value = {0xfb, 0x34, 0x9b, 0x5f, 0x80, 0x00, 0x00, 0x80,
+              0x00, 0x10, 0x00, 0x00, 0x61, 0xfe, 0x00, 0x00}};
 
 /* Data Characteristic: 0000fe62-0000-1000-8000-00805f9b34fb */
 static const ble_uuid128_t s_chr_data_uuid = {
-    .u = { .type = BLE_UUID_TYPE_128 },
-    .value = { 0xfb, 0x34, 0x9b, 0x5f, 0x80, 0x00, 0x00, 0x80,
-               0x00, 0x10, 0x00, 0x00, 0x62, 0xfe, 0x00, 0x00 }
-};
+    .u = {.type = BLE_UUID_TYPE_128},
+    .value = {0xfb, 0x34, 0x9b, 0x5f, 0x80, 0x00, 0x00, 0x80,
+              0x00, 0x10, 0x00, 0x00, 0x62, 0xfe, 0x00, 0x00}};
 
 /* Status Characteristic: 0000fe63-0000-1000-8000-00805f9b34fb */
 static const ble_uuid128_t s_chr_status_uuid = {
-    .u = { .type = BLE_UUID_TYPE_128 },
-    .value = { 0xfb, 0x34, 0x9b, 0x5f, 0x80, 0x00, 0x00, 0x80,
-               0x00, 0x10, 0x00, 0x00, 0x63, 0xfe, 0x00, 0x00 }
-};
+    .u = {.type = BLE_UUID_TYPE_128},
+    .value = {0xfb, 0x34, 0x9b, 0x5f, 0x80, 0x00, 0x00, 0x80,
+              0x00, 0x10, 0x00, 0x00, 0x63, 0xfe, 0x00, 0x00}};
 
 /* Characteristic Value Handles */
 static uint16_t s_control_val_handle;
@@ -107,33 +103,74 @@ static uint16_t s_status_val_handle;
 
 /* BLE Connection State */
 static uint16_t s_conn_handle = BLE_HS_CONN_HANDLE_NONE;
-static bool     s_is_connected = false;
-static bool     s_sync_running = false;
+static bool s_is_connected = false;
+static bool s_sync_running = false;
 static uint16_t s_current_mtu = 23;
 
 #define BLE_SYNC_DEFAULT_SLEEP_TIMEOUT_SEC 5
 
 /* Storage Target State */
 static storage_target_t s_storage_target = STORAGE_TARGET_FLASH;
-static uint16_t         s_sleep_timeout_sec = BLE_SYNC_DEFAULT_SLEEP_TIMEOUT_SEC;
-static bool             s_sleep_timeout_loaded = false;
+static uint16_t s_sleep_timeout_sec = BLE_SYNC_DEFAULT_SLEEP_TIMEOUT_SEC;
+static bool s_sleep_timeout_loaded = false;
 
 /* File Upload State */
-static FILE    *s_upload_fp = NULL;
-static bool     s_is_uploading = false;
-static bool     s_upload_error = false;
-static uint8_t  s_upload_err_status = BLE_SYNC_STATUS_OK;
+static FILE *s_upload_fp = NULL;
+static bool s_is_uploading = false;
+static bool s_upload_error = false;
+static uint8_t s_upload_err_status = BLE_SYNC_STATUS_OK;
 static uint32_t s_bytes_received = 0;
 static uint32_t s_expected_file_size = 0;
 static uint16_t s_expected_seq = 0;
-static char     s_upload_filename[128] = { 0 };
+static char s_upload_filename[128] = {0};
+
+/* Transfer snapshot for the UI (written by worker/host task, read by UI task) */
+static portMUX_TYPE s_xfer_mux = portMUX_INITIALIZER_UNLOCKED;
+static ble_sync_xfer_state_t s_xfer_state = BLE_SYNC_XFER_IDLE;
+static uint8_t s_xfer_status = BLE_SYNC_STATUS_OK;
+static uint32_t s_xfer_total = 0;
+static uint32_t s_xfer_final_bytes = 0;
+static char s_xfer_name[64] = {0};
+
+static void xfer_begin(const char *name, uint32_t total)
+{
+    taskENTER_CRITICAL(&s_xfer_mux);
+    strncpy(s_xfer_name, name ? name : "", sizeof(s_xfer_name) - 1);
+    s_xfer_name[sizeof(s_xfer_name) - 1] = '\0';
+    s_xfer_total = total;
+    s_xfer_final_bytes = 0;
+    s_xfer_status = BLE_SYNC_STATUS_OK;
+    s_xfer_state = BLE_SYNC_XFER_TRANSFERRING;
+    taskEXIT_CRITICAL(&s_xfer_mux);
+}
+
+static void xfer_end(ble_sync_xfer_state_t st, uint8_t status, uint32_t bytes)
+{
+    taskENTER_CRITICAL(&s_xfer_mux);
+    s_xfer_state = st;
+    s_xfer_status = status;
+    s_xfer_final_bytes = bytes;
+    taskEXIT_CRITICAL(&s_xfer_mux);
+}
+
+static void xfer_reset(void)
+{
+    taskENTER_CRITICAL(&s_xfer_mux);
+    s_xfer_state = BLE_SYNC_XFER_IDLE;
+    s_xfer_status = BLE_SYNC_STATUS_OK;
+    s_xfer_total = 0;
+    s_xfer_final_bytes = 0;
+    s_xfer_name[0] = '\0';
+    taskEXIT_CRITICAL(&s_xfer_mux);
+}
 
 /* Ringbuffer & Worker Task */
 static RingbufHandle_t s_data_ringbuf = NULL;
-static QueueHandle_t   s_cmd_queue = NULL;
-static TaskHandle_t    s_worker_task_hdl = NULL;
+static QueueHandle_t s_cmd_queue = NULL;
+static TaskHandle_t s_worker_task_hdl = NULL;
 
-typedef enum {
+typedef enum
+{
     CMD_LIST_BOOKS,
     CMD_START_UPLOAD,
     CMD_FINISH_UPLOAD,
@@ -153,7 +190,8 @@ typedef enum {
     CMD_SET_BOOK_OFFSET,
 } ble_sync_cmd_type_t;
 
-typedef struct {
+typedef struct
+{
     ble_sync_cmd_type_t type;
     char filename[128];
     uint32_t file_size;
@@ -165,7 +203,7 @@ typedef struct {
 
 /* Optional Event Callback */
 static ble_sync_event_cb_t s_event_cb = NULL;
-static void               *s_event_cb_arg = NULL;
+static void *s_event_cb_arg = NULL;
 
 /* Forward Declarations */
 static void ble_sync_advertise(void);
@@ -183,7 +221,7 @@ static const struct ble_gatt_svc_def s_gatt_svcs[] = {
     {
         .type = BLE_GATT_SVC_TYPE_PRIMARY,
         .uuid = &s_svc_uuid.u,
-        .characteristics = (struct ble_gatt_chr_def[]) {
+        .characteristics = (struct ble_gatt_chr_def[]){
             {
                 /* Control Characteristic (0xFE61): Write, Notify */
                 .uuid = &s_chr_control_uuid.u,
@@ -207,8 +245,7 @@ static const struct ble_gatt_svc_def s_gatt_svcs[] = {
             },
             {
                 0, /* End of characteristics */
-            }
-        },
+            }},
     },
     {
         0, /* End of services */
@@ -219,29 +256,36 @@ static const struct ble_gatt_svc_def s_gatt_svcs[] = {
 
 static void sanitize_filename(const char *in, char *out, size_t max_len)
 {
-    if (!in || !out || max_len == 0) return;
+    if (!in || !out || max_len == 0)
+        return;
 
     // Strip leading path components
     const char *p = strrchr(in, '/');
-    if (p) in = p + 1;
+    if (p)
+        in = p + 1;
     p = strrchr(in, '\\');
-    if (p) in = p + 1;
+    if (p)
+        in = p + 1;
 
     // Strip leading dots to prevent hidden or traversal files
-    while (*in == '.') in++;
+    while (*in == '.')
+        in++;
 
     size_t i = 0;
-    while (*in && i < max_len - 1) {
+    while (*in && i < max_len - 1)
+    {
         char c = *in++;
         if (c == '/' || c == '\\' || c == ':' || c == '*' || c == '?' ||
-            c == '"' || c == '<' || c == '>' || c == '|' || (unsigned char)c < 32) {
+            c == '"' || c == '<' || c == '>' || c == '|' || (unsigned char)c < 32)
+        {
             c = '_';
         }
         out[i++] = c;
     }
     out[i] = '\0';
 
-    if (i == 0) {
+    if (i == 0)
+    {
         strncpy(out, "unnamed.txt", max_len - 1);
         out[max_len - 1] = '\0';
     }
@@ -249,33 +293,45 @@ static void sanitize_filename(const char *in, char *out, size_t max_len)
 
 static const char *ble_sync_get_books_dir(uint8_t *out_status)
 {
-    if (s_storage_target == STORAGE_TARGET_FLASH) {
-        if (!flash_storage_is_mounted()) {
+    if (s_storage_target == STORAGE_TARGET_FLASH)
+    {
+        if (!flash_storage_is_mounted())
+        {
             esp_err_t err = flash_storage_init();
-            if (err != ESP_OK || !flash_storage_is_mounted()) {
+            if (err != ESP_OK || !flash_storage_is_mounted())
+            {
                 ESP_LOGE(TAG, "SPI Flash storage is not mounted and init failed (err 0x%x)", err);
-                if (out_status) *out_status = BLE_SYNC_STATUS_STORAGE_ERR;
+                if (out_status)
+                    *out_status = BLE_SYNC_STATUS_STORAGE_ERR;
                 return NULL;
             }
         }
-        if (out_status) *out_status = BLE_SYNC_STATUS_OK;
+        if (out_status)
+            *out_status = BLE_SYNC_STATUS_OK;
         return "/spiflash/books";
-    } else { // STORAGE_TARGET_SDCARD
-        if (!sdcard_is_mounted()) {
+    }
+    else
+    { // STORAGE_TARGET_SDCARD
+        if (!sdcard_is_mounted())
+        {
             ESP_LOGE(TAG, "SD card is not mounted");
-            if (out_status) *out_status = BLE_SYNC_STATUS_STORAGE_ERR;
+            if (out_status)
+                *out_status = BLE_SYNC_STATUS_STORAGE_ERR;
             return NULL;
         }
-        if (out_status) *out_status = BLE_SYNC_STATUS_OK;
+        if (out_status)
+            *out_status = BLE_SYNC_STATUS_OK;
         return "/sdcard/books";
     }
 }
 
 static void ensure_books_dir(const char *dir_path)
 {
-    if (!dir_path) return;
+    if (!dir_path)
+        return;
     struct stat st;
-    if (stat(dir_path, &st) != 0) {
+    if (stat(dir_path, &st) != 0)
+    {
         mkdir(dir_path, 0755);
     }
 }
@@ -291,16 +347,22 @@ static void ble_sync_get_status_payload(ble_sync_status_payload_t *payload)
     uint64_t free_bytes = 0;
     uint64_t total_bytes = 0;
 
-    if (s_storage_target == STORAGE_TARGET_FLASH) {
-        if (!flash_storage_is_mounted()) {
+    if (s_storage_target == STORAGE_TARGET_FLASH)
+    {
+        if (!flash_storage_is_mounted())
+        {
             flash_storage_init();
         }
-        if (flash_storage_is_mounted()) {
+        if (flash_storage_is_mounted())
+        {
             free_bytes = flash_storage_get_free_bytes();
             total_bytes = flash_storage_get_total_bytes();
         }
-    } else {
-        if (sdcard_is_mounted()) {
+    }
+    else
+    {
+        if (sdcard_is_mounted())
+        {
             free_bytes = sdcard_get_free_bytes();
             total_bytes = sdcard_get_total_bytes();
         }
@@ -312,21 +374,27 @@ static void ble_sync_get_status_payload(ble_sync_status_payload_t *payload)
 
 static esp_err_t ble_sync_notify(uint16_t val_handle, const void *data, uint16_t len)
 {
-    if (!s_is_connected || s_conn_handle == BLE_HS_CONN_HANDLE_NONE) {
+    if (!s_is_connected || s_conn_handle == BLE_HS_CONN_HANDLE_NONE)
+    {
         return ESP_ERR_INVALID_STATE;
     }
 
     struct os_mbuf *om = ble_hs_mbuf_from_flat(data, len);
-    if (!om) {
+    if (!om)
+    {
         ESP_LOGE(TAG, "Failed to allocate os_mbuf for notification");
         return ESP_ERR_NO_MEM;
     }
 
     int rc = ble_gatts_notify_custom(s_conn_handle, val_handle, om);
-    if (rc != 0) {
-        if (rc == BLE_HS_EDISABLED) {
+    if (rc != 0)
+    {
+        if (rc == BLE_HS_EDISABLED)
+        {
             ESP_LOGD(TAG, "Notifications disabled by client for handle %u", val_handle);
-        } else {
+        }
+        else
+        {
             ESP_LOGW(TAG, "ble_gatts_notify_custom failed: rc=%d", rc);
         }
         return ESP_FAIL;
@@ -336,25 +404,35 @@ static esp_err_t ble_sync_notify(uint16_t val_handle, const void *data, uint16_t
 
 static void sanitize_rel_path(const char *in, char *out, size_t max_len)
 {
-    if (!in || !out || max_len == 0) return;
+    if (!in || !out || max_len == 0)
+        return;
 
-    while (*in == '/' || *in == '\\' || *in == '.') {
+    while (*in == '/' || *in == '\\' || *in == '.')
+    {
         in++;
     }
 
     size_t i = 0;
     bool seen_slash = false;
-    while (*in && i < max_len - 1) {
+    while (*in && i < max_len - 1)
+    {
         char c = *in++;
-        if (c == '\\') c = '/';
-        if (c == '/') {
-            if (seen_slash || i == 0 || *in == '.' || *in == '/' || *in == '\0') {
+        if (c == '\\')
+            c = '/';
+        if (c == '/')
+        {
+            if (seen_slash || i == 0 || *in == '.' || *in == '/' || *in == '\0')
+            {
                 c = '_';
-            } else {
+            }
+            else
+            {
                 seen_slash = true;
             }
-        } else if (c == ':' || c == '*' || c == '?' ||
-                   c == '"' || c == '<' || c == '>' || c == '|' || (unsigned char)c < 32) {
+        }
+        else if (c == ':' || c == '*' || c == '?' ||
+                 c == '"' || c == '<' || c == '>' || c == '|' || (unsigned char)c < 32)
+        {
             c = '_';
         }
         out[i++] = c;
@@ -374,18 +452,21 @@ static void send_list_book_entry(const char *name, uint32_t size, uint8_t is_las
     resp[6] = (uint8_t)((size >> 24) & 0xFF);
 
     size_t name_len = strlen(name);
-    if (name_len > sizeof(resp) - 14) {
+    if (name_len > sizeof(resp) - 14)
+    {
         name_len = sizeof(resp) - 14;
     }
     memcpy(&resp[7], name, name_len);
     resp[7 + name_len] = '\0';
 
     size_t total_len = 7 + name_len + 1;
-    if (name_len > 0 && name[name_len - 1] != '/') {
+    if (name_len > 0 && name[name_len - 1] != '/')
+    {
         size_t book_offset = 0;
         size_t total_bytes = 0;
         size_t bm_count = 0;
-        if (book_library_get_book_state(name, &book_offset, &total_bytes, NULL, &bm_count) != ESP_OK) {
+        if (book_library_get_book_state(name, &book_offset, &total_bytes, NULL, &bm_count) != ESP_OK)
+        {
             book_offset = 0;
             bm_count = 0;
         }
@@ -409,9 +490,10 @@ static void handle_cmd_list_books(void)
 {
     uint8_t storage_err = BLE_SYNC_STATUS_OK;
     const char *books_dir = ble_sync_get_books_dir(&storage_err);
-    if (!books_dir || storage_err != BLE_SYNC_STATUS_OK) {
+    if (!books_dir || storage_err != BLE_SYNC_STATUS_OK)
+    {
         ESP_LOGE(TAG, "Storage target not available for listing books");
-        uint8_t err_resp[8] = { BLE_SYNC_OP_LIST_BOOKS, BLE_SYNC_STATUS_STORAGE_ERR, 1, 0, 0, 0, 0, 0 };
+        uint8_t err_resp[8] = {BLE_SYNC_OP_LIST_BOOKS, BLE_SYNC_STATUS_STORAGE_ERR, 1, 0, 0, 0, 0, 0};
         ble_sync_notify(s_control_val_handle, err_resp, sizeof(err_resp));
         return;
     }
@@ -420,9 +502,10 @@ static void handle_cmd_list_books(void)
     ensure_books_dir(books_dir);
 
     DIR *dir = opendir(books_dir);
-    if (!dir) {
+    if (!dir)
+    {
         ESP_LOGE(TAG, "Failed to open directory %s", books_dir);
-        uint8_t err_resp[8] = { BLE_SYNC_OP_LIST_BOOKS, BLE_SYNC_STATUS_ERROR, 1, 0, 0, 0, 0, 0 };
+        uint8_t err_resp[8] = {BLE_SYNC_OP_LIST_BOOKS, BLE_SYNC_STATUS_ERROR, 1, 0, 0, 0, 0, 0};
         ble_sync_notify(s_control_val_handle, err_resp, sizeof(err_resp));
         return;
     }
@@ -432,23 +515,30 @@ static void handle_cmd_list_books(void)
     bool has_pending = false;
 
     struct dirent *entry;
-    while ((entry = readdir(dir)) != NULL) {
-        if (!s_is_connected) {
+    while ((entry = readdir(dir)) != NULL)
+    {
+        if (!s_is_connected)
+        {
             break;
         }
 
-        if (entry->d_name[0] == '.') continue; // skip hidden files
+        if (entry->d_name[0] == '.')
+            continue; // skip hidden files
 
         size_t nlen = strlen(entry->d_name);
-        if (nlen < 4) continue;
-        if (strcasecmp(entry->d_name + nlen - 4, ".txt") != 0) continue;
+        if (nlen < 4)
+            continue;
+        if (strcasecmp(entry->d_name + nlen - 4, ".txt") != 0)
+            continue;
 
         char fpath[512];
         snprintf(fpath, sizeof(fpath), "%s/%s", books_dir, entry->d_name);
 
         struct stat st;
-        if (stat(fpath, &st) == 0 && S_ISREG(st.st_mode)) {
-            if (has_pending) {
+        if (stat(fpath, &st) == 0 && S_ISREG(st.st_mode))
+        {
+            if (has_pending)
+            {
                 send_list_book_entry(pending_name, pending_size, 0);
             }
             strncpy(pending_name, entry->d_name, sizeof(pending_name) - 1);
@@ -459,11 +549,14 @@ static void handle_cmd_list_books(void)
     }
     closedir(dir);
 
-    if (has_pending) {
+    if (has_pending)
+    {
         send_list_book_entry(pending_name, pending_size, 1);
-    } else {
+    }
+    else
+    {
         // Empty list notification
-        uint8_t empty_resp[8] = { BLE_SYNC_OP_LIST_BOOKS, BLE_SYNC_STATUS_OK, 1, 0, 0, 0, 0, 0 };
+        uint8_t empty_resp[8] = {BLE_SYNC_OP_LIST_BOOKS, BLE_SYNC_STATUS_OK, 1, 0, 0, 0, 0, 0};
         ble_sync_notify(s_control_val_handle, empty_resp, sizeof(empty_resp));
     }
 }
@@ -472,26 +565,32 @@ static void handle_cmd_start_upload(const ble_sync_cmd_msg_t *cmd)
 {
     ESP_LOGI(TAG, "Start upload: name='%s', size=%u", cmd->filename, (unsigned)cmd->file_size);
 
-    if (s_upload_fp != NULL) {
+    if (s_upload_fp != NULL)
+    {
         fclose(s_upload_fp);
         s_upload_fp = NULL;
     }
 
     // Flush leftover data in ringbuffer if any
-    if (s_data_ringbuf != NULL) {
+    if (s_data_ringbuf != NULL)
+    {
         size_t dummy_sz = 0;
         void *dummy = NULL;
-        while ((dummy = xRingbufferReceiveUpTo(s_data_ringbuf, &dummy_sz, 0, 4096)) != NULL) {
+        while ((dummy = xRingbufferReceiveUpTo(s_data_ringbuf, &dummy_sz, 0, 4096)) != NULL)
+        {
             vRingbufferReturnItem(s_data_ringbuf, dummy);
         }
     }
 
     uint8_t storage_err = BLE_SYNC_STATUS_OK;
     const char *books_dir = ble_sync_get_books_dir(&storage_err);
-    if (!books_dir || storage_err != BLE_SYNC_STATUS_OK) {
+    if (!books_dir || storage_err != BLE_SYNC_STATUS_OK)
+    {
         ESP_LOGE(TAG, "Target storage not available for start upload");
         s_is_uploading = false;
-        uint8_t resp[2] = { BLE_SYNC_OP_START_UPLOAD, BLE_SYNC_STATUS_STORAGE_ERR };
+        xfer_begin(cmd->filename, cmd->file_size);
+        xfer_end(BLE_SYNC_XFER_FAILED, BLE_SYNC_STATUS_STORAGE_ERR, 0);
+        uint8_t resp[2] = {BLE_SYNC_OP_START_UPLOAD, BLE_SYNC_STATUS_STORAGE_ERR};
         ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
         return;
     }
@@ -514,52 +613,67 @@ static void handle_cmd_start_upload(const ble_sync_cmd_msg_t *cmd)
     uint64_t free_bytes = 0;
     const char *mount_path = (s_storage_target == 0 ? "/sdcard" : "/spiflash");
     esp_vfs_fat_info(mount_path, &total_bytes, &free_bytes);
-    if (cmd->file_size > 0 && free_bytes > 0 && ((uint64_t)cmd->file_size + 16384ULL) > free_bytes) {
-        ESP_LOGE(TAG, "Upload rejected: file size %u B exceeds free space %llu B", (unsigned)cmd->file_size, (unsigned long long)free_bytes);
+    if (cmd->file_size > 0 && free_bytes > 0 && ((uint64_t)cmd->file_size + 16384ULL) > free_bytes)
+    {
+        ESP_LOGE(TAG, "Upload rejected: file size %u B exceeds free space %llu B",
+                 (unsigned)cmd->file_size, (unsigned long long)free_bytes);
         s_is_uploading = false;
-        uint8_t resp[2] = { BLE_SYNC_OP_START_UPLOAD, BLE_SYNC_STATUS_SIZE_ERR };
+        xfer_begin(s_upload_filename, cmd->file_size);
+        xfer_end(BLE_SYNC_XFER_FAILED, BLE_SYNC_STATUS_SIZE_ERR, 0);
+        uint8_t resp[2] = {BLE_SYNC_OP_START_UPLOAD, BLE_SYNC_STATUS_SIZE_ERR};
         ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
         return;
     }
 
     s_upload_fp = fopen(fpath, "wb");
     uint8_t status = BLE_SYNC_STATUS_OK;
-    if (!s_upload_fp) {
+    if (!s_upload_fp)
+    {
         ESP_LOGE(TAG, "Failed to open '%s' for write", fpath);
         status = BLE_SYNC_STATUS_ERROR;
         s_is_uploading = false;
-    } else {
+        xfer_begin(s_upload_filename, cmd->file_size);
+        xfer_end(BLE_SYNC_XFER_FAILED, status, 0);
+    }
+    else
+    {
         s_is_uploading = true;
+        xfer_begin(s_upload_filename, cmd->file_size);
         ESP_LOGI(TAG, "Upload target file opened: %s", fpath);
     }
 
-    uint8_t resp[2] = { BLE_SYNC_OP_START_UPLOAD, status };
+    uint8_t resp[2] = {BLE_SYNC_OP_START_UPLOAD, status};
     ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
 
-    if (status == BLE_SYNC_STATUS_OK && s_event_cb) {
+    if (status == BLE_SYNC_STATUS_OK && s_event_cb)
+    {
         s_event_cb(BLE_SYNC_EVT_UPLOAD_START, s_upload_filename, s_event_cb_arg);
     }
 }
-
 static void handle_cmd_finish_upload(void)
 {
     ESP_LOGI(TAG, "Finish upload requested");
 
     // Drain all remaining data from the ringbuffer into the file
-    if (s_data_ringbuf != NULL && s_upload_fp != NULL) {
+    if (s_data_ringbuf != NULL && s_upload_fp != NULL)
+    {
         size_t item_sz = 0;
         uint8_t *item = NULL;
-        while ((item = (uint8_t *)xRingbufferReceiveUpTo(s_data_ringbuf, &item_sz, 0, 4096)) != NULL) {
-            if (fwrite(item, 1, item_sz, s_upload_fp) != item_sz) {
+        while ((item = (uint8_t *)xRingbufferReceiveUpTo(s_data_ringbuf, &item_sz, 0, 4096)) != NULL)
+        {
+            if (fwrite(item, 1, item_sz, s_upload_fp) != item_sz)
+            {
                 ESP_LOGE(TAG, "fwrite failed while draining ringbuffer");
-                if (s_upload_err_status == BLE_SYNC_STATUS_OK) s_upload_err_status = BLE_SYNC_STATUS_WRITE_ERR;
+                if (s_upload_err_status == BLE_SYNC_STATUS_OK)
+                    s_upload_err_status = BLE_SYNC_STATUS_WRITE_ERR;
                 s_upload_error = true;
             }
             vRingbufferReturnItem(s_data_ringbuf, item);
         }
     }
 
-    if (s_upload_fp != NULL) {
+    if (s_upload_fp != NULL)
+    {
         fflush(s_upload_fp);
         fsync(fileno(s_upload_fp));
         fclose(s_upload_fp);
@@ -568,10 +682,12 @@ static void handle_cmd_finish_upload(void)
 
     s_is_uploading = false;
 
-    if (s_expected_file_size > 0 && s_bytes_received != s_expected_file_size) {
+    if (s_expected_file_size > 0 && s_bytes_received != s_expected_file_size)
+    {
         ESP_LOGE(TAG, "Upload size mismatch: got %u, expected %u",
                  (unsigned)s_bytes_received, (unsigned)s_expected_file_size);
-        if (s_upload_err_status == BLE_SYNC_STATUS_OK) s_upload_err_status = BLE_SYNC_STATUS_SIZE_ERR;
+        if (s_upload_err_status == BLE_SYNC_STATUS_OK)
+            s_upload_err_status = BLE_SYNC_STATUS_SIZE_ERR;
         s_upload_error = true;
     }
 
@@ -579,11 +695,13 @@ static void handle_cmd_finish_upload(void)
     const char *books_dir = ble_sync_get_books_dir(&storage_err);
 
     uint8_t status = s_upload_error ? (s_upload_err_status != BLE_SYNC_STATUS_OK ? s_upload_err_status : BLE_SYNC_STATUS_ERROR) : BLE_SYNC_STATUS_OK;
-    if (storage_err != BLE_SYNC_STATUS_OK) {
+    if (storage_err != BLE_SYNC_STATUS_OK)
+    {
         status = BLE_SYNC_STATUS_STORAGE_ERR;
     }
 
-    if (s_upload_error && s_upload_filename[0] != '\0' && books_dir != NULL) {
+    if (s_upload_error && s_upload_filename[0] != '\0' && books_dir != NULL)
+    {
         char fpath[256];
         snprintf(fpath, sizeof(fpath), "%s/%s", books_dir, s_upload_filename);
         unlink(fpath);
@@ -591,13 +709,17 @@ static void handle_cmd_finish_upload(void)
     }
 
 #if CONFIG_BOARD_MUSHAF_ENABLE || BOARD_MUSHAF_ENABLE
-    if (!s_upload_error && strcasecmp(s_upload_filename, "mushaf.bqm") == 0) {
+    if (!s_upload_error && strcasecmp(s_upload_filename, "mushaf.bqm") == 0)
+    {
         mushaf_reader_init(mushaf_reader_get_state());
-        if (!mushaf_reader_has_bqm()) {
+        if (!mushaf_reader_has_bqm())
+        {
             ESP_LOGE(TAG, "Uploaded %s failed BQM header validation", s_upload_filename);
-            if (s_upload_err_status == BLE_SYNC_STATUS_OK) s_upload_err_status = BLE_SYNC_STATUS_BQM_INVALID;
+            if (s_upload_err_status == BLE_SYNC_STATUS_OK)
+                s_upload_err_status = BLE_SYNC_STATUS_BQM_INVALID;
             s_upload_error = true;
-            if (books_dir != NULL) {
+            if (books_dir != NULL)
+            {
                 char fpath[256];
                 snprintf(fpath, sizeof(fpath), "%s/%s", books_dir, s_upload_filename);
                 unlink(fpath);
@@ -608,9 +730,12 @@ static void handle_cmd_finish_upload(void)
 #endif
 
     status = s_upload_error ? (s_upload_err_status != BLE_SYNC_STATUS_OK ? s_upload_err_status : BLE_SYNC_STATUS_ERROR) : BLE_SYNC_STATUS_OK;
-    if (storage_err != BLE_SYNC_STATUS_OK) {
+    if (storage_err != BLE_SYNC_STATUS_OK)
+    {
         status = BLE_SYNC_STATUS_STORAGE_ERR;
     }
+    xfer_end(status == BLE_SYNC_STATUS_OK ? BLE_SYNC_XFER_COMPLETE : BLE_SYNC_XFER_FAILED,
+             status, s_bytes_received);
 
     uint8_t resp[6] = {
         BLE_SYNC_OP_FINISH_UPLOAD,
@@ -618,14 +743,14 @@ static void handle_cmd_finish_upload(void)
         (uint8_t)(s_bytes_received & 0xFF),
         (uint8_t)((s_bytes_received >> 8) & 0xFF),
         (uint8_t)((s_bytes_received >> 16) & 0xFF),
-        (uint8_t)((s_bytes_received >> 24) & 0xFF)
-    };
+        (uint8_t)((s_bytes_received >> 24) & 0xFF)};
     ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
 
     ESP_LOGI(TAG, "Upload finished: %u bytes received, status=%d",
              (unsigned)s_bytes_received, status);
 
-    if (s_event_cb) {
+    if (s_event_cb)
+    {
         s_event_cb(BLE_SYNC_EVT_UPLOAD_COMPLETE, s_upload_filename, s_event_cb_arg);
     }
 }
@@ -637,17 +762,20 @@ static void handle_cmd_delete_book(const ble_sync_cmd_msg_t *cmd)
     char safe_name[128];
     sanitize_filename(cmd->filename, safe_name, sizeof(safe_name));
 
-    if (s_upload_fp && strcmp(s_upload_filename, safe_name) == 0) {
+    if (s_upload_fp && strcmp(s_upload_filename, safe_name) == 0)
+    {
         fclose(s_upload_fp);
         s_upload_fp = NULL;
         s_is_uploading = false;
+        xfer_end(BLE_SYNC_XFER_ABORTED, BLE_SYNC_STATUS_OK, s_bytes_received);
     }
 
     uint8_t storage_err = BLE_SYNC_STATUS_OK;
     const char *books_dir = ble_sync_get_books_dir(&storage_err);
-    if (!books_dir || storage_err != BLE_SYNC_STATUS_OK) {
+    if (!books_dir || storage_err != BLE_SYNC_STATUS_OK)
+    {
         ESP_LOGE(TAG, "Target storage not available for delete book");
-        uint8_t resp[2] = { BLE_SYNC_OP_DELETE_BOOK, BLE_SYNC_STATUS_STORAGE_ERR };
+        uint8_t resp[2] = {BLE_SYNC_OP_DELETE_BOOK, BLE_SYNC_STATUS_STORAGE_ERR};
         ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
         return;
     }
@@ -658,17 +786,21 @@ static void handle_cmd_delete_book(const ble_sync_cmd_msg_t *cmd)
     int rc = unlink(fpath);
     uint8_t status = (rc == 0) ? BLE_SYNC_STATUS_OK : BLE_SYNC_STATUS_ERROR;
 
-    if (rc == 0) {
+    if (rc == 0)
+    {
         ESP_LOGI(TAG, "Deleted file: %s", fpath);
         book_library_delete_book_state(safe_name);
-    } else {
+    }
+    else
+    {
         ESP_LOGW(TAG, "Failed to delete file: %s", fpath);
     }
 
-    uint8_t resp[2] = { BLE_SYNC_OP_DELETE_BOOK, status };
+    uint8_t resp[2] = {BLE_SYNC_OP_DELETE_BOOK, status};
     ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
 
-    if (rc == 0 && s_event_cb) {
+    if (rc == 0 && s_event_cb)
+    {
         s_event_cb(BLE_SYNC_EVT_FILE_DELETED, safe_name, s_event_cb_arg);
     }
 }
@@ -676,8 +808,16 @@ static void handle_cmd_delete_book(const ble_sync_cmd_msg_t *cmd)
 static void handle_cmd_abort_upload(void)
 {
     ESP_LOGW(TAG, "Aborting file upload");
-
-    if (s_upload_fp != NULL) {
+    // Client sends ABORT after a failed FINISH; keep the FAILED result visible.
+    taskENTER_CRITICAL(&s_xfer_mux);
+    bool was_transferring = (s_xfer_state == BLE_SYNC_XFER_TRANSFERRING);
+    taskEXIT_CRITICAL(&s_xfer_mux);
+    if (was_transferring)
+    {
+        xfer_end(BLE_SYNC_XFER_ABORTED, BLE_SYNC_STATUS_OK, s_bytes_received);
+    }
+    if (s_upload_fp != NULL)
+    {
         fclose(s_upload_fp);
         s_upload_fp = NULL;
     }
@@ -686,7 +826,8 @@ static void handle_cmd_abort_upload(void)
     uint8_t storage_err = BLE_SYNC_STATUS_OK;
     const char *books_dir = ble_sync_get_books_dir(&storage_err);
 
-    if (s_upload_filename[0] != '\0' && books_dir != NULL) {
+    if (s_upload_filename[0] != '\0' && books_dir != NULL)
+    {
         char fpath[256];
         snprintf(fpath, sizeof(fpath), "%s/%s", books_dir, s_upload_filename);
         unlink(fpath);
@@ -694,10 +835,12 @@ static void handle_cmd_abort_upload(void)
         s_upload_filename[0] = '\0';
     }
 
-    if (s_data_ringbuf != NULL) {
+    if (s_data_ringbuf != NULL)
+    {
         size_t dummy_sz = 0;
         void *dummy = NULL;
-        while ((dummy = xRingbufferReceiveUpTo(s_data_ringbuf, &dummy_sz, 0, 4096)) != NULL) {
+        while ((dummy = xRingbufferReceiveUpTo(s_data_ringbuf, &dummy_sz, 0, 4096)) != NULL)
+        {
             vRingbufferReturnItem(s_data_ringbuf, dummy);
         }
     }
@@ -708,10 +851,11 @@ static void handle_cmd_abort_upload(void)
     s_upload_error = false;
 
     s_upload_err_status = BLE_SYNC_STATUS_OK;
-    uint8_t resp[2] = { BLE_SYNC_OP_ABORT_UPLOAD, BLE_SYNC_STATUS_OK };
+    uint8_t resp[2] = {BLE_SYNC_OP_ABORT_UPLOAD, BLE_SYNC_STATUS_OK};
     ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
 
-    if (s_event_cb) {
+    if (s_event_cb)
+    {
         s_event_cb(BLE_SYNC_EVT_UPLOAD_ABORTED, NULL, s_event_cb_arg);
     }
 }
@@ -721,20 +865,25 @@ static void handle_cmd_set_storage_target(const ble_sync_cmd_msg_t *cmd)
     ESP_LOGI(TAG, "Set storage target requested: %u", cmd->storage_target);
     uint8_t status = BLE_SYNC_STATUS_OK;
 
-    if (cmd->storage_target != STORAGE_TARGET_SDCARD && cmd->storage_target != STORAGE_TARGET_FLASH) {
+    if (cmd->storage_target != STORAGE_TARGET_SDCARD && cmd->storage_target != STORAGE_TARGET_FLASH)
+    {
         ESP_LOGE(TAG, "Invalid storage target opcode payload: %u", cmd->storage_target);
         status = BLE_SYNC_STATUS_STORAGE_ERR;
-    } else {
+    }
+    else
+    {
         esp_err_t err = ble_sync_set_storage_target((storage_target_t)cmd->storage_target);
-        if (err != ESP_OK) {
+        if (err != ESP_OK)
+        {
             status = BLE_SYNC_STATUS_STORAGE_ERR;
         }
     }
 
-    uint8_t resp[2] = { BLE_SYNC_OP_SET_STORAGE_TARGET, status };
+    uint8_t resp[2] = {BLE_SYNC_OP_SET_STORAGE_TARGET, status};
     ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
 
-    if (status == BLE_SYNC_STATUS_OK) {
+    if (status == BLE_SYNC_STATUS_OK)
+    {
         ble_sync_notify_status();
     }
 }
@@ -745,16 +894,20 @@ static void handle_cmd_set_font(uint8_t font_id)
     text_pager_font_size_t new_font = (font_id == 0 ? TEXT_PAGER_FONT_16 : TEXT_PAGER_FONT_12);
     text_pager_set_font_size(new_font);
     nvs_handle_t h;
-    if (nvs_open("settings", NVS_READWRITE, &h) == ESP_OK) {
+    if (nvs_open("settings", NVS_READWRITE, &h) == ESP_OK)
+    {
         nvs_set_u8(h, "font_size", new_font == TEXT_PAGER_FONT_12 ? 0 : 1);
         nvs_commit(h);
         nvs_close(h);
-    } else {
+    }
+    else
+    {
         ESP_LOGE(TAG, "Failed to open NVS settings to save font_size");
     }
-    uint8_t resp[2] = { BLE_SYNC_OP_SET_FONT, BLE_SYNC_STATUS_OK };
+    uint8_t resp[2] = {BLE_SYNC_OP_SET_FONT, BLE_SYNC_STATUS_OK};
     ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
-    if (s_event_cb) {
+    if (s_event_cb)
+    {
         s_event_cb(BLE_SYNC_EVT_REQUEST_REFRESH, NULL, s_event_cb_arg);
     }
 }
@@ -762,9 +915,10 @@ static void handle_cmd_set_font(uint8_t font_id)
 static void handle_cmd_force_refresh(void)
 {
     ESP_LOGI(TAG, "Force display refresh requested");
-    uint8_t resp[2] = { BLE_SYNC_OP_FORCE_REFRESH, BLE_SYNC_STATUS_OK };
+    uint8_t resp[2] = {BLE_SYNC_OP_FORCE_REFRESH, BLE_SYNC_STATUS_OK};
     ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
-    if (s_event_cb) {
+    if (s_event_cb)
+    {
         s_event_cb(BLE_SYNC_EVT_REQUEST_REFRESH, NULL, s_event_cb_arg);
     }
 }
@@ -776,23 +930,27 @@ static void handle_cmd_set_sleep_timeout(uint16_t timeout_sec)
     s_sleep_timeout_loaded = true;
     nvs_handle_t nvs_hdl;
     esp_err_t err = nvs_open("settings", NVS_READWRITE, &nvs_hdl);
-    if (err == ESP_OK) {
+    if (err == ESP_OK)
+    {
         nvs_set_u16(nvs_hdl, "sleep_timeout", timeout_sec);
         nvs_commit(nvs_hdl);
         nvs_close(nvs_hdl);
-    } else {
+    }
+    else
+    {
         ESP_LOGE(TAG, "Failed to open NVS namespace settings: 0x%x", err);
     }
-    uint8_t resp[2] = { BLE_SYNC_OP_SET_SLEEP_TIMEOUT, BLE_SYNC_STATUS_OK };
+    uint8_t resp[2] = {BLE_SYNC_OP_SET_SLEEP_TIMEOUT, BLE_SYNC_STATUS_OK};
     ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
 }
 
 static void handle_cmd_trigger_sleep(void)
 {
     ESP_LOGI(TAG, "Trigger sleep requested via BLE");
-    uint8_t resp[2] = { BLE_SYNC_OP_TRIGGER_SLEEP, BLE_SYNC_STATUS_OK };
+    uint8_t resp[2] = {BLE_SYNC_OP_TRIGGER_SLEEP, BLE_SYNC_STATUS_OK};
     ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
-    if (s_event_cb) {
+    if (s_event_cb)
+    {
         s_event_cb(BLE_SYNC_EVT_REQUEST_SLEEP, NULL, s_event_cb_arg);
     }
 }
@@ -801,9 +959,10 @@ static void handle_cmd_set_nav_hints(uint8_t show)
 {
     ESP_LOGI(TAG, "Setting nav hints: %u", (unsigned)show);
     reader_ui_set_show_nav_hints(show != 0);
-    uint8_t resp[2] = { BLE_SYNC_OP_SET_NAV_HINTS, BLE_SYNC_STATUS_OK };
+    uint8_t resp[2] = {BLE_SYNC_OP_SET_NAV_HINTS, BLE_SYNC_STATUS_OK};
     ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
-    if (s_event_cb) {
+    if (s_event_cb)
+    {
         s_event_cb(BLE_SYNC_EVT_REQUEST_REFRESH, NULL, s_event_cb_arg);
     }
 }
@@ -813,17 +972,21 @@ static void handle_cmd_set_rotation(uint8_t rot)
     ESP_LOGI(TAG, "Setting rotation: %u", (unsigned)rot);
     nvs_handle_t nvs_hdl;
     esp_err_t err = nvs_open("settings", NVS_READWRITE, &nvs_hdl);
-    if (err == ESP_OK) {
+    if (err == ESP_OK)
+    {
         nvs_set_u8(nvs_hdl, "rotation", rot);
         nvs_commit(nvs_hdl);
         nvs_close(nvs_hdl);
-    } else {
+    }
+    else
+    {
         ESP_LOGE(TAG, "Failed to open NVS namespace settings: 0x%x", err);
     }
     reader_ui_set_rotation(rot);
-    uint8_t resp[2] = { BLE_SYNC_OP_SET_ROTATION, BLE_SYNC_STATUS_OK };
+    uint8_t resp[2] = {BLE_SYNC_OP_SET_ROTATION, BLE_SYNC_STATUS_OK};
     ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
-    if (s_event_cb) {
+    if (s_event_cb)
+    {
         s_event_cb(BLE_SYNC_EVT_REQUEST_REFRESH, NULL, s_event_cb_arg);
     }
 }
@@ -833,15 +996,18 @@ static void handle_cmd_set_button_invert(uint8_t inverted)
     ESP_LOGI(TAG, "Setting button invert: %u", (unsigned)inverted);
     nvs_handle_t nvs_hdl;
     esp_err_t err = nvs_open("settings", NVS_READWRITE, &nvs_hdl);
-    if (err == ESP_OK) {
+    if (err == ESP_OK)
+    {
         nvs_set_u8(nvs_hdl, "btn_invert", inverted != 0 ? 1 : 0);
         nvs_commit(nvs_hdl);
         nvs_close(nvs_hdl);
-    } else {
+    }
+    else
+    {
         ESP_LOGE(TAG, "Failed to open NVS namespace settings: 0x%x", err);
     }
     button_set_inverted(inverted != 0);
-    uint8_t resp[2] = { BLE_SYNC_OP_SET_BUTTON_INVERT, BLE_SYNC_STATUS_OK };
+    uint8_t resp[2] = {BLE_SYNC_OP_SET_BUTTON_INVERT, BLE_SYNC_STATUS_OK};
     ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
 }
 
@@ -854,7 +1020,8 @@ static void handle_cmd_get_bookmarks(const ble_sync_cmd_msg_t *cmd)
     size_t bookmarks[BOOK_MAX_BOOKMARKS] = {0};
     size_t bm_count = 0;
     esp_err_t err = book_library_get_book_state(rel_path, &byte_offset, &total_bytes, bookmarks, &bm_count);
-    if (bm_count > BOOK_MAX_BOOKMARKS) {
+    if (bm_count > BOOK_MAX_BOOKMARKS)
+    {
         bm_count = BOOK_MAX_BOOKMARKS;
     }
     uint8_t resp[11 + BOOK_MAX_BOOKMARKS * 4];
@@ -872,7 +1039,8 @@ static void handle_cmd_get_bookmarks(const ble_sync_cmd_msg_t *cmd)
     resp[8] = (uint8_t)((tot_u32 >> 16) & 0xFF);
     resp[9] = (uint8_t)((tot_u32 >> 24) & 0xFF);
     resp[10] = (uint8_t)bm_count;
-    for (size_t i = 0; i < bm_count; i++) {
+    for (size_t i = 0; i < bm_count; i++)
+    {
         uint32_t bm = (uint32_t)bookmarks[i];
         resp[11 + i * 4 + 0] = (uint8_t)(bm & 0xFF);
         resp[11 + i * 4 + 1] = (uint8_t)((bm >> 8) & 0xFF);
@@ -887,7 +1055,7 @@ static void handle_cmd_delete_bookmark(const ble_sync_cmd_msg_t *cmd)
     char rel_path[128] = {0};
     sanitize_rel_path(cmd->filename, rel_path, sizeof(rel_path));
     esp_err_t err = book_library_remove_book_bookmark(rel_path, (size_t)cmd->offset);
-    uint8_t resp[2] = { BLE_CTRL_OP_DELETE_BOOKMARK, (err == ESP_OK) ? BLE_SYNC_STATUS_OK : BLE_SYNC_STATUS_ERROR };
+    uint8_t resp[2] = {BLE_CTRL_OP_DELETE_BOOKMARK, (err == ESP_OK) ? BLE_SYNC_STATUS_OK : BLE_SYNC_STATUS_ERROR};
     ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
 }
 
@@ -896,7 +1064,7 @@ static void handle_cmd_add_bookmark(const ble_sync_cmd_msg_t *cmd)
     char rel_path[128] = {0};
     sanitize_rel_path(cmd->filename, rel_path, sizeof(rel_path));
     esp_err_t err = book_library_add_book_bookmark(rel_path, (size_t)cmd->offset);
-    uint8_t resp[2] = { BLE_CTRL_OP_ADD_BOOKMARK, (err == ESP_OK) ? BLE_SYNC_STATUS_OK : BLE_SYNC_STATUS_ERROR };
+    uint8_t resp[2] = {BLE_CTRL_OP_ADD_BOOKMARK, (err == ESP_OK) ? BLE_SYNC_STATUS_OK : BLE_SYNC_STATUS_ERROR};
     ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
 }
 
@@ -905,10 +1073,11 @@ static void handle_cmd_set_book_offset(const ble_sync_cmd_msg_t *cmd)
     char rel_path[128] = {0};
     sanitize_rel_path(cmd->filename, rel_path, sizeof(rel_path));
     esp_err_t err = book_library_set_book_offset(rel_path, (size_t)cmd->offset);
-    if (err == ESP_OK && s_event_cb) {
+    if (err == ESP_OK && s_event_cb)
+    {
         s_event_cb(BLE_SYNC_EVT_REQUEST_REFRESH, NULL, s_event_cb_arg);
     }
-    uint8_t resp[2] = { BLE_CTRL_OP_SET_BOOK_OFFSET, (err == ESP_OK) ? BLE_SYNC_STATUS_OK : BLE_SYNC_STATUS_ERROR };
+    uint8_t resp[2] = {BLE_CTRL_OP_SET_BOOK_OFFSET, (err == ESP_OK) ? BLE_SYNC_STATUS_OK : BLE_SYNC_STATUS_ERROR};
     ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
 }
 
@@ -917,11 +1086,15 @@ static void ble_sync_worker_task(void *pvParameters)
     ESP_LOGI(TAG, "Worker task started");
     ble_sync_cmd_msg_t cmd;
 
-    while (s_sync_running) {
-        if (!s_is_uploading) {
+    while (s_sync_running)
+    {
+        if (!s_is_uploading)
+        {
             // Idle state: wait for command
-            if (xQueueReceive(s_cmd_queue, &cmd, pdMS_TO_TICKS(1000)) == pdTRUE) {
-                switch (cmd.type) {
+            if (xQueueReceive(s_cmd_queue, &cmd, pdMS_TO_TICKS(1000)) == pdTRUE)
+            {
+                switch (cmd.type)
+                {
                 case CMD_LIST_BOOKS:
                     handle_cmd_list_books();
                     break;
@@ -977,10 +1150,14 @@ static void ble_sync_worker_task(void *pvParameters)
                     break;
                 }
             }
-        } else {
+        }
+        else
+        {
             // Uploading state: check for commands first
-            if (xQueueReceive(s_cmd_queue, &cmd, 0) == pdTRUE) {
-                switch (cmd.type) {
+            if (xQueueReceive(s_cmd_queue, &cmd, 0) == pdTRUE)
+            {
+                switch (cmd.type)
+                {
                 case CMD_FINISH_UPLOAD:
                     handle_cmd_finish_upload();
                     continue;
@@ -1032,34 +1209,42 @@ static void ble_sync_worker_task(void *pvParameters)
             }
 
             // Stream data from ringbuffer into open file
-            if (s_data_ringbuf != NULL && s_upload_fp != NULL) {
+            if (s_data_ringbuf != NULL && s_upload_fp != NULL)
+            {
                 size_t item_sz = 0;
                 uint8_t *item = (uint8_t *)xRingbufferReceiveUpTo(s_data_ringbuf, &item_sz,
-                                                                 pdMS_TO_TICKS(20), 4096);
-                if (item != NULL) {
+                                                                  pdMS_TO_TICKS(20), 4096);
+                if (item != NULL)
+                {
                     size_t written = fwrite(item, 1, item_sz, s_upload_fp);
-                    if (written != item_sz) {
+                    if (written != item_sz)
+                    {
                         ESP_LOGE(TAG, "fwrite failed: written %u != %u",
                                  (unsigned)written, (unsigned)item_sz);
-                        if (s_upload_err_status == BLE_SYNC_STATUS_OK) s_upload_err_status = BLE_SYNC_STATUS_WRITE_ERR;
+                        if (s_upload_err_status == BLE_SYNC_STATUS_OK)
+                            s_upload_err_status = BLE_SYNC_STATUS_WRITE_ERR;
                         s_upload_error = true;
                     }
                     vRingbufferReturnItem(s_data_ringbuf, item);
 
-                    if (s_event_cb) {
+                    if (s_event_cb)
+                    {
                         s_event_cb(BLE_SYNC_EVT_UPLOAD_PROGRESS,
                                    (void *)(uintptr_t)s_bytes_received,
                                    s_event_cb_arg);
                     }
                 }
-            } else {
+            }
+            else
+            {
                 vTaskDelay(pdMS_TO_TICKS(10));
             }
         }
     }
 
     ESP_LOGI(TAG, "Worker task terminating");
-    if (s_upload_fp != NULL) {
+    if (s_upload_fp != NULL)
+    {
         fclose(s_upload_fp);
         s_upload_fp = NULL;
     }
@@ -1072,19 +1257,22 @@ static void ble_sync_worker_task(void *pvParameters)
 static int ble_sync_control_access_cb(uint16_t conn_handle, uint16_t attr_handle,
                                       struct ble_gatt_access_ctxt *ctxt, void *arg)
 {
-    if (ctxt->op != BLE_GATT_ACCESS_OP_WRITE_CHR) {
+    if (ctxt->op != BLE_GATT_ACCESS_OP_WRITE_CHR)
+    {
         return BLE_ATT_ERR_UNLIKELY;
     }
 
     uint16_t len = OS_MBUF_PKTLEN(ctxt->om);
-    if (len == 0) {
+    if (len == 0)
+    {
         return BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN;
     }
 
     uint8_t buf[256];
     uint16_t copied = 0;
     int rc = ble_hs_mbuf_to_flat(ctxt->om, buf, sizeof(buf) - 1, &copied);
-    if (rc != 0 || copied == 0) {
+    if (rc != 0 || copied == 0)
+    {
         return BLE_ATT_ERR_UNLIKELY;
     }
     buf[copied] = '\0';
@@ -1095,22 +1283,26 @@ static int ble_sync_control_access_cb(uint16_t conn_handle, uint16_t attr_handle
     ble_sync_cmd_msg_t cmd;
     memset(&cmd, 0, sizeof(cmd));
 
-    switch (opcode) {
-    case BLE_SYNC_OP_GET_MUSHAF_STATE: {
+    switch (opcode)
+    {
+    case BLE_SYNC_OP_GET_MUSHAF_STATE:
+    {
 #if CONFIG_BOARD_MUSHAF_ENABLE || BOARD_MUSHAF_ENABLE
         const mushaf_state_t *qst = mushaf_reader_get_state();
         uint8_t resp[40];
         memset(resp, 0, sizeof(resp));
         resp[0] = BLE_SYNC_OP_GET_MUSHAF_STATE;
         resp[1] = BLE_SYNC_STATUS_OK;
-        if (qst != NULL) {
+        if (qst != NULL)
+        {
             resp[2] = qst->started ? 1 : 0;
             resp[3] = qst->surah;
             resp[4] = (uint8_t)(qst->ayah & 0xFF);
             resp[5] = (uint8_t)((qst->ayah >> 8) & 0xFF);
             resp[6] = qst->layer;
             resp[7] = qst->bookmark_count;
-            for (uint8_t i = 0; i < qst->bookmark_count && i < MUSHAF_MAX_BOOKMARKS; i++) {
+            for (uint8_t i = 0; i < qst->bookmark_count && i < MUSHAF_MAX_BOOKMARKS; i++)
+            {
                 size_t base = 8 + (size_t)i * 4;
                 resp[base + 0] = qst->bookmarks[i].surah;
                 resp[base + 1] = (uint8_t)(qst->bookmarks[i].ayah & 0xFF);
@@ -1120,23 +1312,27 @@ static int ble_sync_control_access_cb(uint16_t conn_handle, uint16_t attr_handle
         }
         ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
 #else
-        uint8_t resp[2] = { BLE_SYNC_OP_GET_MUSHAF_STATE, BLE_SYNC_STATUS_NOT_SUPPORTED };
+        uint8_t resp[2] = {BLE_SYNC_OP_GET_MUSHAF_STATE, BLE_SYNC_STATUS_NOT_SUPPORTED};
         ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
 #endif
         break;
     }
 
-    case BLE_SYNC_OP_SET_MUSHAF_STATE: {
+    case BLE_SYNC_OP_SET_MUSHAF_STATE:
+    {
 #if CONFIG_BOARD_MUSHAF_ENABLE || BOARD_MUSHAF_ENABLE
-        if (copied < 2) {
-            uint8_t resp[2] = { BLE_SYNC_OP_SET_MUSHAF_STATE, BLE_SYNC_STATUS_ERROR };
+        if (copied < 2)
+        {
+            uint8_t resp[2] = {BLE_SYNC_OP_SET_MUSHAF_STATE, BLE_SYNC_STATUS_ERROR};
             ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
             break;
         }
         uint8_t sub = buf[1];
-        if (sub == 0x01) {
-            if (copied < 6) {
-                uint8_t resp[2] = { BLE_SYNC_OP_SET_MUSHAF_STATE, BLE_SYNC_STATUS_ERROR };
+        if (sub == 0x01)
+        {
+            if (copied < 6)
+            {
+                uint8_t resp[2] = {BLE_SYNC_OP_SET_MUSHAF_STATE, BLE_SYNC_STATUS_ERROR};
                 ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
                 break;
             }
@@ -1144,43 +1340,52 @@ static int ble_sync_control_access_cb(uint16_t conn_handle, uint16_t attr_handle
             uint16_t ayah = (uint16_t)buf[3] | ((uint16_t)buf[4] << 8);
             uint8_t layer = buf[5];
             esp_err_t err = mushaf_reader_set_cursor(surah, ayah, layer);
-            if (err == ESP_OK && s_event_cb) {
+            if (err == ESP_OK && s_event_cb)
+            {
                 s_event_cb(BLE_SYNC_EVT_REQUEST_REFRESH, NULL, s_event_cb_arg);
             }
-            uint8_t resp[2] = { BLE_SYNC_OP_SET_MUSHAF_STATE, (err == ESP_OK) ? BLE_SYNC_STATUS_OK : BLE_SYNC_STATUS_ERROR };
+            uint8_t resp[2] = {BLE_SYNC_OP_SET_MUSHAF_STATE, (err == ESP_OK) ? BLE_SYNC_STATUS_OK : BLE_SYNC_STATUS_ERROR};
             ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
-        } else if (sub == 0x02) {
-            if (copied < 3) {
-                uint8_t resp[2] = { BLE_SYNC_OP_SET_MUSHAF_STATE, BLE_SYNC_STATUS_ERROR };
+        }
+        else if (sub == 0x02)
+        {
+            if (copied < 3)
+            {
+                uint8_t resp[2] = {BLE_SYNC_OP_SET_MUSHAF_STATE, BLE_SYNC_STATUS_ERROR};
                 ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
                 break;
             }
             uint8_t count = buf[2];
-            if (count > MUSHAF_MAX_BOOKMARKS || copied < (uint16_t)(3 + count * 4)) {
-                uint8_t resp[2] = { BLE_SYNC_OP_SET_MUSHAF_STATE, BLE_SYNC_STATUS_ERROR };
+            if (count > MUSHAF_MAX_BOOKMARKS || copied < (uint16_t)(3 + count * 4))
+            {
+                uint8_t resp[2] = {BLE_SYNC_OP_SET_MUSHAF_STATE, BLE_SYNC_STATUS_ERROR};
                 ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
                 break;
             }
             mushaf_bookmark_t list[MUSHAF_MAX_BOOKMARKS];
             memset(list, 0, sizeof(list));
-            for (uint8_t i = 0; i < count; i++) {
+            for (uint8_t i = 0; i < count; i++)
+            {
                 const uint8_t *p = &buf[3 + i * 4];
                 list[i].surah = p[0];
                 list[i].ayah = (uint16_t)p[1] | ((uint16_t)p[2] << 8);
                 list[i].juz = p[3];
             }
             esp_err_t err = mushaf_reader_set_bookmarks(list, count);
-            if (err == ESP_OK && s_event_cb) {
+            if (err == ESP_OK && s_event_cb)
+            {
                 s_event_cb(BLE_SYNC_EVT_REQUEST_REFRESH, NULL, s_event_cb_arg);
             }
-            uint8_t resp[2] = { BLE_SYNC_OP_SET_MUSHAF_STATE, (err == ESP_OK) ? BLE_SYNC_STATUS_OK : BLE_SYNC_STATUS_ERROR };
+            uint8_t resp[2] = {BLE_SYNC_OP_SET_MUSHAF_STATE, (err == ESP_OK) ? BLE_SYNC_STATUS_OK : BLE_SYNC_STATUS_ERROR};
             ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
-        } else {
-            uint8_t resp[2] = { BLE_SYNC_OP_SET_MUSHAF_STATE, BLE_SYNC_STATUS_ERROR };
+        }
+        else
+        {
+            uint8_t resp[2] = {BLE_SYNC_OP_SET_MUSHAF_STATE, BLE_SYNC_STATUS_ERROR};
             ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
         }
 #else
-        uint8_t resp[2] = { BLE_SYNC_OP_SET_MUSHAF_STATE, BLE_SYNC_STATUS_NOT_SUPPORTED };
+        uint8_t resp[2] = {BLE_SYNC_OP_SET_MUSHAF_STATE, BLE_SYNC_STATUS_NOT_SUPPORTED};
         ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
 #endif
         break;
@@ -1192,7 +1397,8 @@ static int ble_sync_control_access_cb(uint16_t conn_handle, uint16_t attr_handle
         break;
 
     case BLE_SYNC_OP_START_UPLOAD:
-        if (copied < 6) {
+        if (copied < 6)
+        {
             ESP_LOGE(TAG, "START_UPLOAD payload too short: %u bytes", copied);
             return BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN;
         }
@@ -1212,7 +1418,8 @@ static int ble_sync_control_access_cb(uint16_t conn_handle, uint16_t attr_handle
         break;
 
     case BLE_SYNC_OP_DELETE_BOOK:
-        if (copied < 2) {
+        if (copied < 2)
+        {
             ESP_LOGE(TAG, "DELETE_BOOK payload too short: %u bytes", copied);
             return BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN;
         }
@@ -1228,7 +1435,8 @@ static int ble_sync_control_access_cb(uint16_t conn_handle, uint16_t attr_handle
         break;
 
     case BLE_SYNC_OP_SET_STORAGE_TARGET:
-        if (copied < 2) {
+        if (copied < 2)
+        {
             ESP_LOGE(TAG, "SET_STORAGE_TARGET payload too short: %u bytes", copied);
             return BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN;
         }
@@ -1237,26 +1445,31 @@ static int ble_sync_control_access_cb(uint16_t conn_handle, uint16_t attr_handle
         xQueueSend(s_cmd_queue, &cmd, pdMS_TO_TICKS(50));
         break;
 
-    case BLE_CTRL_OP_GET_BOOKMARKS: {
-        if (copied < 2) {
-            uint8_t err_resp[11] = { BLE_CTRL_OP_GET_BOOKMARKS, BLE_SYNC_STATUS_ERROR };
+    case BLE_CTRL_OP_GET_BOOKMARKS:
+    {
+        if (copied < 2)
+        {
+            uint8_t err_resp[11] = {BLE_CTRL_OP_GET_BOOKMARKS, BLE_SYNC_STATUS_ERROR};
             ble_sync_notify(s_control_val_handle, err_resp, sizeof(err_resp));
             break;
         }
         cmd.type = CMD_GET_BOOKMARKS;
         strncpy(cmd.filename, (char *)&buf[1], sizeof(cmd.filename) - 1);
         cmd.filename[sizeof(cmd.filename) - 1] = '\0';
-        if (xQueueSend(s_cmd_queue, &cmd, pdMS_TO_TICKS(50)) != pdTRUE) {
+        if (xQueueSend(s_cmd_queue, &cmd, pdMS_TO_TICKS(50)) != pdTRUE)
+        {
             ESP_LOGE(TAG, "Command queue full for GET_BOOKMARKS");
-            uint8_t err_resp[11] = { BLE_CTRL_OP_GET_BOOKMARKS, BLE_SYNC_STATUS_ERROR };
+            uint8_t err_resp[11] = {BLE_CTRL_OP_GET_BOOKMARKS, BLE_SYNC_STATUS_ERROR};
             ble_sync_notify(s_control_val_handle, err_resp, sizeof(err_resp));
         }
         break;
     }
 
-    case BLE_CTRL_OP_DELETE_BOOKMARK: {
-        if (copied <= 5) {
-            uint8_t resp[2] = { BLE_CTRL_OP_DELETE_BOOKMARK, BLE_SYNC_STATUS_ERROR };
+    case BLE_CTRL_OP_DELETE_BOOKMARK:
+    {
+        if (copied <= 5)
+        {
+            uint8_t resp[2] = {BLE_CTRL_OP_DELETE_BOOKMARK, BLE_SYNC_STATUS_ERROR};
             ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
             break;
         }
@@ -1267,17 +1480,20 @@ static int ble_sync_control_access_cb(uint16_t conn_handle, uint16_t attr_handle
                      ((uint32_t)buf[4] << 24);
         strncpy(cmd.filename, (char *)&buf[5], sizeof(cmd.filename) - 1);
         cmd.filename[sizeof(cmd.filename) - 1] = '\0';
-        if (xQueueSend(s_cmd_queue, &cmd, pdMS_TO_TICKS(50)) != pdTRUE) {
+        if (xQueueSend(s_cmd_queue, &cmd, pdMS_TO_TICKS(50)) != pdTRUE)
+        {
             ESP_LOGE(TAG, "Command queue full for DELETE_BOOKMARK");
-            uint8_t resp[2] = { BLE_CTRL_OP_DELETE_BOOKMARK, BLE_SYNC_STATUS_ERROR };
+            uint8_t resp[2] = {BLE_CTRL_OP_DELETE_BOOKMARK, BLE_SYNC_STATUS_ERROR};
             ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
         }
         break;
     }
 
-    case BLE_CTRL_OP_ADD_BOOKMARK: {
-        if (copied <= 5) {
-            uint8_t resp[2] = { BLE_CTRL_OP_ADD_BOOKMARK, BLE_SYNC_STATUS_ERROR };
+    case BLE_CTRL_OP_ADD_BOOKMARK:
+    {
+        if (copied <= 5)
+        {
+            uint8_t resp[2] = {BLE_CTRL_OP_ADD_BOOKMARK, BLE_SYNC_STATUS_ERROR};
             ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
             break;
         }
@@ -1288,17 +1504,20 @@ static int ble_sync_control_access_cb(uint16_t conn_handle, uint16_t attr_handle
                      ((uint32_t)buf[4] << 24);
         strncpy(cmd.filename, (char *)&buf[5], sizeof(cmd.filename) - 1);
         cmd.filename[sizeof(cmd.filename) - 1] = '\0';
-        if (xQueueSend(s_cmd_queue, &cmd, pdMS_TO_TICKS(50)) != pdTRUE) {
+        if (xQueueSend(s_cmd_queue, &cmd, pdMS_TO_TICKS(50)) != pdTRUE)
+        {
             ESP_LOGE(TAG, "Command queue full for ADD_BOOKMARK");
-            uint8_t resp[2] = { BLE_CTRL_OP_ADD_BOOKMARK, BLE_SYNC_STATUS_ERROR };
+            uint8_t resp[2] = {BLE_CTRL_OP_ADD_BOOKMARK, BLE_SYNC_STATUS_ERROR};
             ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
         }
         break;
     }
 
-    case BLE_CTRL_OP_SET_BOOK_OFFSET: {
-        if (copied <= 5) {
-            uint8_t resp[2] = { BLE_CTRL_OP_SET_BOOK_OFFSET, BLE_SYNC_STATUS_ERROR };
+    case BLE_CTRL_OP_SET_BOOK_OFFSET:
+    {
+        if (copied <= 5)
+        {
+            uint8_t resp[2] = {BLE_CTRL_OP_SET_BOOK_OFFSET, BLE_SYNC_STATUS_ERROR};
             ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
             break;
         }
@@ -1309,16 +1528,18 @@ static int ble_sync_control_access_cb(uint16_t conn_handle, uint16_t attr_handle
                      ((uint32_t)buf[4] << 24);
         strncpy(cmd.filename, (char *)&buf[5], sizeof(cmd.filename) - 1);
         cmd.filename[sizeof(cmd.filename) - 1] = '\0';
-        if (xQueueSend(s_cmd_queue, &cmd, pdMS_TO_TICKS(50)) != pdTRUE) {
+        if (xQueueSend(s_cmd_queue, &cmd, pdMS_TO_TICKS(50)) != pdTRUE)
+        {
             ESP_LOGE(TAG, "Command queue full for SET_BOOK_OFFSET");
-            uint8_t resp[2] = { BLE_CTRL_OP_SET_BOOK_OFFSET, BLE_SYNC_STATUS_ERROR };
+            uint8_t resp[2] = {BLE_CTRL_OP_SET_BOOK_OFFSET, BLE_SYNC_STATUS_ERROR};
             ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
         }
         break;
     }
 
     case BLE_SYNC_OP_SET_FONT:
-        if (copied < 2) {
+        if (copied < 2)
+        {
             ESP_LOGE(TAG, "SET_FONT payload too short: %u bytes", copied);
             return BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN;
         }
@@ -1333,7 +1554,8 @@ static int ble_sync_control_access_cb(uint16_t conn_handle, uint16_t attr_handle
         break;
 
     case BLE_SYNC_OP_SET_SLEEP_TIMEOUT:
-        if (copied < 3) {
+        if (copied < 3)
+        {
             ESP_LOGE(TAG, "SET_SLEEP_TIMEOUT payload too short: %u bytes", copied);
             return BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN;
         }
@@ -1348,7 +1570,8 @@ static int ble_sync_control_access_cb(uint16_t conn_handle, uint16_t attr_handle
         break;
 
     case BLE_SYNC_OP_SET_NAV_HINTS:
-        if (copied < 2) {
+        if (copied < 2)
+        {
             ESP_LOGE(TAG, "SET_NAV_HINTS payload too short: %u bytes", copied);
             return BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN;
         }
@@ -1359,68 +1582,82 @@ static int ble_sync_control_access_cb(uint16_t conn_handle, uint16_t attr_handle
         break;
 
     case BLE_SYNC_OP_SET_ROTATION:
-        if (copied < 2) {
+        if (copied < 2)
+        {
             ESP_LOGE(TAG, "SET_ROTATION payload too short: %u bytes", copied);
             return BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN;
         }
         cmd.type = CMD_SET_ROTATION;
         cmd.param8 = buf[1];
         reader_ui_set_rotation(buf[1]);
-        if (s_cmd_queue != NULL) {
+        if (s_cmd_queue != NULL)
+        {
             xQueueSend(s_cmd_queue, &cmd, pdMS_TO_TICKS(50));
-        } else {
+        }
+        else
+        {
             handle_cmd_set_rotation(cmd.param8);
         }
         break;
 
     case BLE_SYNC_OP_SET_BUTTON_INVERT:
-        if (copied < 2) {
+        if (copied < 2)
+        {
             ESP_LOGE(TAG, "SET_BUTTON_INVERT payload too short: %u bytes", copied);
             return BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN;
         }
         cmd.type = CMD_SET_BUTTON_INVERT;
         cmd.param8 = (buf[1] != 0) ? 1 : 0;
         button_set_inverted(buf[1] != 0);
-        if (s_cmd_queue != NULL) {
+        if (s_cmd_queue != NULL)
+        {
             xQueueSend(s_cmd_queue, &cmd, pdMS_TO_TICKS(50));
-        } else {
+        }
+        else
+        {
             handle_cmd_set_button_invert(cmd.param8);
         }
         break;
 
-    case BLE_SYNC_OP_SET_STATUS_LED: {
-        if (copied < 2) {
+    case BLE_SYNC_OP_SET_STATUS_LED:
+    {
+        if (copied < 2)
+        {
             ESP_LOGE(TAG, "SET_STATUS_LED payload too short: %u bytes", copied);
-            uint8_t resp[2] = { BLE_SYNC_OP_SET_STATUS_LED, BLE_SYNC_STATUS_ERROR };
+            uint8_t resp[2] = {BLE_SYNC_OP_SET_STATUS_LED, BLE_SYNC_STATUS_ERROR};
             ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
             break;
         }
-        if (!status_led_is_available()) {
+        if (!status_led_is_available())
+        {
             ESP_LOGW(TAG, "Status LED not supported on this device");
-            uint8_t resp[2] = { BLE_SYNC_OP_SET_STATUS_LED, BLE_SYNC_STATUS_NOT_SUPPORTED };
+            uint8_t resp[2] = {BLE_SYNC_OP_SET_STATUS_LED, BLE_SYNC_STATUS_NOT_SUPPORTED};
             ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
             break;
         }
         status_led_set_enabled(buf[1] != 0);
-        uint8_t resp[2] = { BLE_SYNC_OP_SET_STATUS_LED, BLE_SYNC_STATUS_OK };
+        uint8_t resp[2] = {BLE_SYNC_OP_SET_STATUS_LED, BLE_SYNC_STATUS_OK};
         ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
         break;
     }
 
-    case BLE_SYNC_OP_SET_REFRESH_INTERVAL: {
-        if (copied < 2 || buf[1] > 100) {
+    case BLE_SYNC_OP_SET_REFRESH_INTERVAL:
+    {
+        if (copied < 2 || buf[1] > 100)
+        {
             ESP_LOGE(TAG, "SET_REFRESH_INTERVAL invalid payload (len=%u, val=%u)", copied, (copied >= 2) ? buf[1] : 0);
-            uint8_t resp[2] = { BLE_SYNC_OP_SET_REFRESH_INTERVAL, BLE_SYNC_STATUS_ERROR };
+            uint8_t resp[2] = {BLE_SYNC_OP_SET_REFRESH_INTERVAL, BLE_SYNC_STATUS_ERROR};
             ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
             break;
         }
         app_settings_save_refresh_interval(buf[1]);
-        uint8_t resp[2] = { BLE_SYNC_OP_SET_REFRESH_INTERVAL, BLE_SYNC_STATUS_OK };
+        uint8_t resp[2] = {BLE_SYNC_OP_SET_REFRESH_INTERVAL, BLE_SYNC_STATUS_OK};
         ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
         break;
     }
 
-    case BLE_SYNC_OP_GET_CONFIG: {
+    case BLE_SYNC_OP_GET_CONFIG:
+    {
         uint8_t nvs_font = 0;
         uint8_t nav_hints = 1;
         uint8_t rotation = 0;
@@ -1428,21 +1665,27 @@ static int ble_sync_control_access_cb(uint16_t conn_handle, uint16_t attr_handle
         uint8_t refresh_interval = reader_ui_get_full_refresh_interval();
         uint16_t sleep_timeout = BLE_SYNC_DEFAULT_SLEEP_TIMEOUT_SEC;
         nvs_handle_t nvs_hdl;
-        if (nvs_open("settings", NVS_READONLY, &nvs_hdl) == ESP_OK) {
+        if (nvs_open("settings", NVS_READONLY, &nvs_hdl) == ESP_OK)
+        {
             nvs_get_u8(nvs_hdl, "font_size", &nvs_font);
-            if (nvs_get_u8(nvs_hdl, "nav_hints", &nav_hints) != ESP_OK) {
+            if (nvs_get_u8(nvs_hdl, "nav_hints", &nav_hints) != ESP_OK)
+            {
                 nav_hints = reader_ui_get_show_nav_hints() ? 1 : 0;
             }
             nvs_get_u8(nvs_hdl, "rotation", &rotation);
             nvs_get_u8(nvs_hdl, "btn_invert", &btn_invert);
-            if (nvs_get_u8(nvs_hdl, "full_refresh_n", &refresh_interval) != ESP_OK) {
+            if (nvs_get_u8(nvs_hdl, "full_refresh_n", &refresh_interval) != ESP_OK)
+            {
                 refresh_interval = reader_ui_get_full_refresh_interval();
             }
-            if (nvs_get_u16(nvs_hdl, "sleep_timeout", &sleep_timeout) != ESP_OK) {
+            if (nvs_get_u16(nvs_hdl, "sleep_timeout", &sleep_timeout) != ESP_OK)
+            {
                 sleep_timeout = BLE_SYNC_DEFAULT_SLEEP_TIMEOUT_SEC;
             }
             nvs_close(nvs_hdl);
-        } else {
+        }
+        else
+        {
             nav_hints = reader_ui_get_show_nav_hints() ? 1 : 0;
             sleep_timeout = BLE_SYNC_DEFAULT_SLEEP_TIMEOUT_SEC;
             refresh_interval = reader_ui_get_full_refresh_interval();
@@ -1473,8 +1716,7 @@ static int ble_sync_control_access_cb(uint16_t conn_handle, uint16_t attr_handle
             (uint8_t)((BOARD_DISPLAY_WIDTH >> 8) & 0xFF),
             (uint8_t)(BOARD_DISPLAY_HEIGHT & 0xFF),
             (uint8_t)((BOARD_DISPLAY_HEIGHT >> 8) & 0xFF),
-            refresh_interval
-        };
+            refresh_interval};
         ble_sync_notify(s_control_val_handle, resp, sizeof(resp));
         break;
     }
@@ -1490,16 +1732,19 @@ static int ble_sync_control_access_cb(uint16_t conn_handle, uint16_t attr_handle
 static int ble_sync_data_access_cb(uint16_t conn_handle, uint16_t attr_handle,
                                    struct ble_gatt_access_ctxt *ctxt, void *arg)
 {
-    if (ctxt->op != BLE_GATT_ACCESS_OP_WRITE_CHR) {
+    if (ctxt->op != BLE_GATT_ACCESS_OP_WRITE_CHR)
+    {
         return BLE_ATT_ERR_UNLIKELY;
     }
 
     uint16_t total_len = OS_MBUF_PKTLEN(ctxt->om);
-    if (total_len < 2) {
+    if (total_len < 2)
+    {
         return BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN;
     }
 
-    if (!s_is_uploading || s_data_ringbuf == NULL) {
+    if (!s_is_uploading || s_data_ringbuf == NULL)
+    {
         ESP_LOGW(TAG, "Data packet received while not uploading");
         return BLE_ATT_ERR_UNLIKELY;
     }
@@ -1507,7 +1752,8 @@ static int ble_sync_data_access_cb(uint16_t conn_handle, uint16_t attr_handle,
     uint8_t chunk_buf[512];
     uint16_t copied = 0;
     int rc = ble_hs_mbuf_to_flat(ctxt->om, chunk_buf, sizeof(chunk_buf), &copied);
-    if (rc != 0 || copied < 2) {
+    if (rc != 0 || copied < 2)
+    {
         return BLE_ATT_ERR_UNLIKELY;
     }
 
@@ -1515,18 +1761,23 @@ static int ble_sync_data_access_cb(uint16_t conn_handle, uint16_t attr_handle,
     const uint8_t *payload = &chunk_buf[2];
     size_t payload_len = copied - 2;
 
-    if (seq != s_expected_seq) {
+    if (seq != s_expected_seq)
+    {
         ESP_LOGE(TAG, "Seq mismatch: expected %u, got %u", s_expected_seq, seq);
-        if (s_upload_err_status == BLE_SYNC_STATUS_OK) s_upload_err_status = BLE_SYNC_STATUS_SEQ_ERR;
+        if (s_upload_err_status == BLE_SYNC_STATUS_OK)
+            s_upload_err_status = BLE_SYNC_STATUS_SEQ_ERR;
         s_upload_error = true;
     }
     s_expected_seq = seq + 1;
 
-    if (payload_len > 0) {
+    if (payload_len > 0)
+    {
         BaseType_t sent = xRingbufferSend(s_data_ringbuf, payload, payload_len, pdMS_TO_TICKS(250));
-        if (sent != pdTRUE) {
+        if (sent != pdTRUE)
+        {
             ESP_LOGE(TAG, "Ringbuffer full, dropped %u bytes", (unsigned)payload_len);
-            if (s_upload_err_status == BLE_SYNC_STATUS_OK) s_upload_err_status = BLE_SYNC_STATUS_OVERFLOW;
+            if (s_upload_err_status == BLE_SYNC_STATUS_OK)
+                s_upload_err_status = BLE_SYNC_STATUS_OVERFLOW;
             s_upload_error = true;
             return BLE_ATT_ERR_INSUFFICIENT_RES;
         }
@@ -1539,7 +1790,8 @@ static int ble_sync_data_access_cb(uint16_t conn_handle, uint16_t attr_handle,
 static int ble_sync_status_access_cb(uint16_t conn_handle, uint16_t attr_handle,
                                      struct ble_gatt_access_ctxt *ctxt, void *arg)
 {
-    if (ctxt->op == BLE_GATT_ACCESS_OP_READ_CHR) {
+    if (ctxt->op == BLE_GATT_ACCESS_OP_READ_CHR)
+    {
         ble_sync_status_payload_t status;
         ble_sync_get_status_payload(&status);
         int rc = os_mbuf_append(ctxt->om, &status, sizeof(status));
@@ -1552,37 +1804,44 @@ static int ble_sync_status_access_cb(uint16_t conn_handle, uint16_t attr_handle,
 
 static int ble_sync_gap_event_cb(struct ble_gap_event *event, void *arg)
 {
-    switch (event->type) {
+    switch (event->type)
+    {
     case BLE_GAP_EVENT_CONNECT:
         ESP_LOGI(TAG, "BLE connection %s; status=%d",
                  event->connect.status == 0 ? "established" : "failed",
                  event->connect.status);
 
-        if (event->connect.status == 0) {
+        if (event->connect.status == 0)
+        {
             s_conn_handle = event->connect.conn_handle;
             s_is_connected = true;
+            xfer_reset();
 
             // Set preferred MTU to 512 (client initiates MTU exchange)
             ble_att_set_preferred_mtu(512);
 
             // Request optimal connection interval (15ms - 30ms) for high throughput
             struct ble_gap_upd_params params = {
-                .itvl_min = 12,  // 15 ms (12 * 1.25)
-                .itvl_max = 24,  // 30 ms (24 * 1.25)
-                .latency  = 0,
+                .itvl_min = 12, // 15 ms (12 * 1.25)
+                .itvl_max = 24, // 30 ms (24 * 1.25)
+                .latency = 0,
                 .supervision_timeout = 400, // 4000 ms
                 .min_ce_len = 0,
                 .max_ce_len = 0,
             };
             ble_gap_update_params(s_conn_handle, &params);
 
-            if (s_event_cb) {
+            if (s_event_cb)
+            {
                 s_event_cb(BLE_SYNC_EVT_CONNECTED, NULL, s_event_cb_arg);
             }
-        } else {
+        }
+        else
+        {
             s_conn_handle = BLE_HS_CONN_HANDLE_NONE;
             s_is_connected = false;
-            if (s_sync_running) {
+            if (s_sync_running)
+            {
                 ble_sync_advertise();
             }
         }
@@ -1593,16 +1852,19 @@ static int ble_sync_gap_event_cb(struct ble_gap_event *event, void *arg)
         s_is_connected = false;
         s_conn_handle = BLE_HS_CONN_HANDLE_NONE;
 
-        if (s_is_uploading) {
-            ble_sync_cmd_msg_t cmd = { .type = CMD_ABORT_UPLOAD };
+        if (s_is_uploading)
+        {
+            ble_sync_cmd_msg_t cmd = {.type = CMD_ABORT_UPLOAD};
             xQueueSend(s_cmd_queue, &cmd, 0);
         }
 
-        if (s_event_cb) {
+        if (s_event_cb)
+        {
             s_event_cb(BLE_SYNC_EVT_DISCONNECTED, NULL, s_event_cb_arg);
         }
 
-        if (s_sync_running) {
+        if (s_sync_running)
+        {
             ble_sync_advertise();
         }
         return 0;
@@ -1616,14 +1878,16 @@ static int ble_sync_gap_event_cb(struct ble_gap_event *event, void *arg)
     case BLE_GAP_EVENT_SUBSCRIBE:
         ESP_LOGI(TAG, "BLE subscribe event: attr_handle=%d, cur_notify=%d",
                  event->subscribe.attr_handle, event->subscribe.cur_notify);
-        if (event->subscribe.attr_handle == s_status_val_handle && event->subscribe.cur_notify) {
+        if (event->subscribe.attr_handle == s_status_val_handle && event->subscribe.cur_notify)
+        {
             ble_sync_notify_status();
         }
         return 0;
 
     case BLE_GAP_EVENT_ADV_COMPLETE:
         ESP_LOGI(TAG, "Advertising complete; reason=%d", event->adv_complete.reason);
-        if (s_sync_running && !s_is_connected) {
+        if (s_sync_running && !s_is_connected)
+        {
             ble_sync_advertise();
         }
         return 0;
@@ -1652,7 +1916,8 @@ static void ble_sync_advertise(void)
     fields.tx_pwr_lvl = BLE_HS_ADV_TX_PWR_LVL_AUTO;
 
     rc = ble_gap_adv_set_fields(&fields);
-    if (rc != 0) {
+    if (rc != 0)
+    {
         ESP_LOGE(TAG, "Failed to set adv fields: rc=%d", rc);
         return;
     }
@@ -1660,7 +1925,8 @@ static void ble_sync_advertise(void)
     // Scan response data (complete device name)
     memset(&rsp_fields, 0, sizeof(rsp_fields));
     const char *dev_name = ble_svc_gap_device_name();
-    if (!dev_name) {
+    if (!dev_name)
+    {
         dev_name = BLE_SYNC_DEVICE_NAME;
     }
     rsp_fields.name = (uint8_t *)dev_name;
@@ -1668,7 +1934,8 @@ static void ble_sync_advertise(void)
     rsp_fields.name_is_complete = 1;
 
     rc = ble_gap_adv_rsp_set_fields(&rsp_fields);
-    if (rc != 0) {
+    if (rc != 0)
+    {
         ESP_LOGE(TAG, "Failed to set scan rsp fields: rc=%d", rc);
         return;
     }
@@ -1680,20 +1947,23 @@ static void ble_sync_advertise(void)
 
     uint8_t own_addr_type;
     rc = ble_hs_id_infer_auto(0, &own_addr_type);
-    if (rc != 0) {
+    if (rc != 0)
+    {
         ESP_LOGE(TAG, "Failed to determine own address type: rc=%d", rc);
         own_addr_type = BLE_OWN_ADDR_PUBLIC;
     }
 
     rc = ble_gap_adv_start(own_addr_type, NULL, BLE_HS_FOREVER,
                            &adv_params, ble_sync_gap_event_cb, NULL);
-    if (rc != 0) {
+    if (rc != 0)
+    {
         ESP_LOGE(TAG, "Failed to start advertising: rc=%d", rc);
         return;
     }
 
     ESP_LOGI(TAG, "BLE advertising started as '%s'", dev_name);
-    if (s_event_cb) {
+    if (s_event_cb)
+    {
         s_event_cb(BLE_SYNC_EVT_ADVERTISING_STARTED, NULL, s_event_cb_arg);
     }
 }
@@ -1702,7 +1972,8 @@ static void ble_sync_on_sync(void)
 {
     ESP_LOGI(TAG, "NimBLE host synced");
     int rc = ble_hs_util_ensure_addr(0);
-    if (rc != 0) {
+    if (rc != 0)
+    {
         ESP_LOGE(TAG, "ble_hs_util_ensure_addr failed: %d", rc);
     }
     ble_sync_advertise();
@@ -1716,7 +1987,8 @@ static void ble_sync_on_reset(int reason)
 static void ble_sync_gatts_register_cb(struct ble_gatt_register_ctxt *ctxt, void *arg)
 {
     char buf[BLE_UUID_STR_LEN];
-    switch (ctxt->op) {
+    switch (ctxt->op)
+    {
     case BLE_GATT_REGISTER_OP_SVC:
         ESP_LOGD(TAG, "Registered service %s with handle=%d",
                  ble_uuid_to_str(ctxt->svc.svc_def->uuid, buf),
@@ -1749,7 +2021,8 @@ static void ble_sync_host_task(void *param)
 
 esp_err_t ble_sync_start(void)
 {
-    if (s_sync_running) {
+    if (s_sync_running)
+    {
         ESP_LOGI(TAG, "BLE sync already running");
         return ESP_OK;
     }
@@ -1760,28 +2033,34 @@ esp_err_t ble_sync_start(void)
 
     // Initialize NVS flash
     esp_err_t ret = nvs_flash_init();
-    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
+    {
         ESP_ERROR_CHECK(nvs_flash_erase());
         ret = nvs_flash_init();
     }
-    if (ret != ESP_OK) {
+    if (ret != ESP_OK)
+    {
         ESP_LOGE(TAG, "nvs_flash_init failed: %d", ret);
         return ret;
     }
 
     // Create command queue if needed
-    if (s_cmd_queue == NULL) {
+    if (s_cmd_queue == NULL)
+    {
         s_cmd_queue = xQueueCreate(CMD_QUEUE_LEN, sizeof(ble_sync_cmd_msg_t));
-        if (s_cmd_queue == NULL) {
+        if (s_cmd_queue == NULL)
+        {
             ESP_LOGE(TAG, "Failed to create command queue");
             return ESP_ERR_NO_MEM;
         }
     }
 
     // Create data ringbuffer if needed
-    if (s_data_ringbuf == NULL) {
+    if (s_data_ringbuf == NULL)
+    {
         s_data_ringbuf = xRingbufferCreate(RINGBUF_SIZE, RINGBUF_TYPE_BYTEBUF);
-        if (s_data_ringbuf == NULL) {
+        if (s_data_ringbuf == NULL)
+        {
             ESP_LOGE(TAG, "Failed to create ringbuffer");
             return ESP_ERR_NO_MEM;
         }
@@ -1790,14 +2069,16 @@ esp_err_t ble_sync_start(void)
     s_sync_running = true;
 
     // Start worker task if needed
-    if (s_worker_task_hdl == NULL) {
+    if (s_worker_task_hdl == NULL)
+    {
         BaseType_t task_ret = xTaskCreate(ble_sync_worker_task,
                                           "ble_sync_wrk",
                                           WORKER_TASK_STACK_SIZE,
                                           NULL,
                                           5,
                                           &s_worker_task_hdl);
-        if (task_ret != pdPASS) {
+        if (task_ret != pdPASS)
+        {
             ESP_LOGE(TAG, "Failed to create worker task");
             s_sync_running = false;
             return ESP_ERR_NO_MEM;
@@ -1806,16 +2087,19 @@ esp_err_t ble_sync_start(void)
 
     // Initialize NimBLE host stack
     static bool s_nimble_inited = false;
-    if (!s_nimble_inited) {
+    if (!s_nimble_inited)
+    {
 #if __has_include("esp_nimble_hci.h") && (ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(5, 0, 0))
         ret = esp_nimble_hci_and_controller_init();
-        if (ret != ESP_OK) {
+        if (ret != ESP_OK)
+        {
             ESP_LOGE(TAG, "esp_nimble_hci_and_controller_init failed: %d", ret);
             return ret;
         }
 #endif
         ret = nimble_port_init();
-        if (ret != ESP_OK) {
+        if (ret != ESP_OK)
+        {
             ESP_LOGE(TAG, "nimble_port_init failed: %d", ret);
             return ret;
         }
@@ -1829,26 +2113,31 @@ esp_err_t ble_sync_start(void)
         ble_svc_gatt_init();
 
         int rc = ble_gatts_count_cfg(s_gatt_svcs);
-        if (rc != 0) {
+        if (rc != 0)
+        {
             ESP_LOGE(TAG, "ble_gatts_count_cfg failed: %d", rc);
             return ESP_FAIL;
         }
 
         rc = ble_gatts_add_svcs(s_gatt_svcs);
-        if (rc != 0) {
+        if (rc != 0)
+        {
             ESP_LOGE(TAG, "ble_gatts_add_svcs failed: %d", rc);
             return ESP_FAIL;
         }
 
         rc = ble_svc_gap_device_name_set(BLE_SYNC_DEVICE_NAME);
-        if (rc != 0) {
+        if (rc != 0)
+        {
             ESP_LOGE(TAG, "ble_svc_gap_device_name_set failed: %d", rc);
             return ESP_FAIL;
         }
 
         nimble_port_freertos_init(ble_sync_host_task);
         s_nimble_inited = true;
-    } else {
+    }
+    else
+    {
         ble_sync_advertise();
     }
 
@@ -1857,7 +2146,8 @@ esp_err_t ble_sync_start(void)
 
 void ble_sync_stop(void)
 {
-    if (!s_sync_running) {
+    if (!s_sync_running)
+    {
         return;
     }
     ESP_LOGI(TAG, "Stopping BLE sync");
@@ -1865,18 +2155,22 @@ void ble_sync_stop(void)
 
     ble_gap_adv_stop();
 
-    if (s_is_connected && s_conn_handle != BLE_HS_CONN_HANDLE_NONE) {
+    if (s_is_connected && s_conn_handle != BLE_HS_CONN_HANDLE_NONE)
+    {
         ble_gap_terminate(s_conn_handle, BLE_ERR_REM_USER_CONN_TERM);
     }
     s_is_connected = false;
     s_conn_handle = BLE_HS_CONN_HANDLE_NONE;
 
-    if (s_is_uploading || s_upload_fp != NULL) {
-        if (s_upload_fp != NULL) {
+    if (s_is_uploading || s_upload_fp != NULL)
+    {
+        if (s_upload_fp != NULL)
+        {
             fclose(s_upload_fp);
             s_upload_fp = NULL;
         }
-        if (s_upload_filename[0] != '\0') {
+        if (s_upload_filename[0] != '\0')
+        {
             const char *books_dir = (s_storage_target == STORAGE_TARGET_FLASH) ? "/spiflash/books" : "/sdcard/books";
             char fpath[256];
             snprintf(fpath, sizeof(fpath), "%s/%s", books_dir, s_upload_filename);
@@ -1893,11 +2187,14 @@ void ble_sync_stop(void)
     s_expected_seq = 0;
     s_upload_err_status = BLE_SYNC_STATUS_OK;
     s_current_mtu = 23;
+    xfer_reset();
 
-    if (s_data_ringbuf != NULL) {
+    if (s_data_ringbuf != NULL)
+    {
         size_t dummy_sz = 0;
         void *dummy = NULL;
-        while ((dummy = xRingbufferReceiveUpTo(s_data_ringbuf, &dummy_sz, 0, 4096)) != NULL) {
+        while ((dummy = xRingbufferReceiveUpTo(s_data_ringbuf, &dummy_sz, 0, 4096)) != NULL)
+        {
             vRingbufferReturnItem(s_data_ringbuf, dummy);
         }
     }
@@ -1912,7 +2209,19 @@ uint32_t ble_sync_get_bytes_received(void)
 {
     return s_bytes_received;
 }
-
+void ble_sync_get_xfer_info(ble_sync_xfer_info_t *out)
+{
+    if (!out)
+        return;
+    taskENTER_CRITICAL(&s_xfer_mux);
+    out->state = s_xfer_state;
+    out->status = s_xfer_status;
+    out->total = s_xfer_total;
+    out->bytes = (s_xfer_state == BLE_SYNC_XFER_TRANSFERRING) ? s_bytes_received
+                                                              : s_xfer_final_bytes;
+    memcpy(out->filename, s_xfer_name, sizeof(out->filename));
+    taskEXIT_CRITICAL(&s_xfer_mux);
+}
 esp_err_t ble_sync_notify_status(void)
 {
     ble_sync_status_payload_t status;
@@ -1922,19 +2231,26 @@ esp_err_t ble_sync_notify_status(void)
 
 esp_err_t ble_sync_set_storage_target(storage_target_t target)
 {
-    if (target != STORAGE_TARGET_SDCARD && target != STORAGE_TARGET_FLASH) {
+    if (target != STORAGE_TARGET_SDCARD && target != STORAGE_TARGET_FLASH)
+    {
         return ESP_ERR_INVALID_ARG;
     }
 
-    if (target == STORAGE_TARGET_SDCARD) {
-        if (!sdcard_is_mounted()) {
+    if (target == STORAGE_TARGET_SDCARD)
+    {
+        if (!sdcard_is_mounted())
+        {
             ESP_LOGE(TAG, "Cannot set storage target to SD card: not mounted");
             return ESP_ERR_INVALID_STATE;
         }
-    } else if (target == STORAGE_TARGET_FLASH) {
-        if (!flash_storage_is_mounted()) {
+    }
+    else if (target == STORAGE_TARGET_FLASH)
+    {
+        if (!flash_storage_is_mounted())
+        {
             esp_err_t err = flash_storage_init();
-            if (err != ESP_OK || !flash_storage_is_mounted()) {
+            if (err != ESP_OK || !flash_storage_is_mounted())
+            {
                 ESP_LOGE(TAG, "Cannot set storage target to Flash: flash init failed (0x%x)", err);
                 return ESP_ERR_INVALID_STATE;
             }
@@ -1960,17 +2276,22 @@ void ble_sync_register_callback(ble_sync_event_cb_t cb, void *user_data)
 
 uint16_t ble_sync_get_sleep_timeout(void)
 {
-    if (!s_sleep_timeout_loaded) {
+    if (!s_sleep_timeout_loaded)
+    {
         nvs_handle_t nvs_hdl;
         esp_err_t err = nvs_open("settings", NVS_READONLY, &nvs_hdl);
-        if (err == ESP_OK) {
+        if (err == ESP_OK)
+        {
             uint16_t val = BLE_SYNC_DEFAULT_SLEEP_TIMEOUT_SEC;
-            if (nvs_get_u16(nvs_hdl, "sleep_timeout", &val) == ESP_OK) {
+            if (nvs_get_u16(nvs_hdl, "sleep_timeout", &val) == ESP_OK)
+            {
                 s_sleep_timeout_sec = val;
             }
             nvs_close(nvs_hdl);
             s_sleep_timeout_loaded = true;
-        } else if (err != ESP_ERR_NVS_NOT_INITIALIZED) {
+        }
+        else if (err != ESP_ERR_NVS_NOT_INITIALIZED)
+        {
             // e.g. namespace not created yet on a fresh device: keep default
             s_sleep_timeout_loaded = true;
         }
