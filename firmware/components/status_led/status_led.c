@@ -1,8 +1,6 @@
 #include "status_led.h"
 #include "board_config.h"
 #include "esp_log.h"
-#include "nvs.h"
-#include "nvs_flash.h"
 
 #if BOARD_HAS_STATUS_LED
 #include "driver/gpio.h"
@@ -11,191 +9,151 @@
 #endif
 
 static const char *TAG = "STATUS_LED";
-static bool s_enabled = true;
 
-#define STATUS_LED_SLEEP_PULSE_MS 150  // visibility only: power_mgr forces LED off + holds before sleep
+/* Runtime only. Persistence is owned by app_settings ("status_led" key). */
+static bool s_enabled = false;
 
-bool status_led_is_available(void) {
+#define WAKE_BLINKS 2
+#define WAKE_ON_MS 150
+#define WAKE_OFF_MS 120
+#define REBOOT_BLINKS 4
+#define REBOOT_ON_MS 50
+#define REBOOT_OFF_MS 50
+#define SLEEP_PULSE_MS 150 /* visibility only: power_mgr forces LEDs off + holds before sleep */
+
+bool status_led_is_available(void)
+{
 #if BOARD_HAS_STATUS_LED
-    return (BOARD_LED_RED_PIN >= 0 || BOARD_LED_GREEN_PIN >= 0 || BOARD_LED_BLUE_PIN >= 0);
+    return (BOARD_LED_PIN >= 0 || BOARD_LED_RED_PIN >= 0 ||
+            BOARD_LED_GREEN_PIN >= 0 || BOARD_LED_BLUE_PIN >= 0);
 #else
     return false;
 #endif
 }
 
-bool status_led_is_enabled(void) {
-    if (!status_led_is_available()) {
-        return false;
-    }
-    return s_enabled;
+bool status_led_is_enabled(void)
+{
+    return status_led_is_available() && s_enabled;
 }
 
-esp_err_t status_led_set_enabled(bool enabled) {
-    if (!status_led_is_available()) {
+esp_err_t status_led_set_enabled(bool enabled)
+{
+    if (!status_led_is_available())
+    {
         return ESP_ERR_NOT_SUPPORTED;
     }
-
     s_enabled = enabled;
-
-    nvs_handle_t handle;
-    esp_err_t err = nvs_open("settings", NVS_READWRITE, &handle);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to open NVS: %s", esp_err_to_name(err));
-        return err;
-    }
-
-    err = nvs_set_u8(handle, "status_led", enabled ? 1 : 0);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to write status_led: %s", esp_err_to_name(err));
-        nvs_close(handle);
-        return err;
-    }
-
-    err = nvs_commit(handle);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to commit NVS: %s", esp_err_to_name(err));
-        nvs_close(handle);
-        return err;
-    }
-
-    nvs_close(handle);
     return ESP_OK;
 }
 
 #if BOARD_HAS_STATUS_LED
-static void delay_ms(uint32_t ms) {
+/* First pin that exists; the single-LED pin is the last fallback (-1 if absent). */
+static int pick_pin(int first, int second, int third)
+{
+    if (first >= 0)
+        return first;
+    if (second >= 0)
+        return second;
+    if (third >= 0)
+        return third;
+    return BOARD_LED_PIN;
+}
+
+static void set_led(int pin, bool on)
+{
+    if (pin >= 0)
+    {
+        int level = on ? BOARD_LED_ACTIVE_LEVEL : !BOARD_LED_ACTIVE_LEVEL;
+        gpio_set_level((gpio_num_t)pin, level ? 1 : 0);
+    }
+}
+
+static void delay_ms(uint32_t ms)
+{
     TickType_t ticks = pdMS_TO_TICKS(ms);
     vTaskDelay(ticks > 0 ? ticks : 1);
 }
 
-static void set_pin_level(int pin, bool active) {
-    if (pin >= 0) {
-        int level = active ? (BOARD_LED_ACTIVE_LEVEL ? 1 : 0) : (BOARD_LED_ACTIVE_LEVEL ? 0 : 1);
-        gpio_set_level((gpio_num_t)pin, level);
+static void blink(int pin, int count, uint32_t on_ms, uint32_t off_ms)
+{
+    for (int i = 0; i < count; i++)
+    {
+        set_led(pin, true);
+        delay_ms(on_ms);
+        set_led(pin, false);
+        if (i + 1 < count)
+        {
+            delay_ms(off_ms);
+        }
     }
 }
 
-static void led_wake_task(void *param) {
-    int pin = (int)(intptr_t)param;
-    for (int i = 0; i < 2; i++) {
-        set_pin_level(pin, true);
-        delay_ms(150);
-        set_pin_level(pin, false);
-        if (i < 1) {
-            delay_ms(120);
-        }
-    }
+static void led_wake_task(void *param)
+{
+    blink((int)(intptr_t)param, WAKE_BLINKS, WAKE_ON_MS, WAKE_OFF_MS);
     vTaskDelete(NULL);
 }
 #endif
 
-void status_led_init(void) {
-    if (!status_led_is_available()) {
-        s_enabled = false;
-        return;
-    }
-
-    nvs_handle_t handle;
-    esp_err_t err = nvs_open("settings", NVS_READONLY, &handle);
-    if (err == ESP_OK) {
-        uint8_t val = 1;
-        err = nvs_get_u8(handle, "status_led", &val);
-        if (err == ESP_OK) {
-            s_enabled = (val != 0);
-        } else {
-            s_enabled = true;
-        }
-        nvs_close(handle);
-    } else {
-        s_enabled = true;
-    }
-
-#if BOARD_HAS_STATUS_LED
-    const int pins[] = { BOARD_LED_RED_PIN, BOARD_LED_GREEN_PIN, BOARD_LED_BLUE_PIN };
-    for (size_t i = 0; i < sizeof(pins) / sizeof(pins[0]); i++) {
-        int pin = pins[i];
-        if (pin >= 0) {
-            gpio_reset_pin((gpio_num_t)pin);
-            gpio_set_direction((gpio_num_t)pin, GPIO_MODE_OUTPUT);
-            set_pin_level(pin, false);
-        }
-    }
-#endif
+/* Pins are configured (output, off, hold released) by power_mgr_early_init(). */
+void status_led_init(bool enabled)
+{
+    s_enabled = status_led_is_available() && enabled;
+    ESP_LOGD(TAG, "status LED %s", s_enabled ? "enabled" : "disabled");
 }
 
-void status_led_trigger(status_led_event_t event) {
-    if (!status_led_is_available() || !s_enabled) {
+void status_led_trigger(status_led_event_t event)
+{
+    if (!s_enabled)
+    {
         return;
     }
 
 #if BOARD_HAS_STATUS_LED
-    switch (event) {
-    case STATUS_LED_EVT_WAKEUP: {
-        int pin = -1;
-        if (BOARD_LED_BLUE_PIN >= 0) {
-            pin = BOARD_LED_BLUE_PIN;
-        } else if (BOARD_LED_GREEN_PIN >= 0) {
-            pin = BOARD_LED_GREEN_PIN;
+    switch (event)
+    {
+    case STATUS_LED_EVT_WAKEUP:
+    {
+        int pin = pick_pin(BOARD_LED_BLUE_PIN, BOARD_LED_GREEN_PIN, -1);
+        if (pin < 0)
+        {
+            break;
         }
-
-        if (pin >= 0) {
-            BaseType_t res = xTaskCreate(led_wake_task, "led_wake", 2048, (void *)(intptr_t)pin, 1, NULL);
-            if (res != pdPASS) {
-                for (int i = 0; i < 2; i++) {
-                    set_pin_level(pin, true);
-                    delay_ms(150);
-                    set_pin_level(pin, false);
-                    if (i < 1) {
-                        delay_ms(120);
-                    }
-                }
-            }
+        if (xTaskCreate(led_wake_task, "led_wake", 2048, (void *)(intptr_t)pin, 1, NULL) != pdPASS)
+        {
+            ESP_LOGE(TAG, "led_wake task create failed, blinking inline");
+            blink(pin, WAKE_BLINKS, WAKE_ON_MS, WAKE_OFF_MS);
         }
         break;
     }
 
-    case STATUS_LED_EVT_SLEEP: {
-        if (BOARD_LED_RED_PIN >= 0 && BOARD_LED_GREEN_PIN >= 0) {
-            set_pin_level(BOARD_LED_RED_PIN, true);
-            set_pin_level(BOARD_LED_GREEN_PIN, true);
-            delay_ms(STATUS_LED_SLEEP_PULSE_MS);
-            set_pin_level(BOARD_LED_RED_PIN, false);
-            set_pin_level(BOARD_LED_GREEN_PIN, false);
-        } else {
-            int sleep_pin = -1;
-            if (BOARD_LED_GREEN_PIN >= 0) {
-                sleep_pin = BOARD_LED_GREEN_PIN;
-            } else if (BOARD_LED_RED_PIN >= 0) {
-                sleep_pin = BOARD_LED_RED_PIN;
-            } else if (BOARD_LED_BLUE_PIN >= 0) {
-                sleep_pin = BOARD_LED_BLUE_PIN;
-            }
-
-            if (sleep_pin >= 0) {
-                set_pin_level(sleep_pin, true);
-                delay_ms(STATUS_LED_SLEEP_PULSE_MS);
-                set_pin_level(sleep_pin, false);
-            }
+    case STATUS_LED_EVT_SLEEP:
+        if (BOARD_LED_RED_PIN >= 0 && BOARD_LED_GREEN_PIN >= 0)
+        {
+            set_led(BOARD_LED_RED_PIN, true);
+            set_led(BOARD_LED_GREEN_PIN, true);
+            delay_ms(SLEEP_PULSE_MS);
+            set_led(BOARD_LED_RED_PIN, false);
+            set_led(BOARD_LED_GREEN_PIN, false);
+        }
+        else
+        {
+            blink(pick_pin(BOARD_LED_GREEN_PIN, BOARD_LED_RED_PIN, BOARD_LED_BLUE_PIN),
+                  1, SLEEP_PULSE_MS, 0);
         }
         break;
-    }
 
-    case STATUS_LED_EVT_REBOOT: {
-        if (BOARD_LED_RED_PIN >= 0) {
-            set_pin_level(BOARD_LED_RED_PIN, true);
-        } else {
-            int reboot_pin = (BOARD_LED_GREEN_PIN >= 0) ? BOARD_LED_GREEN_PIN : BOARD_LED_BLUE_PIN;
-            if (reboot_pin >= 0) {
-                for (int i = 0; i < 4; i++) {
-                    set_pin_level(reboot_pin, true);
-                    delay_ms(50);
-                    set_pin_level(reboot_pin, false);
-                    delay_ms(50);
-                }
-            }
+    case STATUS_LED_EVT_REBOOT:
+        if (BOARD_LED_RED_PIN >= 0)
+        {
+            set_led(BOARD_LED_RED_PIN, true); /* stays on until reset */
+        }
+        else
+        {
+            blink(pick_pin(BOARD_LED_GREEN_PIN, BOARD_LED_BLUE_PIN, -1),
+                  REBOOT_BLINKS, REBOOT_ON_MS, REBOOT_OFF_MS);
         }
         break;
-    }
 
     default:
         break;

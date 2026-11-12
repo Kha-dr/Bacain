@@ -1,560 +1,593 @@
-#define view_mushaf_on_wake __legacy_view_mushaf_on_wake
 #include "view_mushaf.h"
-#undef view_mushaf_on_wake
-#include "views.h"
 
-#if CONFIG_BOARD_MUSHAF_ENABLE || BOARD_MUSHAF_ENABLE
+#if VIEWS_HAS_MUSHAF
 
 #include <stdio.h>
 #include <string.h>
 #include "esp_attr.h"
-#include "esp_log.h"
-#include "epaper_port.h"
-#include "GUI_Paint.h"
 #include "fonts.h"
-#include "app_config.h"
-#include "view_menu.h"
+#include "mushaf_reader.h"
+#include "text_pager.h" /* reading font + TEXT_PAGER_FOOTER: same frame as the book reader */
+#include "ui_display.h"
+#include "ui_widgets.h"
+#include "ui_list.h"
+#include "ui_pager.h"
 
-#define TAG "view_mushaf"
+#define MENU_COUNT 4
+#define PRESET_COUNT 5
+#define JUZ_COUNT 30
+#define JUMP_COUNT (PRESET_COUNT + JUZ_COUNT)
 
-#ifndef MUSHAF_TOTAL_AYAHS
-#define MUSHAF_TOTAL_AYAHS 6236
-#endif
+/* Print at most `limit` chars of a fixed-size, possibly unterminated name (finding 1). */
+#define NAME_FIELD_SIZE sizeof(((bqm_surah_entry_t *)0)->name_latin)
+#define NAME_PREC(limit) ((int)(NAME_FIELD_SIZE < (size_t)(limit) ? NAME_FIELD_SIZE : (size_t)(limit)))
 
-#ifndef MUSHAF_LAYER_COUNT
-#define MUSHAF_LAYER_COUNT 4
-#endif
+/* ---------- state ---------- */
 
-RTC_DATA_ATTR static mushaf_state_t s_rtc_mushaf_state;
-RTC_DATA_ATTR static int s_rtc_mushaf_menu_idx = 0;
-RTC_DATA_ATTR static int s_rtc_mushaf_jump_idx = 0;
-RTC_DATA_ATTR static int s_rtc_mushaf_bm_idx = 0;
-RTC_DATA_ATTR static reader_view_t s_rtc_mushaf_sub_view = VIEW_MUSHAF_MENU;
+RTC_DATA_ATTR static mushaf_state_t s_rtc_state;
+RTC_DATA_ATTR static int s_rtc_menu_idx = 0;
+RTC_DATA_ATTR static int s_rtc_jump_idx = 0;
+RTC_DATA_ATTR static int s_rtc_bm_idx = 0;
+RTC_DATA_ATTR static reader_view_t s_rtc_sub_view = VIEW_MUSHAF_MENU;
 
-static const struct {
+static char s_item_buf[48]; /* list get_text buffer, valid until next call */
+static char s_menu_item0[32];
+static char s_menu_item1[32];
+static char s_menu_item3[32];
+static text_page_t s_text_page;
+
+static const ui_row_style_t k_menu_row = {.font = NULL, .max_lines = 3};
+static const ui_row_style_t k_line_row = {.font = NULL, .max_lines = 1};
+
+static const struct
+{
     const char *label;
     uint8_t surah;
     uint16_t ayah;
-} k_sunnah_presets[5] = {
-    { "Al-Kahf (18:1) - Friday", 18, 1 },
-    { "Yasin (36:1) - Daily", 36, 1 },
-    { "Ar-Rahman (55:1)", 55, 1 },
-    { "Al-Waqiah (56:1) - Night", 56, 1 },
-    { "Al-Mulk (67:1) - Sleep", 67, 1 }
+} k_presets[PRESET_COUNT] = {
+    {"Al-Kahf (18:1) - Friday", 18, 1},
+    {"Yasin (36:1) - Daily", 36, 1},
+    {"Ar-Rahman (55:1)", 55, 1},
+    {"Al-Waqiah (56:1) - Night", 56, 1},
+    {"Al-Mulk (67:1) - Sleep", 67, 1},
 };
 
-static inline void get_juz_start(uint8_t juz, uint8_t *out_surah, uint16_t *out_ayah) {
-    static const struct { uint8_t s; uint16_t a; } k_juz[30] = {
-        {1, 1},   {2, 142}, {2, 253}, {3, 93},  {4, 24},
-        {4, 148}, {5, 82},  {6, 111}, {7, 88},  {8, 41},
-        {9, 93},  {11, 6},  {12, 53}, {15, 1},  {17, 1},
-        {18, 75}, {21, 1},  {23, 1},  {25, 21}, {27, 56},
-        {29, 46}, {33, 31}, {36, 28}, {39, 32}, {41, 47},
-        {46, 1},  {51, 31}, {58, 1},  {67, 1},  {78, 1}
-    };
-    if (juz >= 1 && juz <= 30) {
-        if (out_surah) *out_surah = k_juz[juz - 1].s;
-        if (out_ayah) *out_ayah = k_juz[juz - 1].a;
+static void get_juz_start(uint8_t juz, uint8_t *out_surah, uint16_t *out_ayah)
+{
+    static const struct
+    {
+        uint8_t s;
+        uint16_t a;
+    } k_juz[JUZ_COUNT] = {
+        {1, 1}, {2, 142}, {2, 253}, {3, 93}, {4, 24}, {4, 148}, {5, 82}, {6, 111}, {7, 88}, {8, 41}, {9, 93}, {11, 6}, {12, 53}, {15, 1}, {17, 1}, {18, 75}, {21, 1}, {23, 1}, {25, 21}, {27, 56}, {29, 46}, {33, 31}, {36, 28}, {39, 32}, {41, 47}, {46, 1}, {51, 31}, {58, 1}, {67, 1}, {78, 1}};
+    if (juz >= 1 && juz <= JUZ_COUNT)
+    {
+        *out_surah = k_juz[juz - 1].s;
+        *out_ayah = k_juz[juz - 1].a;
     }
 }
 
-static void view_mushaf_render_menu(bool full_refresh) {
-    uint8_t *canvas = reader_ui_get_canvas();
-    if (!canvas) return;
+static ui_refresh_t refresh_mode(bool full)
+{
+    return full ? UI_REFRESH_FULL : UI_REFRESH_PARTIAL;
+}
 
-    epaper_power_on();
-    Paint_SelectImage(canvas);
-    Paint_Clear(WHITE);
+static void draw_no_data(void)
+{
+    static const char *const k_lines[] = {
+        "No Mushaf data (.bqm)", "Connect via Sync Books", "Build & upload via Web"};
+    ui_draw_message(k_lines, 3, NULL, false);
+    ui_draw_footer("Hold ▲/▼ Back", false);
+}
 
-    Paint_DrawRectangle(0, 0, DISPLAY_WIDTH - 1, UI_HEADER_HEIGHT, BLACK, DOT_PIXEL_1X1, DRAW_FILL_FULL);
-    Paint_DrawString_EN(8, 3, "Mushaf Menu", &Font12, WHITE, BLACK);
-    char bat_str[16];
-    snprintf(bat_str, sizeof(bat_str), "%u%%", reader_ui_get_battery_percentage());
-    Paint_DrawString_EN(165, 3, bat_str, &Font12, WHITE, BLACK);
-    Paint_DrawLine(0, UI_HEADER_HEIGHT + 1, DISPLAY_WIDTH - 1, UI_HEADER_HEIGHT + 1, BLACK, DOT_PIXEL_1X1, LINE_STYLE_SOLID);
+/* ---------- menu ---------- */
 
-    if (!mushaf_reader_has_bqm()) {
-        Paint_DrawString_EN(20, 60, "No Mushaf data (.bqm)", &Font12, BLACK, WHITE);
-        Paint_DrawString_EN(20, 84, "Connect via Sync Books", &Font12, BLACK, WHITE);
-        Paint_DrawString_EN(20, 108, "Build & upload via Web", &Font12, BLACK, WHITE);
-        if (reader_ui_get_show_nav_hints()) {
-            Paint_DrawLine(0, UI_FOOTER_Y - 2, DISPLAY_WIDTH - 1, UI_FOOTER_Y - 2, BLACK, DOT_PIXEL_1X1, LINE_STYLE_SOLID);
-            ui_draw_centered_string(UI_FOOTER_Y + 1, "Hold ▲/▼ Back", &Font12);
-        }
-        reader_ui_flush_canvas(full_refresh);
-        return;
+static const char *menu_text(void *ctx, size_t i)
+{
+    (void)ctx;
+    switch (i)
+    {
+    case 0:
+        return s_menu_item0;
+    case 1:
+        return s_menu_item1;
+    case 2:
+        return "Sunnah & Juz Jump";
+    case 3:
+        return s_menu_item3;
+    default:
+        return "";
     }
+}
 
+static void build_menu_items(void)
+{
+    static const char *const k_layer_names[MUSHAF_LAYER_COUNT] = {"Mushaf", "Latin", "Translate", "Tafsir"};
     const mushaf_state_t *st = mushaf_reader_get_state();
-    char item0[32];
-    if (!st || !st->started) {
-        snprintf(item0, sizeof(item0), "Start Tilawah");
-    } else {
-        bqm_ayah_entry_t a_info;
+
+    if (!st->started)
+    {
+        snprintf(s_menu_item0, sizeof(s_menu_item0), "Start Tilawah");
+    }
+    else
+    {
+        bqm_ayah_entry_t info;
         uint8_t juz = 1;
-        if (mushaf_reader_get_ayah_info(st->surah, st->ayah, &a_info, NULL) == ESP_OK) {
-            juz = a_info.juz;
+        if (mushaf_reader_get_ayah(st->surah, st->ayah, &info, NULL) == ESP_OK)
+        {
+            juz = info.juz;
         }
-        snprintf(item0, sizeof(item0), "Resume S.%u:%u (Juz %u)", st->surah, st->ayah, juz);
+        snprintf(s_menu_item0, sizeof(s_menu_item0), "Resume %u:%u (Juz %u)", st->surah, st->ayah, juz);
     }
 
-    const char *layer_names[MUSHAF_LAYER_COUNT] = { "Mushaf", "Latin", "Translate", "Tafsir" };
-    uint8_t cur_layer = (st && st->layer < MUSHAF_LAYER_COUNT) ? st->layer : 0;
-    char item1[32];
-    snprintf(item1, sizeof(item1), "Layer: [%s]", layer_names[cur_layer]);
-
-    char item3[32];
-    snprintf(item3, sizeof(item3), "Bookmarks (%u/8)", st ? st->bookmark_count : 0);
-
-    const char *items[4] = {
-        item0,
-        item1,
-        "Sunnah & Juz Jump",
-        item3
-    };
-
-    if (s_rtc_mushaf_menu_idx < 0) s_rtc_mushaf_menu_idx = 0;
-    if (s_rtc_mushaf_menu_idx >= 4) s_rtc_mushaf_menu_idx = 3;
-
-    int max_width = DISPLAY_WIDTH - 24;
-    int bottom_limit = reader_ui_get_show_nav_hints() ? (UI_FOOTER_Y - 2) : (DISPLAY_HEIGHT - 2);
-    int y = 24;
-    for (int i = 0; i < 4; i++) {
-        int lines = ui_get_wrapped_line_count(items[i], &Font12, max_width, 3);
-        int text_h = lines * Font12.Height;
-        if (y + text_h + 2 >= bottom_limit) break;
-
-        if (i == s_rtc_mushaf_menu_idx) {
-            Paint_DrawRectangle(4, y - 2, DISPLAY_WIDTH - 4, y + text_h + 2, BLACK, DOT_PIXEL_1X1, DRAW_FILL_EMPTY);
-            Paint_DrawString_EN(8, y, ">", &Font12, BLACK, WHITE);
-        }
-        ui_draw_wrapped_text_clamped(22, y, items[i], &Font12, max_width, 3, BLACK, WHITE);
-        y += (lines > 1) ? (text_h + 6) : 22;
-    }
-
-    if (reader_ui_get_show_nav_hints()) {
-        Paint_DrawLine(0, UI_FOOTER_Y - 2, DISPLAY_WIDTH - 1, UI_FOOTER_Y - 2, BLACK, DOT_PIXEL_1X1, LINE_STYLE_SOLID);
-        ui_draw_centered_string(UI_FOOTER_Y + 1, "2x▲/▼ Select | Hold ▲/▼ Back", &Font12);
-    }
-
-    reader_ui_flush_canvas(full_refresh);
+    uint8_t layer = (st->layer < MUSHAF_LAYER_COUNT) ? st->layer : 0;
+    snprintf(s_menu_item1, sizeof(s_menu_item1), "Layer: [%s]", k_layer_names[layer]);
+    snprintf(s_menu_item3, sizeof(s_menu_item3), "Bookmarks (%u/%u)",
+             st->bookmark_count, (unsigned)MUSHAF_MAX_BOOKMARKS);
 }
 
-static void view_mushaf_render_reading(bool full_refresh) {
-    uint8_t *canvas = reader_ui_get_canvas();
-    if (!canvas) return;
+static void render_menu(bool full)
+{
+    if (!ui_begin(true))
+    {
+        return;
+    }
+    int top = ui_draw_header("MUSHAF MENU", true);
 
-    epaper_power_on();
-    Paint_SelectImage(canvas);
-    Paint_Clear(WHITE);
+    if (!mushaf_reader_is_available())
+    {
+        draw_no_data();
+    }
+    else
+    {
+        build_menu_items();
+        s_rtc_menu_idx = ui_list_clamp(s_rtc_menu_idx, MENU_COUNT);
+        ui_list_t list = {
+            .count = MENU_COUNT,
+            .selected = s_rtc_menu_idx,
+            .get_text = menu_text,
+            .style = &k_menu_row,
+            .top = top,
+            .bottom = ui_body_bottom(false),
+        };
+        ui_draw_list(&list);
+        ui_draw_footer("2x▲/▼ Select | Hold ▲/▼ Back", false);
+    }
+    ui_end(refresh_mode(full));
+}
 
-    const mushaf_state_t *st = mushaf_reader_get_state();
-    if (!st || !mushaf_reader_has_bqm()) {
-        Paint_DrawString_EN(20, 80, "No Mushaf data (.bqm)", &Font12, BLACK, WHITE);
-        ui_draw_string(20, 104, "Sync via Web Companion", &Font12, BLACK, WHITE);
-        reader_ui_flush_canvas(full_refresh);
+static reader_view_t event_menu(reader_view_t self, button_event_t evt)
+{
+    if (!mushaf_reader_is_available())
+    {
+        return (evt.type == BTN_LONG_PRESS || evt.type == BTN_DOUBLE_CLICK) ? VIEW_MENU : self;
+    }
+    if (evt.type == BTN_LONG_PRESS)
+    {
+        return VIEW_MENU;
+    }
+    if (ui_list_step(&s_rtc_menu_idx, MENU_COUNT, evt))
+    {
+        render_menu(false);
+        return self;
+    }
+    if (evt.type != BTN_DOUBLE_CLICK)
+    {
+        return self;
+    }
+    switch (s_rtc_menu_idx)
+    {
+    case 0:
+        return VIEW_MUSHAF_READING;
+    case 1:
+        mushaf_reader_cycle_layer();
+        render_menu(false);
+        return self;
+    case 2:
+        return VIEW_MUSHAF_JUMP;
+    case 3:
+        return VIEW_MUSHAF_BOOKMARKS;
+    default:
+        return self;
+    }
+}
+
+/* ---------- reading (same frame as the book reader) ---------- */
+
+static void format_title(const mushaf_state_t *st, char *out, size_t n)
+{
+    bqm_surah_entry_t info;
+    if (mushaf_reader_get_surah(st->surah, &info) == ESP_OK)
+    {
+        snprintf(out, n, "%u:%u %.*s", st->surah, st->ayah, NAME_PREC(NAME_FIELD_SIZE), info.name_latin);
+    }
+    else
+    {
+        snprintf(out, n, "%u:%u", st->surah, st->ayah);
+    }
+}
+
+/* left: "J3 LAT [BM]"   right: "2/5 40%" (same rules as the old mushaf footer) */
+static void format_footer(const mushaf_state_t *st, char *left, size_t ln, char *right, size_t rn)
+{
+    static const char *const k_tags[MUSHAF_LAYER_COUNT] = {"MUS", "LAT", "TRN", "TAF"};
+    const char *tag = (st->layer < MUSHAF_LAYER_COUNT) ? k_tags[st->layer] : "?";
+    const char *bm = mushaf_reader_is_bookmarked(st->surah, st->ayah) ? " [BM]" : "";
+
+    right[0] = '\0';
+    bqm_ayah_entry_t info;
+    uint16_t global = 0;
+    if (mushaf_reader_get_ayah(st->surah, st->ayah, &info, &global) != ESP_OK)
+    {
+        snprintf(left, ln, "%s%s", tag, bm);
+        return;
+    }
+    snprintf(left, ln, "J%u %s%s", info.juz, tag, bm);
+
+    uint8_t sub = mushaf_reader_get_subpage_count();
+    uint32_t pct = st->started ? (uint32_t)(((uint64_t)global * 100) / MUSHAF_TOTAL_AYAHS) : 0;
+    if (sub > 1 && pct > 0)
+    {
+        snprintf(right, rn, "%u/%u %u%%", st->subpage + 1, sub, (unsigned)pct);
+    }
+    else if (sub > 1)
+    {
+        snprintf(right, rn, "%u/%u", st->subpage + 1, sub);
+    }
+    else if (pct > 0)
+    {
+        snprintf(right, rn, "%u%%", (unsigned)pct);
+    }
+}
+
+static void render_reading(ui_refresh_t mode)
+{
+    if (!ui_begin(true))
+    {
+        return;
+    }
+    if (!mushaf_reader_is_available())
+    {
+        ui_draw_header_plain("MUSHAF", true);
+        draw_no_data();
+        ui_end(mode);
         return;
     }
 
-    mushaf_reader_render_subpage(canvas);
-
-    bqm_surah_entry_t s_info;
-    char header_left[32] = {0};
-    if (mushaf_reader_get_surah_info(st->surah, &s_info) == ESP_OK) {
-        snprintf(header_left, sizeof(header_left), "%02u:%u %.9s", st->surah, st->ayah, s_info.name_latin);
-    } else {
-        snprintf(header_left, sizeof(header_left), "%02u:%u", st->surah, st->ayah);
-    }
-    Paint_DrawString_EN(4, 2, header_left, &Font12, BLACK, WHITE);
-
-    const char *layer_tags[MUSHAF_LAYER_COUNT] = { "[M]", "[LAT]", "[TRN]", "[TAF]" };
-    const char *ltag = (st->layer < MUSHAF_LAYER_COUNT) ? layer_tags[st->layer] : "[?]";
-    bool bookmarked = mushaf_reader_is_bookmarked(st->surah, st->ayah);
-    char tag_str[16];
-    snprintf(tag_str, sizeof(tag_str), "%s%s", ltag, bookmarked ? "*" : "");
-    Paint_DrawString_EN(128, 2, tag_str, &Font12, BLACK, WHITE);
-
-    char bat_str[16];
-    snprintf(bat_str, sizeof(bat_str), "%u%%", reader_ui_get_battery_percentage());
-    Paint_DrawString_EN(165, 2, bat_str, &Font12, BLACK, WHITE);
-    Paint_DrawLine(0, 15, DISPLAY_WIDTH - 1, 15, BLACK, DOT_PIXEL_1X1, LINE_STYLE_SOLID);
-
-    Paint_DrawLine(0, DISPLAY_HEIGHT - 16, DISPLAY_WIDTH - 1, DISPLAY_HEIGHT - 16, BLACK, DOT_PIXEL_1X1, LINE_STYLE_SOLID);
-    if (reader_ui_get_show_nav_hints()) {
-        ui_draw_centered_string(DISPLAY_HEIGHT - 14, "2x▲ Layer | 2x▼ Mark", &Font12);
-    } else {
-        bqm_ayah_entry_t ayah_info;
-        uint16_t global_ayah = 0;
-        char footer_left[32] = {0};
-        char footer_right[32] = {0};
-        if (mushaf_reader_get_ayah_info(st->surah, st->ayah, &ayah_info, &global_ayah) == ESP_OK) {
-            snprintf(footer_left, sizeof(footer_left), "Juz %u", ayah_info.juz);
-            uint8_t subpage_count = mushaf_reader_get_active_subpage_count();
-            if (st->started) {
-                uint32_t pct = (uint32_t)((uint64_t)global_ayah * 100 / MUSHAF_TOTAL_AYAHS);
-                if (subpage_count > 1) {
-                    if (pct > 0) {
-                        snprintf(footer_right, sizeof(footer_right), "%u/%u %u%%", st->subpage + 1, subpage_count, (unsigned)pct);
-                    } else {
-                        snprintf(footer_right, sizeof(footer_right), "%u/%u", st->subpage + 1, subpage_count);
-                    }
-                } else if (pct > 0) {
-                    snprintf(footer_right, sizeof(footer_right), "%u%%", (unsigned)pct);
-                }
-            } else {
-                if (subpage_count > 1) {
-                    snprintf(footer_right, sizeof(footer_right), "%u/%u", st->subpage + 1, subpage_count);
-                }
-            }
-        }
-        Paint_DrawString_EN(4, DISPLAY_HEIGHT - 14, footer_left, &Font12, BLACK, WHITE);
-        if (footer_right[0] != '\0') {
-            int w = ui_get_string_width(footer_right, &Font12);
-            Paint_DrawString_EN(DISPLAY_WIDTH - w - 4, DISPLAY_HEIGHT - 14, footer_right, &Font12, BLACK, WHITE);
-        }
-    }
-
-    reader_ui_flush_canvas(full_refresh);
-}
-
-static void view_mushaf_render_jump(bool full_refresh) {
-    uint8_t *canvas = reader_ui_get_canvas();
-    if (!canvas) return;
-
-    epaper_power_on();
-    Paint_SelectImage(canvas);
-    Paint_Clear(WHITE);
-
-    Paint_DrawRectangle(0, 0, DISPLAY_WIDTH - 1, UI_HEADER_HEIGHT, BLACK, DOT_PIXEL_1X1, DRAW_FILL_FULL);
-    Paint_DrawString_EN(8, 3, "SUNNAH & JUZ JUMP", &Font12, WHITE, BLACK);
-    char bat_str[16];
-    snprintf(bat_str, sizeof(bat_str), "%u%%", reader_ui_get_battery_percentage());
-    Paint_DrawString_EN(165, 3, bat_str, &Font12, WHITE, BLACK);
-    Paint_DrawLine(0, UI_HEADER_HEIGHT + 1, DISPLAY_WIDTH - 1, UI_HEADER_HEIGHT + 1, BLACK, DOT_PIXEL_1X1, LINE_STYLE_SOLID);
-
-    int selected = s_rtc_mushaf_jump_idx;
-    if (selected < 0) selected = 0;
-    if (selected >= 35) selected = 34;
-    s_rtc_mushaf_jump_idx = selected;
-
-    size_t start_idx = 0;
-    if (selected >= 5) {
-        start_idx = (size_t)(selected - 4);
-    }
-    if (start_idx + 6 > 35) {
-        start_idx = 35 - 6;
-    }
-    size_t end_idx = start_idx + 6;
-
-    int y = 28;
-    for (size_t i = start_idx; i < end_idx; i++) {
-        char line[48] = {0};
-        if (i < 5) {
-            strncpy(line, k_sunnah_presets[i].label, sizeof(line) - 1);
-        } else {
-            uint8_t juz = (uint8_t)(i - 4);
-            uint8_t s = 1;
-            uint16_t a = 1;
-            get_juz_start(juz, &s, &a);
-            bqm_surah_entry_t s_info;
-            if (mushaf_reader_get_surah_info(s, &s_info) == ESP_OK) {
-                snprintf(line, sizeof(line), "Juz %u: %.10s %u:%u", juz, s_info.name_latin, s, a);
-            } else {
-                snprintf(line, sizeof(line), "Juz %u (%u:%u)", juz, s, a);
-            }
-        }
-
-        if ((int)i == selected) {
-            Paint_DrawRectangle(4, y - 2, DISPLAY_WIDTH - 4, y + 16, BLACK, DOT_PIXEL_1X1, DRAW_FILL_EMPTY);
-            Paint_DrawString_EN(8, y, ">", &Font12, BLACK, WHITE);
-        }
-        Paint_DrawString_EN(22, y, line, &Font12, BLACK, WHITE);
-        y += 24;
-    }
-
-    if (reader_ui_get_show_nav_hints()) {
-        Paint_DrawLine(0, UI_FOOTER_Y - 2, DISPLAY_WIDTH - 1, UI_FOOTER_Y - 2, BLACK, DOT_PIXEL_1X1, LINE_STYLE_SOLID);
-        ui_draw_centered_string(UI_FOOTER_Y + 1, "2x▲/▼ Jump | Hold ▲/▼ Back", &Font12);
-    }
-
-    reader_ui_flush_canvas(full_refresh);
-}
-
-static void view_mushaf_render_bookmarks(bool full_refresh) {
-    uint8_t *canvas = reader_ui_get_canvas();
-    if (!canvas) return;
-
-    epaper_power_on();
-    Paint_SelectImage(canvas);
-    Paint_Clear(WHITE);
-
+    /* Fetch text first: it may normalize the cursor (layer/subpage) before labels are built. */
     const mushaf_state_t *st = mushaf_reader_get_state();
-    uint8_t count = (st != NULL) ? st->bookmark_count : 0;
-
-    Paint_DrawRectangle(0, 0, DISPLAY_WIDTH - 1, UI_HEADER_HEIGHT, BLACK, DOT_PIXEL_1X1, DRAW_FILL_FULL);
-    char title_buf[32];
-    snprintf(title_buf, sizeof(title_buf), "BOOKMARKS (%u/8)", count);
-    Paint_DrawString_EN(8, 3, title_buf, &Font12, WHITE, BLACK);
-    char bat_str[16];
-    snprintf(bat_str, sizeof(bat_str), "%u%%", reader_ui_get_battery_percentage());
-    Paint_DrawString_EN(165, 3, bat_str, &Font12, WHITE, BLACK);
-    Paint_DrawLine(0, UI_HEADER_HEIGHT + 1, DISPLAY_WIDTH - 1, UI_HEADER_HEIGHT + 1, BLACK, DOT_PIXEL_1X1, LINE_STYLE_SOLID);
-
-    if (count == 0) {
-        Paint_DrawString_EN(20, 80, "No bookmarks yet.", &Font12, BLACK, WHITE);
-        ui_draw_string(14, 104, "2xTap ▼ in ayah to add", &Font12, BLACK, WHITE);
-    } else {
-        int selected = s_rtc_mushaf_bm_idx;
-        if (selected < 0) selected = 0;
-        if (selected >= count) selected = count - 1;
-        s_rtc_mushaf_bm_idx = selected;
-
-        size_t start_idx = 0;
-        if (count > 6) {
-            if (selected >= 5) {
-                start_idx = (size_t)(selected - 4);
-            }
-            if (start_idx + 6 > count) {
-                start_idx = count - 6;
-            }
-        }
-        size_t end_idx = start_idx + 6;
-        if (end_idx > count) end_idx = count;
-
-        int y = 28;
-        for (size_t i = start_idx; i < end_idx; i++) {
-            uint8_t s = st->bookmarks[i].surah;
-            uint16_t a = st->bookmarks[i].ayah;
-            uint8_t j = st->bookmarks[i].juz;
-            bqm_surah_entry_t s_info;
-            char name[12] = {0};
-            if (mushaf_reader_get_surah_info(s, &s_info) == ESP_OK) {
-                strncpy(name, s_info.name_latin, sizeof(name) - 1);
-            }
-            char line[48];
-            snprintf(line, sizeof(line), "%u. %s %u:%u (J%u)", (unsigned)(i + 1), name, s, a, j);
-
-            if ((int)i == selected) {
-                Paint_DrawRectangle(4, y - 2, DISPLAY_WIDTH - 4, y + 16, BLACK, DOT_PIXEL_1X1, DRAW_FILL_EMPTY);
-                Paint_DrawString_EN(8, y, ">", &Font12, BLACK, WHITE);
-            }
-            Paint_DrawString_EN(22, y, line, &Font12, BLACK, WHITE);
-            y += 24;
-        }
+    esp_err_t text_err = ESP_ERR_NOT_SUPPORTED;
+    if (st->layer != MUSHAF_LAYER_MUSHAF)
+    {
+        text_err = mushaf_reader_get_text_page(&s_text_page);
     }
 
-    if (reader_ui_get_show_nav_hints()) {
-        Paint_DrawLine(0, UI_FOOTER_Y - 2, DISPLAY_WIDTH - 1, UI_FOOTER_Y - 2, BLACK, DOT_PIXEL_1X1, LINE_STYLE_SOLID);
-        ui_draw_centered_string(UI_FOOTER_Y + 1, "2x▲/▼ Jump | Hold ▲/▼ Back", &Font12);
-    }
+    char title[40], left[24], right[24];
+    format_title(st, title, sizeof(title));
+    format_footer(st, left, sizeof(left), right, sizeof(right));
 
-    reader_ui_flush_canvas(full_refresh);
+    ui_pager_chrome_t chrome = {
+        .title = title,
+        .show_battery = true,
+        .footer = TEXT_PAGER_FOOTER,
+        .footer_left = left,
+        .footer_right = right[0] ? right : NULL,
+    };
+
+    if (text_err == ESP_ERR_NOT_SUPPORTED)
+    {
+        /* Mushaf image layer: frame with an empty body, then sprites clipped to the body. */
+        chrome.empty_text = "";
+        ui_pager_draw(NULL, text_pager_get_style(), &chrome);
+        int top, bottom;
+        ui_pager_body_rect(&chrome, &top, &bottom);
+        mushaf_reader_draw_mushaf_page(top, bottom);
+    }
+    else
+    {
+        chrome.empty_text = "No text for this ayah.";
+        ui_pager_draw((text_err == ESP_OK) ? &s_text_page : NULL, text_pager_get_style(), &chrome);
+    }
+    ui_end(mode);
 }
 
-void view_mushaf_init(bool is_cold_boot) {
-    if (is_cold_boot) {
-        s_rtc_mushaf_sub_view = VIEW_MUSHAF_MENU;
-        mushaf_reader_init(NULL);
-    } else {
-        mushaf_reader_init(&s_rtc_mushaf_state);
+static reader_view_t event_reading(reader_view_t self, button_event_t evt)
+{
+    if (evt.type == BTN_LONG_PRESS)
+    {
+        view_mushaf_save_before_sleep();
+        return VIEW_MUSHAF_MENU;
+    }
+    if (evt.type == BTN_CLICK)
+    {
+        mushaf_reader_step_page(evt.button == BTN_ID_PWR ? 1 : -1);
+        render_reading(UI_REFRESH_PAGE_TURN);
+    }
+    else if (evt.type == BTN_DOUBLE_CLICK)
+    {
+        if (evt.button == BTN_ID_BOOT)
+        {
+            mushaf_reader_cycle_layer();
+        }
+        else if (evt.button == BTN_ID_PWR)
+        {
+            mushaf_reader_toggle_bookmark();
+        }
+        render_reading(UI_REFRESH_PARTIAL);
+    }
+    return self;
+}
+
+/* ---------- jump list ---------- */
+
+static const char *jump_text(void *ctx, size_t i)
+{
+    (void)ctx;
+    if (i < PRESET_COUNT)
+    {
+        return k_presets[i].label;
+    }
+    uint8_t juz = (uint8_t)(i - PRESET_COUNT + 1);
+    uint8_t s = 1;
+    uint16_t a = 1;
+    get_juz_start(juz, &s, &a);
+
+    bqm_surah_entry_t info;
+    if (mushaf_reader_get_surah(s, &info) == ESP_OK)
+    {
+        snprintf(s_item_buf, sizeof(s_item_buf), "Juz %u: %.*s %u:%u",
+                 juz, NAME_PREC(10), info.name_latin, s, a);
+    }
+    else
+    {
+        snprintf(s_item_buf, sizeof(s_item_buf), "Juz %u (%u:%u)", juz, s, a);
+    }
+    return s_item_buf;
+}
+
+static void render_jump(bool full)
+{
+    if (!ui_begin(true))
+    {
+        return;
+    }
+    int top = ui_draw_header("SUNNAH & JUZ JUMP", true);
+    s_rtc_jump_idx = ui_list_clamp(s_rtc_jump_idx, JUMP_COUNT);
+    ui_list_t list = {
+        .count = JUMP_COUNT,
+        .selected = s_rtc_jump_idx,
+        .get_text = jump_text,
+        .style = &k_line_row,
+        .top = top,
+        .bottom = ui_body_bottom(false),
+    };
+    ui_draw_list(&list);
+    ui_draw_footer("2x▲/▼ Jump | Hold ▲/▼ Back", false);
+    ui_end(refresh_mode(full));
+}
+
+static reader_view_t event_jump(reader_view_t self, button_event_t evt)
+{
+    if (evt.type == BTN_LONG_PRESS)
+    {
+        return VIEW_MUSHAF_MENU;
+    }
+    if (ui_list_step(&s_rtc_jump_idx, JUMP_COUNT, evt))
+    {
+        render_jump(false);
+        return self;
+    }
+    if (evt.type != BTN_DOUBLE_CLICK)
+    {
+        return self;
+    }
+
+    uint8_t surah = 1;
+    uint16_t ayah = 1;
+    if (s_rtc_jump_idx < PRESET_COUNT)
+    {
+        surah = k_presets[s_rtc_jump_idx].surah;
+        ayah = k_presets[s_rtc_jump_idx].ayah;
+    }
+    else
+    {
+        get_juz_start((uint8_t)(s_rtc_jump_idx - PRESET_COUNT + 1), &surah, &ayah);
+    }
+    mushaf_reader_set_cursor(surah, ayah, mushaf_reader_get_state()->layer);
+    views_request_full_refresh();
+    return VIEW_MUSHAF_READING;
+}
+
+/* ---------- bookmarks ---------- */
+
+static const char *bookmark_text(void *ctx, size_t i)
+{
+    const mushaf_state_t *st = (const mushaf_state_t *)ctx;
+    const mushaf_bookmark_t *b = &st->bookmarks[i];
+
+    bqm_surah_entry_t info;
+    if (mushaf_reader_get_surah(b->surah, &info) == ESP_OK)
+    {
+        snprintf(s_item_buf, sizeof(s_item_buf), "%u. %.*s %u:%u (J%u)",
+                 (unsigned)(i + 1), NAME_PREC(11), info.name_latin, b->surah, b->ayah, b->juz);
+    }
+    else
+    {
+        snprintf(s_item_buf, sizeof(s_item_buf), "%u. %u:%u (J%u)",
+                 (unsigned)(i + 1), b->surah, b->ayah, b->juz);
+    }
+    return s_item_buf;
+}
+
+static void render_bookmarks(bool full)
+{
+    if (!ui_begin(true))
+    {
+        return;
     }
     const mushaf_state_t *st = mushaf_reader_get_state();
-    if (st != NULL) {
-        memcpy(&s_rtc_mushaf_state, st, sizeof(mushaf_state_t));
+    uint8_t count = st->bookmark_count;
+
+    char title[32];
+    snprintf(title, sizeof(title), "BOOKMARKS (%u/%u)", count, (unsigned)MUSHAF_MAX_BOOKMARKS);
+    int top = ui_draw_header(title, true);
+
+    if (count == 0)
+    {
+        static const char *const k_empty[] = {"No bookmarks yet.", "2x▼ in ayah to add"};
+        ui_draw_message(k_empty, 2, NULL, false);
     }
+    else
+    {
+        s_rtc_bm_idx = ui_list_clamp(s_rtc_bm_idx, count);
+        ui_list_t list = {
+            .count = count,
+            .selected = s_rtc_bm_idx,
+            .get_text = bookmark_text,
+            .ctx = (void *)st,
+            .style = &k_line_row,
+            .top = top,
+            .bottom = ui_body_bottom(false),
+        };
+        ui_draw_list(&list);
+    }
+    ui_draw_footer("2x▲/▼ Jump | Hold ▲/▼ Back", false);
+    ui_end(refresh_mode(full));
 }
 
-void view_mushaf_save_before_sleep(void) {
-    mushaf_reader_save_state();
+static reader_view_t event_bookmarks(reader_view_t self, button_event_t evt)
+{
     const mushaf_state_t *st = mushaf_reader_get_state();
-    if (st != NULL) {
-        memcpy(&s_rtc_mushaf_state, st, sizeof(mushaf_state_t));
+    uint8_t count = st->bookmark_count;
+
+    if (evt.type == BTN_LONG_PRESS || (count == 0 && evt.type == BTN_DOUBLE_CLICK))
+    {
+        return VIEW_MUSHAF_MENU;
     }
+    if (ui_list_step(&s_rtc_bm_idx, count, evt))
+    {
+        render_bookmarks(false);
+        return self;
+    }
+    if (evt.type != BTN_DOUBLE_CLICK)
+    {
+        return self;
+    }
+
+    int idx = ui_list_clamp(s_rtc_bm_idx, count);
+    mushaf_reader_set_cursor(st->bookmarks[idx].surah, st->bookmarks[idx].ayah, st->layer);
+    views_request_full_refresh();
+    return VIEW_MUSHAF_READING;
 }
 
-void view_mushaf_enter_menu(void) {
-    s_rtc_mushaf_menu_idx = 0;
-    s_rtc_mushaf_sub_view = VIEW_MUSHAF_MENU;
-    view_mushaf_render_menu(false);
+/* ---------- view_def_t ---------- */
+
+static void enter(reader_view_t self)
+{
+    s_rtc_sub_view = self;
+    if (self == VIEW_MUSHAF_JUMP)
+    {
+        s_rtc_jump_idx = 0;
+    }
+    else if (self == VIEW_MUSHAF_BOOKMARKS)
+    {
+        s_rtc_bm_idx = 0;
+    }
+    /* Menu index is reset in leave(), so returning from a sub-view keeps the selection. */
 }
 
-reader_view_t view_mushaf_on_wake(void) {
-    switch (s_rtc_mushaf_sub_view) {
+static void leave(reader_view_t self)
+{
+    (void)self;
+    view_mushaf_save_before_sleep();
+    s_rtc_menu_idx = 0;
+    s_rtc_sub_view = VIEW_MUSHAF_MENU;
+}
+
+static reader_view_t wake(reader_view_t self)
+{
+    (void)self;
+    switch (s_rtc_sub_view)
+    {
     case VIEW_MUSHAF_READING:
     case VIEW_MUSHAF_JUMP:
     case VIEW_MUSHAF_BOOKMARKS:
-        return s_rtc_mushaf_sub_view;
-    case VIEW_MUSHAF_MENU:
+        return s_rtc_sub_view;
     default:
-        s_rtc_mushaf_sub_view = VIEW_MUSHAF_MENU;
+        s_rtc_sub_view = VIEW_MUSHAF_MENU;
         return VIEW_MUSHAF_MENU;
     }
 }
 
-static reader_view_t mushaf_handle_event_internal(reader_view_t view, button_event_t evt) {
-    if (view == VIEW_MUSHAF_MENU) {
-        if (evt.type == BTN_EVENT_CUSTOM_REFRESH) {
-            view_mushaf_render_menu(false);
-            return VIEW_MUSHAF_MENU;
-        }
-
-        if (!mushaf_reader_has_bqm()) {
-            if (evt.type == BTN_LONG_PRESS || evt.type == BTN_DOUBLE_CLICK) {
-                view_menu_render(false);
-                return VIEW_MENU;
-            }
-            return VIEW_MUSHAF_MENU;
-        }
-
-        if (evt.type == BTN_CLICK) {
-            if (evt.button == BTN_ID_BOOT) {
-                s_rtc_mushaf_menu_idx = (s_rtc_mushaf_menu_idx - 1 + 4) % 4;
-            } else if (evt.button == BTN_ID_PWR) {
-                s_rtc_mushaf_menu_idx = (s_rtc_mushaf_menu_idx + 1) % 4;
-            }
-            view_mushaf_render_menu(false);
-            return VIEW_MUSHAF_MENU;
-        } else if (evt.type == BTN_DOUBLE_CLICK) {
-            if (s_rtc_mushaf_menu_idx == 0) {
-                view_mushaf_render_reading(false);
-                return VIEW_MUSHAF_READING;
-            } else if (s_rtc_mushaf_menu_idx == 1) {
-                mushaf_reader_cycle_layer();
-                view_mushaf_render_menu(false);
-                return VIEW_MUSHAF_MENU;
-            } else if (s_rtc_mushaf_menu_idx == 2) {
-                s_rtc_mushaf_jump_idx = 0;
-                view_mushaf_render_jump(false);
-                return VIEW_MUSHAF_JUMP;
-            } else if (s_rtc_mushaf_menu_idx == 3) {
-                s_rtc_mushaf_bm_idx = 0;
-                view_mushaf_render_bookmarks(false);
-                return VIEW_MUSHAF_BOOKMARKS;
-            }
-        } else if (evt.type == BTN_LONG_PRESS) {
-            view_menu_render(false);
-            return VIEW_MENU;
-        }
-        return VIEW_MUSHAF_MENU;
+static void render(reader_view_t self, bool full)
+{
+    switch (self)
+    {
+    case VIEW_MUSHAF_READING:
+        render_reading(refresh_mode(full));
+        break;
+    case VIEW_MUSHAF_JUMP:
+        render_jump(full);
+        break;
+    case VIEW_MUSHAF_BOOKMARKS:
+        render_bookmarks(full);
+        break;
+    default:
+        render_menu(full);
+        break;
     }
-
-    if (view == VIEW_MUSHAF_READING) {
-        if (evt.type == BTN_EVENT_CUSTOM_REFRESH) {
-            view_mushaf_render_reading(false);
-            return VIEW_MUSHAF_READING;
-        }
-
-        if (evt.type == BTN_CLICK) {
-            if (evt.button == BTN_ID_PWR) {
-                mushaf_reader_step_page(1);
-            } else if (evt.button == BTN_ID_BOOT) {
-                mushaf_reader_step_page(-1);
-            }
-            bool full = reader_ui_page_turn_needs_full();
-            view_mushaf_render_reading(full);
-            return VIEW_MUSHAF_READING;
-        } else if (evt.type == BTN_DOUBLE_CLICK) {
-            if (evt.button == BTN_ID_BOOT) {
-                mushaf_reader_cycle_layer();
-                view_mushaf_render_reading(false);
-                return VIEW_MUSHAF_READING;
-            } else if (evt.button == BTN_ID_PWR) {
-                mushaf_reader_toggle_bookmark();
-                view_mushaf_render_reading(false);
-                return VIEW_MUSHAF_READING;
-            }
-        } else if (evt.type == BTN_LONG_PRESS) {
-            view_mushaf_save_before_sleep();
-            view_mushaf_render_menu(false);
-            return VIEW_MUSHAF_MENU;
-        }
-        return VIEW_MUSHAF_READING;
-    }
-
-    if (view == VIEW_MUSHAF_JUMP) {
-        if (evt.type == BTN_EVENT_CUSTOM_REFRESH) {
-            view_mushaf_render_jump(false);
-            return VIEW_MUSHAF_JUMP;
-        }
-
-        if (evt.type == BTN_CLICK) {
-            if (evt.button == BTN_ID_BOOT) {
-                s_rtc_mushaf_jump_idx = (s_rtc_mushaf_jump_idx - 1 + 35) % 35;
-            } else if (evt.button == BTN_ID_PWR) {
-                s_rtc_mushaf_jump_idx = (s_rtc_mushaf_jump_idx + 1) % 35;
-            }
-            view_mushaf_render_jump(false);
-            return VIEW_MUSHAF_JUMP;
-        } else if (evt.type == BTN_DOUBLE_CLICK) {
-            uint8_t surah = 1;
-            uint16_t ayah = 1;
-            if (s_rtc_mushaf_jump_idx < 5) {
-                surah = k_sunnah_presets[s_rtc_mushaf_jump_idx].surah;
-                ayah = k_sunnah_presets[s_rtc_mushaf_jump_idx].ayah;
-            } else {
-                uint8_t juz = (uint8_t)(s_rtc_mushaf_jump_idx - 4);
-                get_juz_start(juz, &surah, &ayah);
-            }
-            const mushaf_state_t *st = mushaf_reader_get_state();
-            uint8_t layer = st ? st->layer : 0;
-            mushaf_reader_set_cursor(surah, ayah, layer);
-            view_mushaf_render_reading(true);
-            return VIEW_MUSHAF_READING;
-        } else if (evt.type == BTN_LONG_PRESS) {
-            view_mushaf_render_menu(false);
-            return VIEW_MUSHAF_MENU;
-        }
-        return VIEW_MUSHAF_JUMP;
-    }
-
-    if (view == VIEW_MUSHAF_BOOKMARKS) {
-        if (evt.type == BTN_EVENT_CUSTOM_REFRESH) {
-            view_mushaf_render_bookmarks(false);
-            return VIEW_MUSHAF_BOOKMARKS;
-        }
-
-        const mushaf_state_t *st = mushaf_reader_get_state();
-        uint8_t count = (st != NULL) ? st->bookmark_count : 0;
-
-        if (count == 0) {
-            if (evt.type == BTN_LONG_PRESS || evt.type == BTN_DOUBLE_CLICK) {
-                view_mushaf_render_menu(false);
-                return VIEW_MUSHAF_MENU;
-            }
-            return VIEW_MUSHAF_BOOKMARKS;
-        }
-
-        if (evt.type == BTN_CLICK) {
-            if (evt.button == BTN_ID_BOOT) {
-                s_rtc_mushaf_bm_idx = (s_rtc_mushaf_bm_idx - 1 + count) % count;
-            } else if (evt.button == BTN_ID_PWR) {
-                s_rtc_mushaf_bm_idx = (s_rtc_mushaf_bm_idx + 1) % count;
-            }
-            view_mushaf_render_bookmarks(false);
-            return VIEW_MUSHAF_BOOKMARKS;
-        } else if (evt.type == BTN_DOUBLE_CLICK) {
-            if (s_rtc_mushaf_bm_idx >= count) s_rtc_mushaf_bm_idx = 0;
-            uint8_t surah = st->bookmarks[s_rtc_mushaf_bm_idx].surah;
-            uint16_t ayah = st->bookmarks[s_rtc_mushaf_bm_idx].ayah;
-            mushaf_reader_set_cursor(surah, ayah, st->layer);
-            view_mushaf_render_reading(true);
-            return VIEW_MUSHAF_READING;
-        } else if (evt.type == BTN_LONG_PRESS) {
-            view_mushaf_render_menu(false);
-            return VIEW_MUSHAF_MENU;
-        }
-        return VIEW_MUSHAF_BOOKMARKS;
-    }
-
-    return view;
 }
 
-reader_view_t view_mushaf_handle_event(reader_view_t view, button_event_t evt) {
-    reader_view_t next = mushaf_handle_event_internal(view, evt);
-    if (next >= VIEW_MUSHAF_MENU && next <= VIEW_MUSHAF_BOOKMARKS) {
-        s_rtc_mushaf_sub_view = next;
+static reader_view_t event(reader_view_t self, button_event_t evt)
+{
+    if (evt.type == BTN_EVENT_CUSTOM_REFRESH)
+    {
+        return self; /* dispatcher renders */
     }
-    return next;
+    switch (self)
+    {
+    case VIEW_MUSHAF_READING:
+        return event_reading(self, evt);
+    case VIEW_MUSHAF_JUMP:
+        return event_jump(self, evt);
+    case VIEW_MUSHAF_BOOKMARKS:
+        return event_bookmarks(self, evt);
+    default:
+        return event_menu(self, evt);
+    }
 }
 
-#endif // CONFIG_BOARD_MUSHAF_ENABLE || BOARD_MUSHAF_ENABLE
+const view_def_t VIEW_DEF_MUSHAF = {
+    .first = VIEW_MUSHAF_MENU,
+    .last = VIEW_MUSHAF_BOOKMARKS,
+    .full_on_refresh = false,
+    .enter = enter,
+    .wake = wake,
+    .render = render,
+    .event = event,
+    .leave = leave,
+};
+
+/* ---------- lifecycle (called from main) ---------- */
+
+void view_mushaf_init(bool is_cold_boot)
+{
+    if (is_cold_boot)
+    {
+        s_rtc_sub_view = VIEW_MUSHAF_MENU;
+        mushaf_reader_init(NULL);
+    }
+    else
+    {
+        mushaf_reader_init(&s_rtc_state);
+    }
+    memcpy(&s_rtc_state, mushaf_reader_get_state(), sizeof(mushaf_state_t));
+}
+
+void view_mushaf_save_before_sleep(void)
+{
+    mushaf_reader_save_state();
+    memcpy(&s_rtc_state, mushaf_reader_get_state(), sizeof(mushaf_state_t));
+}
+
+#endif /* VIEWS_HAS_MUSHAF */

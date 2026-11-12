@@ -7,9 +7,9 @@
   <title>BacaIn Flasher</title>
   <meta name="description" content="ESP32-S3 firmware installer for BacaIn">
   <meta name="theme-color" content="#2563eb">
-  <link rel="icon" type="image/svg+xml" href="icon.svg">
-  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
-  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="icon" type="image/svg+xml" href="assets/icon.svg">
+  <link rel="icon" type="image/png" sizes="192x192" href="assets/icon-192.png">
+  <link rel="apple-touch-icon" href="assets/icon-192.png">
   <link rel="manifest" href="manifest.json">
   <link rel="stylesheet" href="style.css">
   <style>
@@ -20,9 +20,11 @@
       background: var(--bg-secondary);
       transition: border-color var(--transition-fast);
     }
+
     .custom-file-details:hover {
       border-color: var(--border-hover);
     }
+
     .custom-file-summary {
       padding: 0.65rem 0.85rem;
       font-size: 0.82rem;
@@ -31,18 +33,22 @@
       cursor: pointer;
       user-select: none;
     }
+
     .custom-file-summary:focus-visible {
       outline: 2px solid var(--accent-color);
       outline-offset: -2px;
       border-radius: var(--radius-sm);
     }
+
     .custom-file-content {
       padding: 0.75rem;
       border-top: 1px solid var(--border-color);
     }
+
     .release-select-group {
       margin-bottom: 0.85rem;
     }
+
     .release-select-label {
       display: block;
       font-size: 0.76rem;
@@ -50,6 +56,7 @@
       color: var(--text-secondary);
       margin-bottom: 0.35rem;
     }
+
     .release-meta-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
@@ -61,6 +68,7 @@
       border-radius: var(--radius-sm);
       font-size: 0.8rem;
     }
+
     .release-meta-item .meta-label {
       font-size: 0.68rem;
       color: var(--text-muted);
@@ -68,10 +76,12 @@
       text-transform: uppercase;
       letter-spacing: 0.04em;
     }
+
     .release-meta-item .meta-value {
       font-weight: 600;
       color: var(--text-primary);
     }
+
     .release-meta-item .meta-mono {
       font-family: var(--font-mono);
       color: var(--text-secondary);
@@ -97,7 +107,7 @@
     <!-- Header Section -->
     <header class="app-header">
       <div class="brand-section">
-        <img src="icon.svg" alt="BacaIn logo" class="brand-logo">
+        <img src="assets/icon.svg" alt="BacaIn logo" class="brand-logo">
         <div class="brand-text">
           <h1><span>Baca<span style="color: var(--accent-color);">In</span></span> <span
               class="brand-badge">Flasher</span></h1>

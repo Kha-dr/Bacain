@@ -10,6 +10,7 @@ idf_component_register(
         power_mgr
         sdcard
         reader_core
+        app_settings
         fatfs
         vfs
         log

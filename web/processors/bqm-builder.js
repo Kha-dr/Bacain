@@ -13,120 +13,120 @@
 // Canonical Surahs Dataset (114 Surahs: number, name, ayahs, startJuz)
 // ---------------------------------------------------------------------------
 export const CANONICAL_SURAHS = [
-  { number: 1, name: 'Al-Fatihah', ayahs: 7, startJuz: 1 },
-  { number: 2, name: 'Al-Baqarah', ayahs: 286, startJuz: 1 },
+  { number: 1, name: "Al-Fatihah", ayahs: 7, startJuz: 1 },
+  { number: 2, name: "Al-Baqarah", ayahs: 286, startJuz: 1 },
   { number: 3, name: "Ali 'Imran", ayahs: 200, startJuz: 3 },
-  { number: 4, name: 'An-Nisa', ayahs: 176, startJuz: 4 },
+  { number: 4, name: "An-Nisa", ayahs: 176, startJuz: 4 },
   { number: 5, name: "Al-Ma'idah", ayahs: 120, startJuz: 6 },
   { number: 6, name: "Al-An'am", ayahs: 165, startJuz: 7 },
   { number: 7, name: "Al-A'raf", ayahs: 206, startJuz: 8 },
-  { number: 8, name: 'Al-Anfal', ayahs: 75, startJuz: 9 },
-  { number: 9, name: 'At-Tawbah', ayahs: 129, startJuz: 10 },
-  { number: 10, name: 'Yunus', ayahs: 109, startJuz: 11 },
-  { number: 11, name: 'Hud', ayahs: 123, startJuz: 11 },
-  { number: 12, name: 'Yusuf', ayahs: 111, startJuz: 12 },
+  { number: 8, name: "Al-Anfal", ayahs: 75, startJuz: 9 },
+  { number: 9, name: "At-Tawbah", ayahs: 129, startJuz: 10 },
+  { number: 10, name: "Yunus", ayahs: 109, startJuz: 11 },
+  { number: 11, name: "Hud", ayahs: 123, startJuz: 11 },
+  { number: 12, name: "Yusuf", ayahs: 111, startJuz: 12 },
   { number: 13, name: "Ar-Ra'd", ayahs: 43, startJuz: 13 },
-  { number: 14, name: 'Ibrahim', ayahs: 52, startJuz: 13 },
-  { number: 15, name: 'Al-Hijr', ayahs: 99, startJuz: 14 },
-  { number: 16, name: 'An-Nahl', ayahs: 128, startJuz: 14 },
-  { number: 17, name: 'Al-Isra', ayahs: 111, startJuz: 15 },
-  { number: 18, name: 'Al-Kahf', ayahs: 110, startJuz: 15 },
-  { number: 19, name: 'Maryam', ayahs: 98, startJuz: 16 },
-  { number: 20, name: 'Taha', ayahs: 135, startJuz: 16 },
-  { number: 21, name: 'Al-Anbiya', ayahs: 112, startJuz: 17 },
-  { number: 22, name: 'Al-Hajj', ayahs: 78, startJuz: 17 },
+  { number: 14, name: "Ibrahim", ayahs: 52, startJuz: 13 },
+  { number: 15, name: "Al-Hijr", ayahs: 99, startJuz: 14 },
+  { number: 16, name: "An-Nahl", ayahs: 128, startJuz: 14 },
+  { number: 17, name: "Al-Isra", ayahs: 111, startJuz: 15 },
+  { number: 18, name: "Al-Kahf", ayahs: 110, startJuz: 15 },
+  { number: 19, name: "Maryam", ayahs: 98, startJuz: 16 },
+  { number: 20, name: "Taha", ayahs: 135, startJuz: 16 },
+  { number: 21, name: "Al-Anbiya", ayahs: 112, startJuz: 17 },
+  { number: 22, name: "Al-Hajj", ayahs: 78, startJuz: 17 },
   { number: 23, name: "Al-Mu'minun", ayahs: 118, startJuz: 18 },
-  { number: 24, name: 'An-Nur', ayahs: 64, startJuz: 18 },
-  { number: 25, name: 'Al-Furqan', ayahs: 77, startJuz: 18 },
+  { number: 24, name: "An-Nur", ayahs: 64, startJuz: 18 },
+  { number: 25, name: "Al-Furqan", ayahs: 77, startJuz: 18 },
   { number: 26, name: "Ash-Shu'ara", ayahs: 227, startJuz: 19 },
-  { number: 27, name: 'An-Naml', ayahs: 93, startJuz: 19 },
-  { number: 28, name: 'Al-Qasas', ayahs: 88, startJuz: 20 },
+  { number: 27, name: "An-Naml", ayahs: 93, startJuz: 19 },
+  { number: 28, name: "Al-Qasas", ayahs: 88, startJuz: 20 },
   { number: 29, name: "Al-'Ankabut", ayahs: 69, startJuz: 20 },
-  { number: 30, name: 'Ar-Rum', ayahs: 60, startJuz: 21 },
-  { number: 31, name: 'Luqman', ayahs: 34, startJuz: 21 },
-  { number: 32, name: 'As-Sajdah', ayahs: 30, startJuz: 21 },
-  { number: 33, name: 'Al-Ahzab', ayahs: 73, startJuz: 21 },
-  { number: 34, name: 'Saba', ayahs: 54, startJuz: 22 },
-  { number: 35, name: 'Fatir', ayahs: 45, startJuz: 22 },
-  { number: 36, name: 'Ya-Sin', ayahs: 83, startJuz: 22 },
-  { number: 37, name: 'As-Saffat', ayahs: 182, startJuz: 23 },
-  { number: 38, name: 'Sad', ayahs: 88, startJuz: 23 },
-  { number: 39, name: 'Az-Zumar', ayahs: 75, startJuz: 23 },
-  { number: 40, name: 'Ghafir', ayahs: 85, startJuz: 24 },
-  { number: 41, name: 'Fussilat', ayahs: 54, startJuz: 24 },
-  { number: 42, name: 'Ash-Shura', ayahs: 53, startJuz: 25 },
-  { number: 43, name: 'Az-Zukhruf', ayahs: 89, startJuz: 25 },
-  { number: 44, name: 'Ad-Dukhan', ayahs: 59, startJuz: 25 },
-  { number: 45, name: 'Al-Jathiyah', ayahs: 37, startJuz: 25 },
-  { number: 46, name: 'Al-Ahqaf', ayahs: 35, startJuz: 26 },
-  { number: 47, name: 'Muhammad', ayahs: 38, startJuz: 26 },
-  { number: 48, name: 'Al-Fath', ayahs: 29, startJuz: 26 },
-  { number: 49, name: 'Al-Hujurat', ayahs: 18, startJuz: 26 },
-  { number: 50, name: 'Qaf', ayahs: 45, startJuz: 26 },
-  { number: 51, name: 'Adh-Dhariyat', ayahs: 60, startJuz: 26 },
-  { number: 52, name: 'At-Tur', ayahs: 49, startJuz: 27 },
-  { number: 53, name: 'An-Najm', ayahs: 62, startJuz: 27 },
-  { number: 54, name: 'Al-Qamar', ayahs: 55, startJuz: 27 },
-  { number: 55, name: 'Ar-Rahman', ayahs: 78, startJuz: 27 },
+  { number: 30, name: "Ar-Rum", ayahs: 60, startJuz: 21 },
+  { number: 31, name: "Luqman", ayahs: 34, startJuz: 21 },
+  { number: 32, name: "As-Sajdah", ayahs: 30, startJuz: 21 },
+  { number: 33, name: "Al-Ahzab", ayahs: 73, startJuz: 21 },
+  { number: 34, name: "Saba", ayahs: 54, startJuz: 22 },
+  { number: 35, name: "Fatir", ayahs: 45, startJuz: 22 },
+  { number: 36, name: "Ya-Sin", ayahs: 83, startJuz: 22 },
+  { number: 37, name: "As-Saffat", ayahs: 182, startJuz: 23 },
+  { number: 38, name: "Sad", ayahs: 88, startJuz: 23 },
+  { number: 39, name: "Az-Zumar", ayahs: 75, startJuz: 23 },
+  { number: 40, name: "Ghafir", ayahs: 85, startJuz: 24 },
+  { number: 41, name: "Fussilat", ayahs: 54, startJuz: 24 },
+  { number: 42, name: "Ash-Shura", ayahs: 53, startJuz: 25 },
+  { number: 43, name: "Az-Zukhruf", ayahs: 89, startJuz: 25 },
+  { number: 44, name: "Ad-Dukhan", ayahs: 59, startJuz: 25 },
+  { number: 45, name: "Al-Jathiyah", ayahs: 37, startJuz: 25 },
+  { number: 46, name: "Al-Ahqaf", ayahs: 35, startJuz: 26 },
+  { number: 47, name: "Muhammad", ayahs: 38, startJuz: 26 },
+  { number: 48, name: "Al-Fath", ayahs: 29, startJuz: 26 },
+  { number: 49, name: "Al-Hujurat", ayahs: 18, startJuz: 26 },
+  { number: 50, name: "Qaf", ayahs: 45, startJuz: 26 },
+  { number: 51, name: "Adh-Dhariyat", ayahs: 60, startJuz: 26 },
+  { number: 52, name: "At-Tur", ayahs: 49, startJuz: 27 },
+  { number: 53, name: "An-Najm", ayahs: 62, startJuz: 27 },
+  { number: 54, name: "Al-Qamar", ayahs: 55, startJuz: 27 },
+  { number: 55, name: "Ar-Rahman", ayahs: 78, startJuz: 27 },
   { number: 56, name: "Al-Waqi'ah", ayahs: 96, startJuz: 27 },
-  { number: 57, name: 'Al-Hadid', ayahs: 29, startJuz: 27 },
-  { number: 58, name: 'Al-Mujadila', ayahs: 22, startJuz: 28 },
-  { number: 59, name: 'Al-Hashr', ayahs: 24, startJuz: 28 },
-  { number: 60, name: 'Al-Mumtahanah', ayahs: 13, startJuz: 28 },
-  { number: 61, name: 'As-Saff', ayahs: 14, startJuz: 28 },
+  { number: 57, name: "Al-Hadid", ayahs: 29, startJuz: 27 },
+  { number: 58, name: "Al-Mujadila", ayahs: 22, startJuz: 28 },
+  { number: 59, name: "Al-Hashr", ayahs: 24, startJuz: 28 },
+  { number: 60, name: "Al-Mumtahanah", ayahs: 13, startJuz: 28 },
+  { number: 61, name: "As-Saff", ayahs: 14, startJuz: 28 },
   { number: 62, name: "Al-Jumu'ah", ayahs: 11, startJuz: 28 },
-  { number: 63, name: 'Al-Munafiqun', ayahs: 11, startJuz: 28 },
-  { number: 64, name: 'At-Taghabun', ayahs: 18, startJuz: 28 },
-  { number: 65, name: 'At-Talaq', ayahs: 12, startJuz: 28 },
-  { number: 66, name: 'At-Tahrim', ayahs: 12, startJuz: 28 },
-  { number: 67, name: 'Al-Mulk', ayahs: 30, startJuz: 29 },
-  { number: 68, name: 'Al-Qalam', ayahs: 52, startJuz: 29 },
-  { number: 69, name: 'Al-Haqqah', ayahs: 52, startJuz: 29 },
+  { number: 63, name: "Al-Munafiqun", ayahs: 11, startJuz: 28 },
+  { number: 64, name: "At-Taghabun", ayahs: 18, startJuz: 28 },
+  { number: 65, name: "At-Talaq", ayahs: 12, startJuz: 28 },
+  { number: 66, name: "At-Tahrim", ayahs: 12, startJuz: 28 },
+  { number: 67, name: "Al-Mulk", ayahs: 30, startJuz: 29 },
+  { number: 68, name: "Al-Qalam", ayahs: 52, startJuz: 29 },
+  { number: 69, name: "Al-Haqqah", ayahs: 52, startJuz: 29 },
   { number: 70, name: "Al-Ma'arij", ayahs: 44, startJuz: 29 },
-  { number: 71, name: 'Nuh', ayahs: 28, startJuz: 29 },
-  { number: 72, name: 'Al-Jinn', ayahs: 28, startJuz: 29 },
-  { number: 73, name: 'Al-Muzzammil', ayahs: 20, startJuz: 29 },
-  { number: 74, name: 'Al-Muddaththir', ayahs: 56, startJuz: 29 },
-  { number: 75, name: 'Al-Qiyamah', ayahs: 40, startJuz: 29 },
-  { number: 76, name: 'Al-Insan', ayahs: 31, startJuz: 29 },
-  { number: 77, name: 'Al-Mursalat', ayahs: 50, startJuz: 29 },
-  { number: 78, name: 'An-Naba', ayahs: 40, startJuz: 30 },
+  { number: 71, name: "Nuh", ayahs: 28, startJuz: 29 },
+  { number: 72, name: "Al-Jinn", ayahs: 28, startJuz: 29 },
+  { number: 73, name: "Al-Muzzammil", ayahs: 20, startJuz: 29 },
+  { number: 74, name: "Al-Muddaththir", ayahs: 56, startJuz: 29 },
+  { number: 75, name: "Al-Qiyamah", ayahs: 40, startJuz: 29 },
+  { number: 76, name: "Al-Insan", ayahs: 31, startJuz: 29 },
+  { number: 77, name: "Al-Mursalat", ayahs: 50, startJuz: 29 },
+  { number: 78, name: "An-Naba", ayahs: 40, startJuz: 30 },
   { number: 79, name: "An-Nazi'at", ayahs: 46, startJuz: 30 },
   { number: 80, name: "'Abasa", ayahs: 42, startJuz: 30 },
-  { number: 81, name: 'At-Takwir', ayahs: 29, startJuz: 30 },
-  { number: 82, name: 'Al-Infitar', ayahs: 19, startJuz: 30 },
-  { number: 83, name: 'Al-Mutaffifin', ayahs: 36, startJuz: 30 },
-  { number: 84, name: 'Al-Inshiqaq', ayahs: 25, startJuz: 30 },
-  { number: 85, name: 'Al-Buruj', ayahs: 22, startJuz: 30 },
-  { number: 86, name: 'At-Tariq', ayahs: 17, startJuz: 30 },
+  { number: 81, name: "At-Takwir", ayahs: 29, startJuz: 30 },
+  { number: 82, name: "Al-Infitar", ayahs: 19, startJuz: 30 },
+  { number: 83, name: "Al-Mutaffifin", ayahs: 36, startJuz: 30 },
+  { number: 84, name: "Al-Inshiqaq", ayahs: 25, startJuz: 30 },
+  { number: 85, name: "Al-Buruj", ayahs: 22, startJuz: 30 },
+  { number: 86, name: "At-Tariq", ayahs: 17, startJuz: 30 },
   { number: 87, name: "Al-A'la", ayahs: 19, startJuz: 30 },
-  { number: 88, name: 'Al-Ghashiyah', ayahs: 26, startJuz: 30 },
-  { number: 89, name: 'Al-Fajr', ayahs: 30, startJuz: 30 },
-  { number: 90, name: 'Al-Balad', ayahs: 20, startJuz: 30 },
-  { number: 91, name: 'Ash-Shams', ayahs: 15, startJuz: 30 },
-  { number: 92, name: 'Al-Layl', ayahs: 21, startJuz: 30 },
-  { number: 93, name: 'Ad-Duha', ayahs: 11, startJuz: 30 },
-  { number: 94, name: 'Ash-Sharh', ayahs: 8, startJuz: 30 },
-  { number: 95, name: 'At-Tin', ayahs: 8, startJuz: 30 },
+  { number: 88, name: "Al-Ghashiyah", ayahs: 26, startJuz: 30 },
+  { number: 89, name: "Al-Fajr", ayahs: 30, startJuz: 30 },
+  { number: 90, name: "Al-Balad", ayahs: 20, startJuz: 30 },
+  { number: 91, name: "Ash-Shams", ayahs: 15, startJuz: 30 },
+  { number: 92, name: "Al-Layl", ayahs: 21, startJuz: 30 },
+  { number: 93, name: "Ad-Duha", ayahs: 11, startJuz: 30 },
+  { number: 94, name: "Ash-Sharh", ayahs: 8, startJuz: 30 },
+  { number: 95, name: "At-Tin", ayahs: 8, startJuz: 30 },
   { number: 96, name: "Al-'Alaq", ayahs: 19, startJuz: 30 },
-  { number: 97, name: 'Al-Qadr', ayahs: 5, startJuz: 30 },
-  { number: 98, name: 'Al-Bayyinah', ayahs: 8, startJuz: 30 },
-  { number: 99, name: 'Az-Zalzalah', ayahs: 8, startJuz: 30 },
+  { number: 97, name: "Al-Qadr", ayahs: 5, startJuz: 30 },
+  { number: 98, name: "Al-Bayyinah", ayahs: 8, startJuz: 30 },
+  { number: 99, name: "Az-Zalzalah", ayahs: 8, startJuz: 30 },
   { number: 100, name: "Al-'Adiyat", ayahs: 11, startJuz: 30 },
   { number: 101, name: "Al-Qari'ah", ayahs: 11, startJuz: 30 },
-  { number: 102, name: 'At-Takathur', ayahs: 8, startJuz: 30 },
+  { number: 102, name: "At-Takathur", ayahs: 8, startJuz: 30 },
   { number: 103, name: "Al-'Asr", ayahs: 3, startJuz: 30 },
-  { number: 104, name: 'Al-Humazah', ayahs: 9, startJuz: 30 },
-  { number: 105, name: 'Al-Fil', ayahs: 5, startJuz: 30 },
-  { number: 106, name: 'Quraysh', ayahs: 4, startJuz: 30 },
+  { number: 104, name: "Al-Humazah", ayahs: 9, startJuz: 30 },
+  { number: 105, name: "Al-Fil", ayahs: 5, startJuz: 30 },
+  { number: 106, name: "Quraysh", ayahs: 4, startJuz: 30 },
   { number: 107, name: "Al-Ma'un", ayahs: 7, startJuz: 30 },
-  { number: 108, name: 'Al-Kawthar', ayahs: 3, startJuz: 30 },
-  { number: 109, name: 'Al-Kafirun', ayahs: 6, startJuz: 30 },
-  { number: 110, name: 'An-Nasr', ayahs: 3, startJuz: 30 },
-  { number: 111, name: 'Al-Masad', ayahs: 5, startJuz: 30 },
-  { number: 112, name: 'Al-Ikhlas', ayahs: 4, startJuz: 30 },
-  { number: 113, name: 'Al-Falaq', ayahs: 5, startJuz: 30 },
-  { number: 114, name: 'An-Nas', ayahs: 6, startJuz: 30 }
+  { number: 108, name: "Al-Kawthar", ayahs: 3, startJuz: 30 },
+  { number: 109, name: "Al-Kafirun", ayahs: 6, startJuz: 30 },
+  { number: 110, name: "An-Nasr", ayahs: 3, startJuz: 30 },
+  { number: 111, name: "Al-Masad", ayahs: 5, startJuz: 30 },
+  { number: 112, name: "Al-Ikhlas", ayahs: 4, startJuz: 30 },
+  { number: 113, name: "Al-Falaq", ayahs: 5, startJuz: 30 },
+  { number: 114, name: "An-Nas", ayahs: 6, startJuz: 30 },
 ];
 
 export const JUZ_BOUNDARIES = [
@@ -159,7 +159,7 @@ export const JUZ_BOUNDARIES = [
   { juz: 27, surah: 51, ayah: 31 },
   { juz: 28, surah: 58, ayah: 1 },
   { juz: 29, surah: 67, ayah: 1 },
-  { juz: 30, surah: 78, ayah: 1 }
+  { juz: 30, surah: 78, ayah: 1 },
 ];
 
 export function getJuzForSurahAyah(surah, ayah) {
@@ -181,52 +181,228 @@ export const getJuzForAyah = getJuzForSurahAyah;
 export const SURAHS = CANONICAL_SURAHS;
 
 export const MEDINAN_SURAHS = new Set([
-  2, 3, 4, 5, 8, 9, 22, 24, 33, 47, 48, 49, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 76, 98, 110
+  2, 3, 4, 5, 8, 9, 22, 24, 33, 47, 48, 49, 57, 58, 59, 60, 61, 62, 63, 64, 65,
+  66, 76, 98, 110,
 ]);
 
-export const LAYER_TAGS = ['[M]', '[LAT]', '[TRN]', '[TAF]'];
-export const LAYER_NAMES = ['Mushaf Calligraphy', 'Latin Transliteration', 'Translation', 'Tafsir Ringkas'];
+export const LAYER_TAGS = ["[M]", "[LAT]", "[TRN]", "[TAF]"];
+export const LAYER_NAMES = [
+  "Mushaf Calligraphy",
+  "Latin Transliteration",
+  "Translation",
+  "Tafsir Ringkas",
+];
 
 export const SUNNAH_PRESETS = [
-  { surah: 18, ayah: 1, name: 'Al-Kahf', label: 'Al-Kahf (18:1)' },
-  { surah: 36, ayah: 1, name: 'Ya-Sin', label: 'Ya-Sin (36:1)' },
-  { surah: 55, ayah: 1, name: 'Ar-Rahman', label: 'Ar-Rahman (55:1)' },
+  { surah: 18, ayah: 1, name: "Al-Kahf", label: "Al-Kahf (18:1)" },
+  { surah: 36, ayah: 1, name: "Ya-Sin", label: "Ya-Sin (36:1)" },
+  { surah: 55, ayah: 1, name: "Ar-Rahman", label: "Ar-Rahman (55:1)" },
   { surah: 56, ayah: 1, name: "Al-Waqi'ah", label: "Al-Waqi'ah (56:1)" },
-  { surah: 67, ayah: 1, name: 'Al-Mulk', label: 'Al-Mulk (67:1)' }
+  { surah: 67, ayah: 1, name: "Al-Mulk", label: "Al-Mulk (67:1)" },
 ];
 
 export const MUSHAF_LAYERS = [
-  { id: 0, tag: 'M', fullTag: '[M]', name: 'Mushaf', title: 'Mushaf Calligraphy' },
-  { id: 1, tag: 'LAT', fullTag: '[LAT]', name: 'Latin', title: 'Latin Transliteration' },
-  { id: 2, tag: 'TRN', fullTag: '[TRN]', name: 'Translation', title: 'Translation' },
-  { id: 3, tag: 'TAF', fullTag: '[TAF]', name: 'Tafsir', title: 'Tafsir Ringkas' }
+  {
+    id: 0,
+    tag: "M",
+    fullTag: "[M]",
+    name: "Mushaf",
+    title: "Mushaf Calligraphy",
+  },
+  {
+    id: 1,
+    tag: "LAT",
+    fullTag: "[LAT]",
+    name: "Latin",
+    title: "Latin Transliteration",
+  },
+  {
+    id: 2,
+    tag: "TRN",
+    fullTag: "[TRN]",
+    name: "Translation",
+    title: "Translation",
+  },
+  {
+    id: 3,
+    tag: "TAF",
+    fullTag: "[TAF]",
+    name: "Tafsir",
+    title: "Tafsir Ringkas",
+  },
 ];
+// ---------------------------------------------------------------------------
+// Firmware geometry (must match ui_kit/ui_layout.h, ui_pager.c, mushaf_reader.c)
+// ---------------------------------------------------------------------------
+export const BQM_FORMAT_VERSION = 2; // mushaf_reader.h BQM_VERSION
+export const BQM_MAX_WORDS_PER_SUBPAGE = 64; // mushaf_reader.c words[64]
+export const BQM_MAX_SPRITE_W = 255; // bqm_word_sprite_t.width is uint8
 
+export const FW_LAYOUT = {
+  headerHeight: 19, // UI_HEADER_HEIGHT
+  footerHeight: 16, // UI_FOOTER_HEIGHT
+  bodyTop: 22, // UI_BODY_TOP = header + 3
+  marginX: 8, // UI_MARGIN_X
+};
+
+/** Reader body rows [top, bottom): same rect the firmware clips sprites and text to. */
+export function fwBodyRect(screenH) {
+  return {
+    top: FW_LAYOUT.bodyTop,
+    bottom: screenH - FW_LAYOUT.footerHeight - 2, // status footer: ui_footer_y() - 2
+  };
+}
+
+/** Reader text styles (ui_pager.c UI_PAGER_STYLE_SMALL / _LARGE, Waveshare Font12/Font16). */
+export const FW_TEXT_STYLES = {
+  12: { charW: 7, charH: 12, pitch: 14, padX: 8 },
+  16: { charW: 11, charH: 16, pitch: 20, padX: 10 },
+};
+
+/** Columns / lines / left margin the firmware uses for text layers on this screen. */
+export function fwTextGeometry(screenW, screenH, bodyFont = 12) {
+  const st = FW_TEXT_STYLES[bodyFont] || FW_TEXT_STYLES[12];
+  const { top, bottom } = fwBodyRect(screenH);
+  const cols = Math.max(1, Math.floor((screenW - 2 * st.padX) / st.charW));
+  const area = bottom - top;
+  const lines =
+    area < st.charH ? 1 : Math.floor((area - st.charH) / st.pitch) + 1;
+  const marginX = Math.max(0, Math.floor((screenW - cols * st.charW) / 2));
+  return { ...st, cols, lines, marginX, top, bottom };
+}
+
+const MUSHAF_MARGIN = 6;
+const MUSHAF_WORD_SPACING = 4;
+
+export function mushafLineHeight(fontSize) {
+  return Math.max(fontSize + 8, 28);
+}
+
+/** Groups word sprites into right-to-left lines that fit the screen width. */
+export function layoutMushafLines(sprites, screenW) {
+  const maxLineWidth = screenW - MUSHAF_MARGIN * 2;
+  const lines = [];
+  let cur = [];
+  let curW = 0;
+  for (const sp of sprites) {
+    const added = cur.length === 0 ? sp.width : sp.width + MUSHAF_WORD_SPACING;
+    if (curW + added <= maxLineWidth) {
+      cur.push(sp);
+      curW += added;
+    } else {
+      if (cur.length > 0) lines.push(cur);
+      cur = [sp];
+      curW = sp.width;
+    }
+  }
+  if (cur.length > 0) lines.push(cur);
+  return lines;
+}
+
+/** Splits lines into subpages by body height and by the firmware's 64-word cap. */
+export function paginateMushafLines(lines, screenH, fontSize) {
+  const { top, bottom } = fwBodyRect(screenH);
+  const maxLines = Math.max(
+    1,
+    Math.floor((bottom - top) / mushafLineHeight(fontSize)),
+  );
+  const pages = [];
+  let cur = [];
+  let words = 0;
+  for (const line of lines) {
+    if (
+      cur.length > 0 &&
+      (cur.length >= maxLines ||
+        words + line.length > BQM_MAX_WORDS_PER_SUBPAGE)
+    ) {
+      pages.push(cur);
+      cur = [];
+      words = 0;
+    }
+    cur.push(line);
+    words += line.length;
+  }
+  if (cur.length > 0 || pages.length === 0) pages.push(cur);
+  return pages;
+}
+
+/**
+ * Places one subpage. Returns [{ sprite, x, y }] where y is the stored bqm_placed_word_t.y:
+ * the firmware draws rows y + sprite.yOffset .. + height - 1. All words of a line share the
+ * same y (same text origin), so the baseline stays aligned; only out-of-body words are shifted.
+ */
+export function placeMushafPage(pageLines, screenW, screenH, fontSize) {
+  const { top, bottom } = fwBodyRect(screenH);
+  const lh = mushafLineHeight(fontSize);
+  const startY =
+    top + Math.max(0, Math.floor((bottom - top - pageLines.length * lh) / 2));
+  const placed = [];
+
+  pageLines.forEach((line, i) => {
+    const lineY = startY + i * lh;
+    let cursorX = screenW - MUSHAF_MARGIN;
+    for (const sp of line) {
+      const x = Math.max(0, cursorX - sp.width);
+      let y = lineY;
+      const drawTop = y + sp.yOffset;
+      if (drawTop < top) y = top - sp.yOffset;
+      if (y + sp.yOffset + sp.height > bottom)
+        y = bottom - sp.height - sp.yOffset;
+      placed.push({ sprite: sp, x, y: Math.max(0, y) });
+      cursorX = x - MUSHAF_WORD_SPACING;
+    }
+  });
+  return placed;
+}
+
+/** Draws placed words exactly as mushaf_reader_draw_mushaf_page() does (with clipping). */
+function drawPlacedWords(ctx, placed, screenW, screenH) {
+  const { top, bottom } = fwBodyRect(screenH);
+  ctx.fillStyle = "#000000";
+  for (const { sprite: sp, x, y } of placed) {
+    for (let r = 0; r < sp.height; r++) {
+      const py = y + sp.yOffset + r;
+      if (py < top || py >= bottom) continue;
+      for (let c = 0; c < sp.width; c++) {
+        const px = x + c;
+        if (px < 0 || px >= screenW) continue;
+        if (
+          (sp.bitmapBytes[r * sp.strideBytes + (c >> 3)] &
+            (0x80 >> (c & 7))) !==
+          0
+        ) {
+          ctx.fillRect(px, py, 1, 1);
+        }
+      }
+    }
+  }
+}
 // ---------------------------------------------------------------------------
 // Upstream CORS Font & Corpus Endpoints + CacheStorage ('bacain-mushaf-assets-v1')
 // ---------------------------------------------------------------------------
-export const MUSHAF_CACHE_NAME = 'bacain-mushaf-assets-v1';
+export const MUSHAF_CACHE_NAME = "bacain-mushaf-assets-v1";
 
 export const MUSHAF_FONTS = {
   uthmani: {
-    family: 'KFGQPC-Uthmanic',
-    url: 'https://verses.quran.foundation/fonts/quran/hafs/uthmanic_hafs/UthmanicHafs1Ver18.woff2'
+    family: "KFGQPC-Uthmanic",
+    url: "https://verses.quran.foundation/fonts/quran/hafs/uthmanic_hafs/UthmanicHafs1Ver18.woff2",
   },
   indopak: {
-    family: 'IndoPak-Naskh',
-    url: 'https://verses.quran.foundation/fonts/quran/hafs/nastaleeq/indopak/indopak-nastaleeq-waqf-lazim-v4.2.1.woff2'
-  }
+    family: "IndoPak-Naskh",
+    url: "https://verses.quran.foundation/fonts/quran/hafs/nastaleeq/indopak/indopak-nastaleeq-waqf-lazim-v4.2.1.woff2",
+  },
 };
 
 export const MUSHAF_DATA_ENDPOINTS = {
-  uthmani: 'https://api.alquran.cloud/v1/quran/quran-uthmani',
-  indopakPrimary: 'https://cdn.jsdelivr.net/gh/fawazahmed0/quran-api@1/editions/ara-quranindopak.json',
-  indopakFallback: 'https://api.alquran.cloud/v1/quran/quran-indopak',
-  latin: 'https://api.alquran.cloud/v1/quran/en.transliteration',
-  idTrans: 'https://api.alquran.cloud/v1/quran/id.indonesian',
-  enTrans: 'https://api.alquran.cloud/v1/quran/en.sahih',
-  idTafsir: 'https://api.alquran.cloud/v1/quran/id.jalalayn',
-  enTafsir: 'https://api.alquran.cloud/v1/quran/en.jalalayn'
+  uthmani: "https://api.alquran.cloud/v1/quran/quran-uthmani",
+  indopakPrimary:
+    "https://cdn.jsdelivr.net/gh/fawazahmed0/quran-api@1/editions/ara-quranindopak.json",
+  indopakFallback: "https://api.alquran.cloud/v1/quran/quran-indopak",
+  latin: "https://api.alquran.cloud/v1/quran/en.transliteration",
+  idTrans: "https://api.alquran.cloud/v1/quran/id.indonesian",
+  enTrans: "https://api.alquran.cloud/v1/quran/en.sahih",
+  idTafsir: "https://api.alquran.cloud/v1/quran/id.jalalayn",
+  enTafsir: "https://api.alquran.cloud/v1/quran/en.jalalayn",
 };
 
 /**
@@ -237,7 +413,7 @@ export const MUSHAF_DATA_ENDPOINTS = {
  * @returns {Promise<Response>}
  */
 export async function fetchWithCache(url) {
-  if (typeof globalThis !== 'undefined' && globalThis.caches) {
+  if (typeof globalThis !== "undefined" && globalThis.caches) {
     try {
       const cache = await globalThis.caches.open(MUSHAF_CACHE_NAME);
       const cached = await cache.match(url);
@@ -246,7 +422,9 @@ export async function fetchWithCache(url) {
       }
       const res = await fetch(url);
       if (!res.ok) {
-        throw new Error(`Failed to fetch ${url} (HTTP ${res.status}: ${res.statusText})`);
+        throw new Error(
+          `Failed to fetch ${url} (HTTP ${res.status}: ${res.statusText})`,
+        );
       }
       try {
         await cache.put(url, res.clone());
@@ -255,15 +433,21 @@ export async function fetchWithCache(url) {
       }
       return res;
     } catch (err) {
-      console.warn(`CacheStorage open/match warning for ${url}: ${err.message}. Falling back to fetch.`);
+      console.warn(
+        `CacheStorage open/match warning for ${url}: ${err.message}. Falling back to fetch.`,
+      );
     }
   } else {
-    console.warn(`globalThis.caches is unavailable in this environment, falling back to direct fetch for ${url}`);
+    console.warn(
+      `globalThis.caches is unavailable in this environment, falling back to direct fetch for ${url}`,
+    );
   }
 
   const res = await fetch(url);
   if (!res.ok) {
-    throw new Error(`Failed to fetch ${url} (HTTP ${res.status}: ${res.statusText})`);
+    throw new Error(
+      `Failed to fetch ${url} (HTTP ${res.status}: ${res.statusText})`,
+    );
   }
   return res;
 }
@@ -277,10 +461,15 @@ const loadedMushafFonts = new Set();
  * @returns {Promise<boolean>}
  */
 export async function ensureMushafFont(scriptId = 0, onStatus = null) {
-  if (typeof FontFace === 'undefined' || typeof document === 'undefined' || !document.fonts) {
+  if (
+    typeof FontFace === "undefined" ||
+    typeof document === "undefined" ||
+    !document.fonts
+  ) {
     return false;
   }
-  const fontConfig = scriptId === 1 ? MUSHAF_FONTS.indopak : MUSHAF_FONTS.uthmani;
+  const fontConfig =
+    scriptId === 1 ? MUSHAF_FONTS.indopak : MUSHAF_FONTS.uthmani;
   if (loadedMushafFonts.has(fontConfig.family)) {
     return true;
   }
@@ -289,7 +478,7 @@ export async function ensureMushafFont(scriptId = 0, onStatus = null) {
     return true;
   }
 
-  if (typeof onStatus === 'function') {
+  if (typeof onStatus === "function") {
     onStatus(`Fetching ${fontConfig.family} font (${MUSHAF_CACHE_NAME})...`);
   }
 
@@ -314,9 +503,9 @@ export function parseMushafCloud(json) {
       if (Array.isArray(s.ayahs)) {
         for (const a of s.ayahs) {
           map.set(`${s.number}:${a.numberInSurah}`, {
-            text: (a.text || '').trim(),
+            text: (a.text || "").trim(),
             juz: a.juz,
-            hizbQuarter: a.hizbQuarter
+            hizbQuarter: a.hizbQuarter,
           });
         }
       }
@@ -336,7 +525,7 @@ export function parseIndoPakData(json) {
     for (const s of json.data.surahs) {
       if (Array.isArray(s.ayahs)) {
         for (const a of s.ayahs) {
-          map.set(`${s.number}:${a.numberInSurah}`, (a.text || '').trim());
+          map.set(`${s.number}:${a.numberInSurah}`, (a.text || "").trim());
         }
       }
     }
@@ -345,17 +534,19 @@ export function parseIndoPakData(json) {
       const s = item.chapter || item.surah;
       const a = item.verse || item.ayah;
       if (s && a && item.text) {
-        map.set(`${s}:${a}`, (item.text || '').trim());
+        map.set(`${s}:${a}`, (item.text || "").trim());
       }
     }
-  } else if (json && typeof json === 'object') {
-    const list = json.mushaf || Object.values(json).find(Array.isArray); if (Array.isArray(list)) for (const item of list) {
-      const s = item.chapter || item.surah;
-      const a = item.verse || item.ayah;
-      if (s && a && item.text) {
-        map.set(`${s}:${a}`, (item.text || '').trim());
+  } else if (json && typeof json === "object") {
+    const list = json.mushaf || Object.values(json).find(Array.isArray);
+    if (Array.isArray(list))
+      for (const item of list) {
+        const s = item.chapter || item.surah;
+        const a = item.verse || item.ayah;
+        if (s && a && item.text) {
+          map.set(`${s}:${a}`, (item.text || "").trim());
+        }
       }
-    }
   }
   return map;
 }
@@ -368,7 +559,7 @@ export function parseIndoPakData(json) {
  */
 export async function fetchMushafDatasets(options = {}, onStatus = null) {
   function status(msg) {
-    if (typeof onStatus === 'function') onStatus(msg);
+    if (typeof onStatus === "function") onStatus(msg);
   }
 
   const scriptId = options.scriptId ?? options.scriptStyle ?? 0;
@@ -377,23 +568,33 @@ export async function fetchMushafDatasets(options = {}, onStatus = null) {
   const needLatin = options.layers?.latin ?? true;
   const needTrans = options.layers?.translation ?? true;
   const needTafsir = options.layers?.tafsir ?? true;
-  const transLang = (options.translationEdition === 'en_saheeh' || options.translationId === 2) ? 'en' : 'id';
-  const tafsirLang = (options.tafsirEdition === 'jalalayn' || options.tafsirId === 2) ? 'en' : 'id';
+  const transLang =
+    options.translationEdition === "en_saheeh" || options.translationId === 2
+      ? "en"
+      : "id";
+  const tafsirLang =
+    options.tafsirEdition === "jalalayn" || options.tafsirId === 2
+      ? "en"
+      : "id";
 
-  status('Fetching Uthmani text corpus...');
+  status("Fetching Uthmani text corpus...");
   const uthmaniRes = await fetchWithCache(MUSHAF_DATA_ENDPOINTS.uthmani);
   const uthmaniJson = await uthmaniRes.json();
   const uthmaniMap = parseMushafCloud(uthmaniJson);
 
   let indopakMap = null;
   if (needIndopak) {
-    status('Fetching IndoPak text corpus...');
+    status("Fetching IndoPak text corpus...");
     try {
-      const indopakRes = await fetchWithCache(MUSHAF_DATA_ENDPOINTS.indopakPrimary);
+      const indopakRes = await fetchWithCache(
+        MUSHAF_DATA_ENDPOINTS.indopakPrimary,
+      );
       const indopakJson = await indopakRes.json();
       indopakMap = parseIndoPakData(indopakJson);
     } catch (err) {
-      console.warn(`Primary IndoPak fetch failed: ${err.message}. Trying fallback...`);
+      console.warn(
+        `Primary IndoPak fetch failed: ${err.message}. Trying fallback...`,
+      );
       const fbRes = await fetchWithCache(MUSHAF_DATA_ENDPOINTS.indopakFallback);
       const fbJson = await fbRes.json();
       indopakMap = parseIndoPakData(fbJson);
@@ -402,7 +603,7 @@ export async function fetchMushafDatasets(options = {}, onStatus = null) {
 
   let latinMap = null;
   if (needLatin) {
-    status('Fetching Latin transliteration...');
+    status("Fetching Latin transliteration...");
     const latinRes = await fetchWithCache(MUSHAF_DATA_ENDPOINTS.latin);
     const latinJson = await latinRes.json();
     latinMap = parseMushafCloud(latinJson);
@@ -411,14 +612,14 @@ export async function fetchMushafDatasets(options = {}, onStatus = null) {
   let idTransMap = null;
   let enTransMap = null;
   if (needTrans) {
-    if (transLang === 'id' || !options.lazyEditions) {
-      status('Fetching Indonesian translation...');
+    if (transLang === "id" || !options.lazyEditions) {
+      status("Fetching Indonesian translation...");
       const idTrRes = await fetchWithCache(MUSHAF_DATA_ENDPOINTS.idTrans);
       const idTrJson = await idTrRes.json();
       idTransMap = parseMushafCloud(idTrJson);
     }
-    if (transLang === 'en' || !options.lazyEditions) {
-      status('Fetching English translation...');
+    if (transLang === "en" || !options.lazyEditions) {
+      status("Fetching English translation...");
       const enTrRes = await fetchWithCache(MUSHAF_DATA_ENDPOINTS.enTrans);
       const enTrJson = await enTrRes.json();
       enTransMap = parseMushafCloud(enTrJson);
@@ -428,26 +629,26 @@ export async function fetchMushafDatasets(options = {}, onStatus = null) {
   let idTafsirMap = null;
   let enTafsirMap = null;
   if (needTafsir) {
-    if (tafsirLang === 'id' || !options.lazyEditions) {
-      status('Fetching Indonesian tafsir...');
+    if (tafsirLang === "id" || !options.lazyEditions) {
+      status("Fetching Indonesian tafsir...");
       const idTafRes = await fetchWithCache(MUSHAF_DATA_ENDPOINTS.idTafsir);
       const idTafJson = await idTafRes.json();
       idTafsirMap = parseMushafCloud(idTafJson);
     }
-    if (tafsirLang === 'en' || !options.lazyEditions) {
-      status('Fetching English tafsir...');
+    if (tafsirLang === "en" || !options.lazyEditions) {
+      status("Fetching English tafsir...");
       const enTafRes = await fetchWithCache(MUSHAF_DATA_ENDPOINTS.enTafsir);
       const enTafJson = await enTafRes.json();
       enTafsirMap = parseMushafCloud(enTafJson);
     }
   }
 
-  status('Assembling Mushaf datasets...');
+  status("Assembling Mushaf datasets...");
   const surahs = CANONICAL_SURAHS.map((s) => ({
     number: s.number,
     nameLatin: s.name,
     ayahCount: s.ayahs,
-    startJuz: s.startJuz
+    startJuz: s.startJuz,
   }));
 
   const ayahs = [];
@@ -460,39 +661,49 @@ export async function fetchMushafDatasets(options = {}, onStatus = null) {
     for (let a = 1; a <= s.ayahs; a++) {
       const key = `${s.number}:${a}`;
       const u = uthmaniMap?.get(key);
-      const ip = indopakMap?.get(key) || '';
+      const ip = indopakMap?.get(key) || "";
       const lat = latinMap?.get(key);
       const idTr = idTransMap?.get(key);
       const enTr = enTransMap?.get(key);
       const idTaf = idTafsirMap?.get(key);
       const enTaf = enTafsirMap?.get(key);
 
-      const uText = u?.text || '';
-      const ipText = typeof ip === 'object' ? (ip.text || '') : (ip || '');
-      const latText = lat?.text || '';
-      const idTrText = idTr?.text || '';
-      const enTrText = enTr?.text || '';
-      const idTafText = idTaf?.text || '';
-      const enTafText = enTaf?.text || '';
+      const uText = u?.text || "";
+      const ipText = typeof ip === "object" ? ip.text || "" : ip || "";
+      const latText = lat?.text || "";
+      const idTrText = idTr?.text || "";
+      const enTrText = enTr?.text || "";
+      const idTafText = idTaf?.text || "";
+      const enTafText = enTaf?.text || "";
 
       const uthmaniWords = uText.trim().split(/\s+/).filter(Boolean);
       const indopakWords = ipText.trim().split(/\s+/).filter(Boolean);
 
       const juz = u?.juz || getJuzForSurahAyah(s.number, a);
-      const hizbQuarter = u?.hizbQuarter || ((juz - 1) * 8 + 1);
+      const hizbQuarter = u?.hizbQuarter || (juz - 1) * 8 + 1;
 
       ayahs.push({
         surah: s.number,
         ayah: a,
         juz,
         hizbQuarter,
-        uthmaniWords: uthmaniWords.length > 0 ? uthmaniWords : (indopakWords.length > 0 ? indopakWords : ['']),
-        indopakWords: indopakWords.length > 0 ? indopakWords : (uthmaniWords.length > 0 ? uthmaniWords : ['']),
+        uthmaniWords:
+          uthmaniWords.length > 0
+            ? uthmaniWords
+            : indopakWords.length > 0
+              ? indopakWords
+              : [""],
+        indopakWords:
+          indopakWords.length > 0
+            ? indopakWords
+            : uthmaniWords.length > 0
+              ? uthmaniWords
+              : [""],
         latin: latText.trim(),
         translationId: idTrText.trim(),
         translationEn: enTrText.trim(),
         tafsirId: idTafText.trim(),
-        tafsirEn: enTafText.trim()
+        tafsirEn: enTafText.trim(),
       });
 
       idTranslations.push(idTrText.trim());
@@ -504,18 +715,18 @@ export async function fetchMushafDatasets(options = {}, onStatus = null) {
 
   const mushafBase = {
     surahs,
-    ayahs
+    ayahs,
   };
 
   const editionsData = {
     translations: {
       id_kemenag: idTranslations,
-      en_saheeh: enTranslations
+      en_saheeh: enTranslations,
     },
     tafsirs: {
       id_kemenag_ringkas: idTafsirList,
-      jalalayn: enTafsirList
-    }
+      jalalayn: enTafsirList,
+    },
   };
 
   return { mushafBase, editionsData };
@@ -528,33 +739,33 @@ const CRC32_TABLE = new Uint32Array(256);
 for (let i = 0; i < 256; i++) {
   let c = i;
   for (let j = 0; j < 8; j++) {
-    c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
   }
   CRC32_TABLE[i] = c >>> 0;
 }
 
 export function calculateCrc32(bytes, length) {
-  let crc = 0xFFFFFFFF;
+  let crc = 0xffffffff;
   const len = length !== undefined ? length : bytes.length;
   for (let i = 0; i < len; i++) {
-    crc = (crc >>> 8) ^ CRC32_TABLE[(crc ^ bytes[i]) & 0xFF];
+    crc = (crc >>> 8) ^ CRC32_TABLE[(crc ^ bytes[i]) & 0xff];
   }
-  return (crc ^ 0xFFFFFFFF) >>> 0;
+  return (crc ^ 0xffffffff) >>> 0;
 }
 
 // ---------------------------------------------------------------------------
 // ASCII Sanitization & Text Wrapping
 // ---------------------------------------------------------------------------
 export function sanitizeAscii(str) {
-  if (!str) return '';
+  if (!str) return "";
   return str
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[\u2018\u2019]/g, "'")
-    .replace(/[\u201C\u201D]/g, '"')
-    .replace(/[\u2013\u2014]/g, '-')
-    .replace(/…/g, '...')
-    .replace(/[^\x20-\x7E\n]/g, '')
+    .replace(/[\u02BB\u02BC\u02BE\u02BF\u2018\u2019\u201B\u0060\u00B4]/g, "'") // ayn/hamza/quotes
+    .replace(/[\u201C\u201D\u201E]/g, '"')
+    .replace(/[\u2013\u2014]/g, "-")
+    .replace(/…/g, "...")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // ā -> a, ḥ -> h
+    .replace(/[^\x20-\x7E\n]/g, "")
     .trim();
 }
 
@@ -563,13 +774,13 @@ export function wrapTextToLines(text, maxCols) {
   const clean = sanitizeAscii(text);
   const words = clean.split(/\s+/).filter(Boolean);
   const lines = [];
-  let currentLine = '';
+  let currentLine = "";
 
   for (const word of words) {
     if (word.length > maxCols) {
       if (currentLine) {
         lines.push(currentLine);
-        currentLine = '';
+        currentLine = "";
       }
       for (let i = 0; i < word.length; i += maxCols) {
         lines.push(word.slice(i, i + maxCols));
@@ -600,48 +811,63 @@ let _sharedRasterCanvas = null;
 
 function getCanvasContext() {
   if (_sharedRasterCanvas) return _sharedRasterCanvas;
-  if (typeof OffscreenCanvas !== 'undefined') {
+  if (typeof OffscreenCanvas !== "undefined") {
     try {
       const oc = new OffscreenCanvas(300, 100);
-      const ctx = oc.getContext('2d', { willReadFrequently: true });
+      const ctx = oc.getContext("2d", { willReadFrequently: true });
       if (ctx) {
         _sharedRasterCanvas = { canvas: oc, ctx };
         return _sharedRasterCanvas;
       }
     } catch (err) {
-      console.warn('OffscreenCanvas init warning:', err.message);
+      console.warn("OffscreenCanvas init warning:", err.message);
     }
   }
-  if (typeof document !== 'undefined' && typeof document.createElement === 'function') {
+  if (
+    typeof document !== "undefined" &&
+    typeof document.createElement === "function"
+  ) {
     try {
-      const c = document.createElement('canvas');
+      const c = document.createElement("canvas");
       c.width = 300;
       c.height = 100;
-      const ctx = c.getContext('2d', { willReadFrequently: true });
+      const ctx = c.getContext("2d", { willReadFrequently: true });
       if (ctx) {
         _sharedRasterCanvas = { canvas: c, ctx };
         return _sharedRasterCanvas;
       }
     } catch (err) {
-      console.warn('Document canvas init warning:', err.message);
+      console.warn("Document canvas init warning:", err.message);
     }
   }
   return null;
 }
 
-export function rasterizeWordTo1Bit(wordStr, ayahFontSize = 24, scriptId = 0, screenW = 200) {
+export function rasterizeWordTo1Bit(
+  wordStr,
+  ayahFontSize = 24,
+  scriptId = 0,
+  screenW = 200,
+) {
   const envCtx = getCanvasContext();
-  if (!envCtx || typeof envCtx.ctx.measureText !== 'function') {
-    throw new Error('Canvas 2D context is required for 1-bit Mushaf glyph rasterization');
+  if (!envCtx || typeof envCtx.ctx.measureText !== "function") {
+    throw new Error(
+      "Canvas 2D context is required for 1-bit Mushaf glyph rasterization",
+    );
   }
   const { canvas, ctx } = envCtx;
-  const fontName = scriptId === 1 ? 'IndoPak-Naskh, serif' : 'KFGQPC-Uthmanic, Amiri, serif';
+  const fontName =
+    scriptId === 1 ? "IndoPak-Naskh, serif" : "KFGQPC-Uthmanic, Amiri, serif";
   ctx.font = `${ayahFontSize}px ${fontName}`;
-  ctx.textBaseline = 'top';
+  ctx.textBaseline = "top";
 
   const textMetrics = ctx.measureText(wordStr);
   const measuredW = Math.max(8, Math.ceil(textMetrics.width));
-  const canvasW = Math.min(screenW - 16, Math.max(32, measuredW + 16));
+  const canvasW = Math.min(
+    screenW - 16,
+    BQM_MAX_SPRITE_W,
+    Math.max(32, measuredW + 16),
+  );
   const canvasH = Math.max(36, ayahFontSize + 16);
 
   if (canvas.width < canvasW || canvas.height < canvasH) {
@@ -649,22 +875,25 @@ export function rasterizeWordTo1Bit(wordStr, ayahFontSize = 24, scriptId = 0, sc
     canvas.height = Math.max(canvas.height, canvasH);
   }
 
-
-  ctx.fillStyle = '#FFFFFF';
+  ctx.fillStyle = "#FFFFFF";
   ctx.fillRect(0, 0, canvasW, canvasH);
-  ctx.fillStyle = '#000000';
+  ctx.fillStyle = "#000000";
   ctx.font = `${ayahFontSize}px ${fontName}`;
-  ctx.textBaseline = 'top';
+  ctx.textBaseline = "top";
   ctx.fillText(wordStr, 4, 4);
 
   const imgData = ctx.getImageData(0, 0, canvasW, canvasH);
   const pixels = imgData.data;
 
-  let minX = canvasW, minY = canvasH, maxX = -1, maxY = -1;
+  let minX = canvasW,
+    minY = canvasH,
+    maxX = -1,
+    maxY = -1;
   for (let y = 0; y < canvasH; y++) {
     for (let x = 0; x < canvasW; x++) {
       const idx = (y * canvasW + x) * 4;
-      const lum = 0.299 * pixels[idx] + 0.587 * pixels[idx + 1] + 0.114 * pixels[idx + 2];
+      const lum =
+        0.299 * pixels[idx] + 0.587 * pixels[idx + 1] + 0.114 * pixels[idx + 2];
       const alpha = pixels[idx + 3];
       if (lum < 160 && alpha > 100) {
         if (x < minX) minX = x;
@@ -687,10 +916,13 @@ export function rasterizeWordTo1Bit(wordStr, ayahFontSize = 24, scriptId = 0, sc
       for (let c = 0; c < width; c++) {
         const srcX = minX + c;
         const idx = (srcY * canvasW + srcX) * 4;
-        const lum = 0.299 * pixels[idx] + 0.587 * pixels[idx + 1] + 0.114 * pixels[idx + 2];
+        const lum =
+          0.299 * pixels[idx] +
+          0.587 * pixels[idx + 1] +
+          0.114 * pixels[idx + 2];
         const alpha = pixels[idx + 3];
         if (lum < 160 && alpha > 100) {
-          bitmapBytes[r * strideBytes + (c >> 3)] |= (0x80 >> (c & 7));
+          bitmapBytes[r * strideBytes + (c >> 3)] |= 0x80 >> (c & 7);
         }
       }
     }
@@ -700,7 +932,7 @@ export function rasterizeWordTo1Bit(wordStr, ayahFontSize = 24, scriptId = 0, sc
       height,
       yOffset,
       strideBytes,
-      bitmapBytes
+      bitmapBytes,
     };
   }
 
@@ -709,7 +941,7 @@ export function rasterizeWordTo1Bit(wordStr, ayahFontSize = 24, scriptId = 0, sc
     height: 8,
     yOffset: 0,
     strideBytes: 1,
-    bitmapBytes: new Uint8Array(8)
+    bitmapBytes: new Uint8Array(8),
   };
 }
 
@@ -718,193 +950,138 @@ export function rasterizeWordTo1Bit(wordStr, ayahFontSize = 24, scriptId = 0, sc
 // ---------------------------------------------------------------------------
 export async function renderAyahPreviewToCanvas(canvas, options = {}) {
   if (!canvas) {
-    throw new Error('Canvas element required for renderAyahPreviewToCanvas');
+    throw new Error("Canvas element required for renderAyahPreviewToCanvas");
   }
 
   const surah = Math.max(1, Math.min(114, options.surah || 1));
   const ayah = Math.max(1, options.ayah || 1);
   const layer = Math.max(0, Math.min(3, options.layer || 0));
   const scriptId = options.scriptId ?? options.scriptStyle ?? 0;
-  const translationId = options.translationId ?? (options.translationEdition === 'en_saheeh' ? 2 : 1);
-  const tafsirId = options.tafsirId ?? (options.tafsirEdition === 'jalalayn' ? 2 : 1);
-  const screenW = options.screenW || options.displayWidth || canvas.width || 200;
-  const screenH = options.screenH || options.displayHeight || canvas.height || 200;
+  const translationId =
+    options.translationId ??
+    (options.translationEdition === "en_saheeh" ? 2 : 1);
+  const tafsirId =
+    options.tafsirId ?? (options.tafsirEdition === "jalalayn" ? 2 : 1);
+  const screenW =
+    options.screenW || options.displayWidth || canvas.width || 200;
+  const screenH =
+    options.screenH || options.displayHeight || canvas.height || 200;
   const ayahFontSize = options.ayahFontSize || options.mushafFontSize || 24;
-  const latinFontId = options.latinFontId || 0;
+  /* Device reading font (Settings > Font Size): 12 or 16. latinFontId kept for old callers. */
+  const bodyFont = options.bodyFont ?? (options.latinFontId === 1 ? 16 : 12);
 
   canvas.width = screenW;
   canvas.height = screenH;
 
-  // Ensure font is loaded in browser
-  if (typeof ensureMushafFont === 'function') {
-    try {
-      await ensureMushafFont(scriptId);
-    } catch (fontErr) {
-      console.warn('Font load warning in renderAyahPreviewToCanvas:', fontErr.message);
-    }
+  try {
+    await ensureMushafFont(scriptId);
+  } catch (fontErr) {
+    console.warn(
+      "Font load warning in renderAyahPreviewToCanvas:",
+      fontErr.message,
+    );
   }
 
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
   if (!ctx) {
-    throw new Error('Canvas 2D rendering context unavailable');
+    throw new Error("Canvas 2D rendering context unavailable");
   }
-
-  // Clear canvas buffer to pure white
-  ctx.fillStyle = '#FFFFFF';
+  ctx.fillStyle = "#FFFFFF";
   ctx.fillRect(0, 0, screenW, screenH);
 
-  const surahInfo = CANONICAL_SURAHS[surah - 1] || { number: surah, name: 'Mushaf', ayahs: 7, startJuz: 1 };
+  const surahInfo = CANONICAL_SURAHS[surah - 1] || { name: "Mushaf" };
   const juz = getJuzForSurahAyah(surah, ayah);
 
-  // 1. Exact Header Geometry (y = 0..15, height 16px matching view_mushaf.c)
-  ctx.fillStyle = '#000000';
-  ctx.font = '12px monospace';
-  ctx.textBaseline = 'top';
-
-  const headerLeft = `${String(surah).padStart(2, '0')}:${ayah} ${surahInfo.name.slice(0, 9)}`;
-  ctx.fillText(headerLeft, 4, 2);
-
-  const layerTags = ['[M]', '[LAT]', '[TRN]', '[TAF]'];
-  const midX = Math.round(screenW * 0.64);
-  ctx.fillText(layerTags[layer] || '[M]', midX, 2);
-
-  const batX = screenW - 35;
-  ctx.fillText('100%', batX, 2);
-
-  // Header separator line at y = 15
-  ctx.fillRect(0, 15, screenW, 1);
-
-  // 2. Exact Footer Geometry (y = screenH - 16..screenH - 1, height 16px)
-  ctx.fillRect(0, screenH - 16, screenW, 1);
-  ctx.fillText(`Juz ${juz}`, 4, screenH - 14);
-
-  const pageStr = '1/1';
-  const pageStrWidth = ctx.measureText(pageStr).width || 21;
-  ctx.fillText(pageStr, screenW - pageStrWidth - 4, screenH - 14);
-
-  // 3. Exact Body Geometry (y = 16 .. screenH - 17, height = screenH - 32)
-  const key = `${surah}:${ayah}`;
-  let ref = null;
-  if (options.mushafBase && Array.isArray(options.mushafBase.ayahs)) {
-    const found = options.mushafBase.ayahs.find((a) => a.surah === surah && a.ayah === ayah);
-    if (found) {
-      ref = {
-        uthmaniWords: found.uthmaniWords,
-        indopakWords: found.indopakWords,
-        latin: found.latin,
-        trId: found.translationId || options.editionsData?.translations?.id_kemenag?.[found.globalAyahIndex ?? -1],
-        trEn: found.translationEn || options.editionsData?.translations?.en_saheeh?.[found.globalAyahIndex ?? -1],
-        tafsirId: found.tafsirId || options.editionsData?.tafsirs?.id_kemenag_ringkas?.[found.globalAyahIndex ?? -1],
-        tafsirEn: found.tafsirEn || options.editionsData?.tafsirs?.jalalayn?.[found.globalAyahIndex ?? -1]
-      };
-    }
-  }
-  if (!ref) {
-    throw new Error(`Ayah ${key} not found in loaded Mushaf dataset`);
+  // Look up ayah data
+  const found = options.mushafBase?.ayahs?.find(
+    (a) => a.surah === surah && a.ayah === ayah,
+  );
+  if (!found) {
+    throw new Error(`Ayah ${surah}:${ayah} not found in loaded Mushaf dataset`);
   }
 
+  // --- Body (computed first: footer shows the page count) ---
+  let pageCount = 1;
   if (layer === 0) {
-    // Mushaf Calligraphy (RTL Word Layout)
-    const words = (scriptId === 1 ? ref.indopakWords : ref.uthmaniWords) || ref.uthmaniWords;
-    const lineHeight = Math.max(ayahFontSize + 8, 28);
-    const bodyHeight = screenH - 32;
-    const margin = 6;
-    const wordSpacing = 4;
-
-    const wordSprites = words.map((w) => {
-      const sp = rasterizeWordTo1Bit(w, ayahFontSize, scriptId, screenW);
-      return { word: w, ...sp };
-    });
-
-    const lines = [];
-    let currentLine = [];
-    let currentLineWidth = 0;
-    const maxLineWidth = screenW - (margin * 2);
-
-    for (const sp of wordSprites) {
-      const addedWidth = currentLine.length === 0 ? sp.width : (sp.width + wordSpacing);
-      if (currentLineWidth + addedWidth <= maxLineWidth) {
-        currentLine.push(sp);
-        currentLineWidth += addedWidth;
-      } else {
-        if (currentLine.length > 0) lines.push(currentLine);
-        currentLine = [sp];
-        currentLineWidth = sp.width;
-      }
-    }
-    if (currentLine.length > 0) lines.push(currentLine);
-
-    const totalLinesHeight = lines.length * lineHeight;
-    const startY = 16 + Math.max(2, Math.floor((bodyHeight - totalLinesHeight) / 2));
-
-    for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
-      const lineWords = lines[lineIdx];
-      const lineY = startY + (lineIdx * lineHeight);
-      if (lineY + lineHeight > screenH - 16) break;
-
-      let cursorX = screenW - margin;
-      for (const sp of lineWords) {
-        const placedX = cursorX - sp.width;
-        const placedY = lineY + Math.max(0, Math.floor((lineHeight - sp.height) / 2));
-
-        for (let r = 0; r < sp.height; r++) {
-          const py = placedY + r;
-          if (py < 16 || py >= screenH - 16) continue;
-          for (let c = 0; c < sp.width; c++) {
-            const px = placedX + c;
-            if (px < 0 || px >= screenW) continue;
-            const byteVal = sp.bitmapBytes[r * sp.strideBytes + (c >> 3)];
-            if ((byteVal & (0x80 >> (c & 7))) !== 0) {
-              ctx.fillRect(px, py, 1, 1);
-            }
-          }
-        }
-        cursorX = placedX - wordSpacing;
-      }
-    }
+    const words =
+      (scriptId === 1 ? found.indopakWords : found.uthmaniWords) ||
+      found.uthmaniWords;
+    const sprites = words.map((w) =>
+      rasterizeWordTo1Bit(w, ayahFontSize, scriptId, screenW),
+    );
+    const pages = paginateMushafLines(
+      layoutMushafLines(sprites, screenW),
+      screenH,
+      ayahFontSize,
+    );
+    pageCount = pages.length;
+    drawPlacedWords(
+      ctx,
+      placeMushafPage(pages[0], screenW, screenH, ayahFontSize),
+      screenW,
+      screenH,
+    );
   } else {
-    // Text Layers: Latin (1), Translation (2), Tafsir (3)
-    let textToDraw = '';
-    if (layer === 1) {
-      textToDraw = ref.latin;
-    } else if (layer === 2) {
-      textToDraw = translationId === 2 ? ref.trEn : ref.trId;
-    } else {
-      textToDraw = tafsirId === 2 ? ref.tafsirEn : ref.tafsirId;
-    }
+    const text =
+      layer === 1
+        ? found.latin
+        : layer === 2
+          ? translationId === 2
+            ? found.translationEn
+            : found.translationId
+          : tafsirId === 2
+            ? found.tafsirEn
+            : found.tafsirId;
+    const g = fwTextGeometry(screenW, screenH, bodyFont);
+    const lines = wrapTextToLines(text || "", g.cols);
+    pageCount = Math.max(1, Math.ceil(lines.length / g.lines));
 
-    const charW = latinFontId === 1 ? 11 : 7;
-    const charH = latinFontId === 1 ? 16 : 12;
-    const maxCols = Math.floor((screenW - 8) / charW);
-    const lines = wrapTextToLines(textToDraw, maxCols);
-
-    ctx.font = `${charH}px monospace`;
-    ctx.textBaseline = 'top';
-
-    let curY = 18;
-    for (const ln of lines) {
-      if (curY + charH >= screenH - 16) break;
-      ctx.fillText(ln, 4, curY);
-      curY += charH + 2;
-    }
+    ctx.fillStyle = "#000000";
+    ctx.font = `${g.charH}px monospace`;
+    ctx.textBaseline = "top";
+    lines.slice(0, g.lines).forEach((ln, i) => {
+      const y = g.top + i * g.pitch;
+      for (let k = 0; k < ln.length; k++) {
+        ctx.fillText(ln[k], g.marginX + k * g.charW, y); // fixed advance, like the bitmap font
+      }
+    });
   }
 
-  // 4. Strict 1-Bit Luminance Thresholding
+  // --- Header: plain bar like the reader (title left, battery right, line at y = 19) ---
+  ctx.fillStyle = "#000000";
+  ctx.font = "12px monospace";
+  ctx.textBaseline = "top";
+  ctx.fillText(`${surah}:${ayah} ${surahInfo.name}`, FW_LAYOUT.marginX, 3);
+  const bat = "100%";
+  ctx.fillText(bat, screenW - bat.length * 7 - FW_LAYOUT.marginX, 3);
+  ctx.fillRect(0, FW_LAYOUT.headerHeight, screenW, 1);
+
+  // --- Footer: status bar like the reader (line at H-17, text at H-14) ---
+  const footerY = screenH - FW_LAYOUT.footerHeight;
+  ctx.fillRect(0, footerY - 1, screenW, 1);
+  const tags = ["MUS", "LAT", "TRN", "TAF"];
+  ctx.fillText(`J${juz} ${tags[layer]}`, FW_LAYOUT.marginX, footerY + 2);
+  const right = pageCount > 1 ? `1/${pageCount}` : "";
+  if (right)
+    ctx.fillText(
+      right,
+      screenW - right.length * 7 - FW_LAYOUT.marginX,
+      footerY + 2,
+    );
+
+  // --- Strict 1-bit threshold (same as before) ---
   try {
     const frame = ctx.getImageData(0, 0, screenW, screenH);
     const d = frame.data;
     for (let i = 0; i < d.length; i += 4) {
       const lum = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-      const a = d[i + 3];
-      const bit = (lum < 160 && a > 64) ? 0 : 255;
-      d[i] = bit;
-      d[i + 1] = bit;
-      d[i + 2] = bit;
+      const bit = lum < 160 && d[i + 3] > 64 ? 0 : 255;
+      d[i] = d[i + 1] = d[i + 2] = bit;
       d[i + 3] = 255;
     }
     ctx.putImageData(frame, 0, 0);
   } catch (err) {
-    console.warn('1-bit thresholding warning:', err.message);
+    console.warn("1-bit thresholding warning:", err.message);
   }
 }
 
@@ -913,59 +1090,80 @@ export async function renderAyahPreviewToCanvas(canvas, options = {}) {
 // ---------------------------------------------------------------------------
 export async function buildBqmPackage(options = {}, onProgress = null) {
   const scriptId = options.scriptId ?? options.scriptStyle ?? 0;
-  const translationId = options.translationId ?? (options.translationEdition === 'en_saheeh' ? 2 : (options.translationEdition === 'id_kemenag' ? 1 : 1));
-  const tafsirId = options.tafsirId ?? (options.tafsirEdition === 'jalalayn' ? 2 : (options.tafsirEdition === 'id_kemenag_ringkas' ? 1 : 1));
+  const translationId =
+    options.translationId ??
+    (options.translationEdition === "en_saheeh"
+      ? 2
+      : options.translationEdition === "id_kemenag"
+        ? 1
+        : 1);
+  const tafsirId =
+    options.tafsirId ??
+    (options.tafsirEdition === "jalalayn"
+      ? 2
+      : options.tafsirEdition === "id_kemenag_ringkas"
+        ? 1
+        : 1);
   const ayahFontSize = options.ayahFontSize ?? options.mushafFontSize ?? 24;
   const latinFontId = options.latinFontId ?? 0;
   const screenW = options.screenW ?? options.displayWidth ?? 200;
   const screenH = options.screenH ?? options.displayHeight ?? 200;
 
   const showMushaf = options.layers?.mushaf ?? true;
-  const showLatin = options.layers?.latin ?? (options.showLatin ?? true);
-  const showTranslation = options.layers?.translation ?? (options.showTranslation ?? (translationId !== 0));
-  const showTafsir = options.layers?.tafsir ?? (options.showTafsir ?? (tafsirId !== 0));
+  const showLatin = options.layers?.latin ?? options.showLatin ?? true;
+  const showTranslation =
+    options.layers?.translation ??
+    options.showTranslation ??
+    translationId !== 0;
+  const showTafsir =
+    options.layers?.tafsir ?? options.showTafsir ?? tafsirId !== 0;
 
   function reportProgress(pct, stage) {
-    if (typeof onProgress === 'function') {
+    if (typeof onProgress === "function") {
       try {
         onProgress({
           stage,
           percent: Math.round(pct * 100),
           current: Math.round(pct * 100),
-          total: 100
+          total: 100,
         });
         onProgress(pct, stage);
       } catch (err) {
-        console.warn('onProgress handler warning:', err.message);
+        console.warn("onProgress handler warning:", err.message);
       }
     }
   }
 
-  reportProgress(0.05, 'Loading Mushaf datasets');
+  reportProgress(0.05, "Loading Mushaf datasets");
 
   // Load or acquire datasets
   let mushafBase = options.mushafBase || null;
   let editionsData = options.editionsData || null;
 
   if (!mushafBase || !editionsData) {
-    reportProgress(0.08, 'Fetching Mushaf datasets (bacain-mushaf-assets-v1)...');
+    reportProgress(
+      0.08,
+      "Fetching Mushaf datasets (bacain-mushaf-assets-v1)...",
+    );
     const datasets = await fetchMushafDatasets(options, (statusMsg) => {
-      reportProgress(0.10, statusMsg);
+      reportProgress(0.1, statusMsg);
     });
     if (!mushafBase) mushafBase = datasets.mushafBase;
     if (!editionsData) editionsData = datasets.editionsData;
   }
 
   // Ensure calligraphy font is loaded in browser
-  if (typeof ensureMushafFont === 'function') {
+  if (typeof ensureMushafFont === "function") {
     try {
-      await ensureMushafFont(scriptId, (statusMsg) => reportProgress(0.12, statusMsg));
+      await ensureMushafFont(scriptId, (statusMsg) =>
+        reportProgress(0.12, statusMsg),
+      );
     } catch (fontErr) {
-      console.warn('Font loading notice in buildBqmPackage:', fontErr.message);
+      console.warn("Font loading notice in buildBqmPackage:", fontErr.message);
     }
   }
 
-  reportProgress(0.15, 'Preparing Surah and Ayah indices');
+  reportProgress(0.15, "Preparing Surah and Ayah indices");
 
   const surahs = CANONICAL_SURAHS;
   const TOTAL_SURAHS = 114;
@@ -979,23 +1177,27 @@ export async function buildBqmPackage(options = {}, onProgress = null) {
     }
   }
 
+  const startSurah = Math.max(1, Math.min(114, options.startSurah || 1));
+  const endSurah = Math.max(startSurah, Math.min(114, options.endSurah || 114));
+
   // Pre-calculate first_global_ayah for each Surah
   const surahMeta = [];
   let globalAyahCounter = 0;
   for (let s = 0; s < TOTAL_SURAHS; s++) {
     const sInfo = surahs[s];
+    const inRange = sInfo.number >= startSurah && sInfo.number <= endSurah;
     surahMeta.push({
       surah_number: sInfo.number,
-      ayah_count: sInfo.ayahs,
+      ayah_count: inRange ? sInfo.ayahs : 0,
       first_global_ayah: globalAyahCounter,
       juz_start: sInfo.startJuz,
       revelation_type: MEDINAN_SURAHS.has(sInfo.number) ? 1 : 0,
-      name_latin: sInfo.name
+      name_latin: sInfo.name,
     });
     globalAyahCounter += sInfo.ayahs;
   }
 
-  reportProgress(0.25, 'Rasterizing word sprites and placing layouts');
+  reportProgress(0.25, "Rasterizing word sprites and placing layouts");
 
   // Dictionary structures
   const wordDict = new Map();
@@ -1007,15 +1209,23 @@ export async function buildBqmPackage(options = {}, onProgress = null) {
     if (wordDict.has(wordStr)) {
       return wordDict.get(wordStr);
     }
-    const raster = rasterizeWordTo1Bit(wordStr, ayahFontSize, scriptId, screenW);
+    const raster = rasterizeWordTo1Bit(
+      wordStr,
+      ayahFontSize,
+      scriptId,
+      screenW,
+    );
     const sprite = {
       word_id: wordSprites.length,
       width: raster.width,
       height: raster.height,
+      yOffset: raster.yOffset,
       y_offset: raster.yOffset,
+      strideBytes: raster.strideBytes,
       stride_bytes: raster.strideBytes,
+      bitmapBytes: raster.bitmapBytes,
       bitmap_off: spriteBlobLen,
-      bytes: raster.bitmapBytes
+      bytes: raster.bitmapBytes,
     };
     wordDict.set(wordStr, sprite);
     wordSprites.push(sprite);
@@ -1030,31 +1240,22 @@ export async function buildBqmPackage(options = {}, onProgress = null) {
 
   const textLayerRecords = [];
   let textBlobLen = 0;
-
-  const charW = latinFontId === 1 ? 11 : 7;
-  const charH = latinFontId === 1 ? 16 : 12;
-  const maxCols = Math.floor((screenW - 8) / charW);
-  const maxLines = Math.floor((screenH - 36) / (charH + 2));
-
-  const lineHeight = Math.max(ayahFontSize + 8, 28);
-  const bodyHeight = screenH - 32;
-  const margin = 6;
-  const wordSpacing = 4;
-  const maxLineWidth = screenW - (margin * 2);
-  const maxMushafLinesPerSubpage = Math.max(1, Math.floor(bodyHeight / lineHeight));
+  // Text layers: the firmware re-wraps text for the device's reading font, so stored
+  // line breaks only keep each line < 255 bytes. Use the Font12 reader geometry.
+  const textGeom = fwTextGeometry(screenW, screenH, 12);
+  const maxCols = textGeom.cols;
+  const maxLines = textGeom.lines;
 
   const ayahEntries = [];
-  const startSurah = Math.max(1, Math.min(114, options.startSurah || 1));
-  const endSurah = Math.max(startSurah, Math.min(114, options.endSurah || 114));
 
   for (let s = 1; s <= TOTAL_SURAHS; s++) {
     const sInfo = surahs[s - 1];
-    const inRange = (s >= startSurah && s <= endSurah);
+    const inRange = s >= startSurah && s <= endSurah;
     for (let a = 1; a <= sInfo.ayahs; a++) {
       const key = `${s}:${a}`;
       const juz = getJuzForSurahAyah(s, a);
       const src = ayahMap.get(key);
-      const hizb = src?.hizbQuarter || ((juz - 1) * 8 + 1);
+      const hizb = src?.hizbQuarter || (juz - 1) * 8 + 1;
 
       if (!inRange) {
         ayahEntries.push({
@@ -1068,7 +1269,7 @@ export async function buildBqmPackage(options = {}, onProgress = null) {
           mushaf_off: 0,
           latin_off: 0,
           trans_off: 0,
-          tafsir_off: 0
+          tafsir_off: 0,
         });
         continue;
       }
@@ -1082,95 +1283,56 @@ export async function buildBqmPackage(options = {}, onProgress = null) {
       let mushafOff = 0;
 
       if (showMushaf) {
-        const words = scriptId === 1 ? (src.indopakWords || src.words) : (src.uthmaniWords || src.words);
+        const words =
+          scriptId === 1
+            ? src.indopakWords || src.words
+            : src.uthmaniWords || src.words;
         if (!Array.isArray(words) || words.length === 0) {
           throw new Error(`Ayah ${key} missing Arabic word tokens`);
         }
 
         const sprites = words.map(getWordSprite);
+        const pages = paginateMushafLines(
+          layoutMushafLines(sprites, screenW),
+          screenH,
+          ayahFontSize,
+        );
 
-        // Group into lines (RTL)
-        const lines = [];
-        let curLine = [];
-        let curLineWidth = 0;
-
-        for (const sp of sprites) {
-          const added = curLine.length === 0 ? sp.width : (sp.width + wordSpacing);
-          if (curLineWidth + added <= maxLineWidth) {
-            curLine.push(sp);
-            curLineWidth += added;
-          } else {
-            if (curLine.length > 0) lines.push(curLine);
-            curLine = [sp];
-            curLineWidth = sp.width;
-          }
-        }
-        if (curLine.length > 0) lines.push(curLine);
-
-        // Paginate lines into subpages
-        const subpages = [];
-        for (let i = 0; i < lines.length; i += maxMushafLinesPerSubpage) {
-          subpages.push(lines.slice(i, i + maxMushafLinesPerSubpage));
-        }
-        if (subpages.length === 0) subpages.push([]);
-
-        mushafSubpages = subpages.length;
+        mushafSubpages = pages.length;
         mushafOff = mushafPagesLen;
 
         const subpageRelOffsets = new Uint16Array(mushafSubpages);
         const subpageByteChunks = [];
-        let subpageHeaderSize = mushafSubpages * 2;
-        let runningRelOffset = subpageHeaderSize;
+        let runningRelOffset = mushafSubpages * 2;
 
         for (let spIdx = 0; spIdx < mushafSubpages; spIdx++) {
           subpageRelOffsets[spIdx] = runningRelOffset;
-          const pageLines = subpages[spIdx];
-          const totalPageHeight = pageLines.length * lineHeight;
-          const startY = 16 + Math.max(2, Math.floor((bodyHeight - totalPageHeight) / 2));
+          const placed = placeMushafPage(
+            pages[spIdx],
+            screenW,
+            screenH,
+            ayahFontSize,
+          );
 
-          const placedWords = [];
-          for (let lIdx = 0; lIdx < pageLines.length; lIdx++) {
-            const lineWords = pageLines[lIdx];
-            const lineY = startY + (lIdx * lineHeight);
-            let cursorX = screenW - margin;
-
-            for (const sp of lineWords) {
-              const placedX = Math.max(0, cursorX - sp.width);
-              let placedY = lineY;
-
-              if (placedY < 16) placedY = 16;
-              if (placedY + sp.height > screenH - 16) {
-                placedY = screenH - 16 - sp.height;
-              }
-
-              placedWords.push({
-                word_id: sp.word_id,
-                x: placedX,
-                y: placedY
-              });
-
-              cursorX = placedX - wordSpacing;
-            }
-          }
-
-          const count = Math.min(64, placedWords.length);
-          const chunk = new Uint8Array(1 + count * 6);
-          chunk[0] = count;
-          const view = new DataView(chunk.buffer, chunk.byteOffset, chunk.byteLength);
-
-          for (let pw = 0; pw < count; pw++) {
-            const off = 1 + pw * 6;
-            view.setUint16(off, placedWords[pw].word_id, true);
-            view.setUint16(off + 2, placedWords[pw].x, true);
-            view.setUint16(off + 4, placedWords[pw].y, true);
-          }
+          const chunk = new Uint8Array(1 + placed.length * 6); // <= 64 by paginateMushafLines
+          chunk[0] = placed.length;
+          const view = new DataView(
+            chunk.buffer,
+            chunk.byteOffset,
+            chunk.byteLength,
+          );
+          placed.forEach((pw, i) => {
+            const off = 1 + i * 6;
+            view.setUint16(off, pw.sprite.word_id, true);
+            view.setUint16(off + 2, pw.x, true);
+            view.setUint16(off + 4, pw.y, true);
+          });
 
           subpageByteChunks.push(chunk);
           runningRelOffset += chunk.length;
         }
 
-        const headerBytes = new Uint8Array(subpageRelOffsets.buffer);
-        mushafAyahRecords.push(headerBytes);
+        mushafAyahRecords.push(new Uint8Array(subpageRelOffsets.buffer));
         for (const ch of subpageByteChunks) mushafAyahRecords.push(ch);
         mushafPagesLen += runningRelOffset;
       }
@@ -1207,7 +1369,7 @@ export async function buildBqmPackage(options = {}, onProgress = null) {
           for (const ln of pageLines) {
             chunk[wOff++] = ln.length;
             for (let c = 0; c < ln.length; c++) {
-              chunk[wOff++] = ln.charCodeAt(c) & 0x7F;
+              chunk[wOff++] = ln.charCodeAt(c) & 0x7f;
             }
           }
 
@@ -1223,13 +1385,25 @@ export async function buildBqmPackage(options = {}, onProgress = null) {
         return { subpages: subpageCount, off: layerOff };
       }
 
-      const latinText = src.latin || '';
-      const transText = translationId === 2
-        ? (src.translationEn || src.trEn || editionsData?.translations?.en_saheeh?.[ayahEntries.length] || '')
-        : (src.translationId || src.trId || editionsData?.translations?.id_kemenag?.[ayahEntries.length] || '');
-      const tafsirText = tafsirId === 2
-        ? (src.tafsirEn || editionsData?.tafsirs?.jalalayn?.[ayahEntries.length] || '')
-        : (src.tafsirId || editionsData?.tafsirs?.id_kemenag_ringkas?.[ayahEntries.length] || '');
+      const latinText = src.latin || "";
+      const transText =
+        translationId === 2
+          ? src.translationEn ||
+            src.trEn ||
+            editionsData?.translations?.en_saheeh?.[ayahEntries.length] ||
+            ""
+          : src.translationId ||
+            src.trId ||
+            editionsData?.translations?.id_kemenag?.[ayahEntries.length] ||
+            "";
+      const tafsirText =
+        tafsirId === 2
+          ? src.tafsirEn ||
+            editionsData?.tafsirs?.jalalayn?.[ayahEntries.length] ||
+            ""
+          : src.tafsirId ||
+            editionsData?.tafsirs?.id_kemenag_ringkas?.[ayahEntries.length] ||
+            "";
 
       const latinRec = encodeTextLayer(showLatin, latinText);
       const transRec = encodeTextLayer(showTranslation, transText);
@@ -1246,12 +1420,12 @@ export async function buildBqmPackage(options = {}, onProgress = null) {
         mushaf_off: mushafOff,
         latin_off: latinRec.off,
         trans_off: transRec.off,
-        tafsir_off: tafsirRec.off
+        tafsir_off: tafsirRec.off,
       });
     }
   }
 
-  reportProgress(0.75, 'Assembling BQM container');
+  reportProgress(0.75, "Assembling BQM container");
 
   // Section Offsets matching bqm_header_t in mushaf_reader.h
   const HEADER_SIZE = 64;
@@ -1282,9 +1456,9 @@ export async function buildBqmPackage(options = {}, onProgress = null) {
   // Magic 'BQM1'
   bqmBuffer[0] = 0x42;
   bqmBuffer[1] = 0x51;
-  bqmBuffer[2] = 0x4D;
+  bqmBuffer[2] = 0x4d;
   bqmBuffer[3] = 0x31;
-  dv.setUint16(4, 1, true); // Version = 1
+  dv.setUint16(4, BQM_FORMAT_VERSION, true); // must match firmware BQM_VERSION
 
   let layerMask = 0;
   if (showMushaf) layerMask |= 0x01;
@@ -1306,9 +1480,9 @@ export async function buildBqmPackage(options = {}, onProgress = null) {
   dv.setUint32(36, mushafPagesOff, true); // mushaf_pages_off
   dv.setUint32(40, textBlobOff, true); // text_blob_off
 
-  const editionTag = `${scriptId === 1 ? 'IndoPak' : 'Uthmani'}|${translationId === 2 ? 'EN-Sahih' : 'ID-Kemenag'}`;
+  const editionTag = `${scriptId === 1 ? "IndoPak" : "Uthmani"}|${translationId === 2 ? "EN-Sahih" : "ID-Kemenag"}`;
   for (let i = 0; i < 20 && i < editionTag.length; i++) {
-    bqmBuffer[44 + i] = editionTag.charCodeAt(i) & 0x7F;
+    bqmBuffer[44 + i] = editionTag.charCodeAt(i) & 0x7f;
   }
 
   // 2. Write Surah Table (114 * 24 bytes bqm_surah_entry_t at offset 64)
@@ -1323,7 +1497,8 @@ export async function buildBqmPackage(options = {}, onProgress = null) {
     // name_latin[18] at byte 6
     const nameBytes = sanitizeAscii(sm.name_latin);
     for (let i = 0; i < 18; i++) {
-      bqmBuffer[sOff + 6 + i] = i < nameBytes.length ? (nameBytes.charCodeAt(i) & 0x7F) : 0;
+      bqmBuffer[sOff + 6 + i] =
+        i < nameBytes.length ? nameBytes.charCodeAt(i) & 0x7f : 0;
     }
   }
 
@@ -1377,7 +1552,7 @@ export async function buildBqmPackage(options = {}, onProgress = null) {
     writePtr += chunk.length;
   }
 
-  reportProgress(1.0, 'Complete');
+  reportProgress(1.0, "Complete");
 
   return bqmBuffer;
 }
@@ -1385,7 +1560,7 @@ export async function buildBqmPackage(options = {}, onProgress = null) {
 // ---------------------------------------------------------------------------
 // Global Window Attachment
 // ---------------------------------------------------------------------------
-if (typeof window !== 'undefined') {
+if (typeof window !== "undefined") {
   window.BqmBuilder = {
     renderAyahPreviewToCanvas,
     buildBqmPackage,
@@ -1406,6 +1581,10 @@ if (typeof window !== 'undefined') {
     LAYER_NAMES,
     SUNNAH_PRESETS,
     MUSHAF_LAYERS,
-    calculateCrc32
+    calculateCrc32,
+    BQM_FORMAT_VERSION,
+    FW_LAYOUT,
+    fwBodyRect,
+    fwTextGeometry,
   };
 }

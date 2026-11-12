@@ -22,25 +22,29 @@
 #include "book_library.h"
 #include "text_pager.h"
 #include "ble_sync.h"
-#include "reader_ui.h"
 #include "status_led.h"
+
+#include "app_settings.h" /* CHANGED: was reader_ui.h */
+#include "app_links.h"    /* CHANGED */
+#include "ui_display.h"   /* CHANGED */
+#include "ui_screens.h"   /* CHANGED */
 
 #include "views.h"
 #include "view_menu.h"
 #include "view_ble_sync.h"
-#if CONFIG_BOARD_MUSHAF_ENABLE
+#if VIEWS_HAS_MUSHAF /* CHANGED: single mushaf switch */
 #include "view_mushaf.h"
 #endif
 
 #define TAG "MAIN"
 
-#define LOOP_MAX_WAIT_MS 60000       // keeps pdMS_TO_TICKS within 32 bits; bounds staleness of BLE-changed timeout
+#define LOOP_MAX_WAIT_MS 60000 // keeps pdMS_TO_TICKS within 32 bits; bounds staleness of BLE-changed timeout
 #define BLE_RX_REFRESH_MIN_US 500000
 
 static QueueHandle_t s_btn_queue = NULL;
 static atomic_int s_current_view = VIEW_MENU; // written by main task, read by BLE task
 static int64_t s_last_activity_us = 0;
-static bool s_nvs_ready = false;             // main task only
+static bool s_nvs_ready = false; // main task only
 
 RTC_DATA_ATTR static reader_view_t s_rtc_last_view = VIEW_MENU;
 RTC_DATA_ATTR static bool s_rtc_has_sdcard = false;
@@ -109,7 +113,7 @@ static void prepare_power_down(void)
         book_library_update_offset(text_pager_get_current_offset());
     }
     book_library_flush_state(); // no write if state not dirty
-#if CONFIG_BOARD_MUSHAF_ENABLE
+#if VIEWS_HAS_MUSHAF            /* CHANGED */
     view_mushaf_save_before_sleep();
 #endif
     status_led_trigger(STATUS_LED_EVT_SLEEP); // synchronous 150 ms; no-op if LED disabled
@@ -145,7 +149,7 @@ static void on_ble_sync_event(ble_sync_event_t event, const void *param, void *u
     const reader_view_t view = get_view(); // single snapshot
     const bool in_ble = (view == VIEW_BLE_SYNC);
     bool in_mushaf_menu = false;
-#if CONFIG_BOARD_MUSHAF_ENABLE
+#if VIEWS_HAS_MUSHAF /* CHANGED */
     in_mushaf_menu = (view == VIEW_MUSHAF_MENU);
 #endif
     if (!in_ble && !in_mushaf_menu)
@@ -189,7 +193,7 @@ static void on_ble_sync_event(ble_sync_event_t event, const void *param, void *u
 
 static bool inactivity_expired(void)
 {
-    uint16_t timeout_sec = ble_sync_get_sleep_timeout();
+    uint16_t timeout_sec = app_settings_get()->sleep_timeout_sec;
     if (timeout_sec == 0)
     {
         return false;
@@ -204,7 +208,7 @@ static TickType_t compute_wait_ticks(reader_view_t view)
         return view_ble_sync_get_wait_ticks();
     }
     int64_t wait_ms = LOOP_MAX_WAIT_MS;
-    uint16_t timeout_sec = ble_sync_get_sleep_timeout();
+    uint16_t timeout_sec = app_settings_get()->sleep_timeout_sec;
     if (timeout_sec > 0)
     {
         int64_t remaining_us = (int64_t)timeout_sec * 1000000LL - (esp_timer_get_time() - s_last_activity_us);
@@ -227,7 +231,7 @@ static void wait_for_splash_dismiss(void)
     button_event_t evt;
     for (;;)
     {
-        uint16_t timeout_sec = ble_sync_get_sleep_timeout();
+        uint16_t timeout_sec = app_settings_get()->sleep_timeout_sec;
         // seconds * tick rate: avoids the 32-bit overflow of pdMS_TO_TICKS(sec * 1000)
         TickType_t wait = (timeout_sec > 0)
                               ? (TickType_t)timeout_sec * configTICK_RATE_HZ
@@ -255,14 +259,17 @@ void app_main(void)
     // 1. Latch board power and cut audio rail (must stay first)
     power_mgr_early_init();
     ensure_nvs();
-    status_led_init();
-    status_led_trigger(STATUS_LED_EVT_WAKEUP); // background task, returns immediately
 
     wakeup_reason_t raw_wakeup = power_mgr_get_wakeup_cause();
     bool is_cold_boot = (raw_wakeup == WAKEUP_REASON_COLD_BOOT ||
                          esp_reset_reason() != ESP_RST_DEEPSLEEP);
 
-    // 2. Buttons: the wake stub's classified gesture is pushed to the queue here
+    // 2. Settings (NVS -> RTC cache, no side effects). Read before the LED wake blink.
+    app_settings_read(is_cold_boot);
+    status_led_init(app_settings_get()->status_led_enabled);
+    status_led_trigger(STATUS_LED_EVT_WAKEUP); // background task, returns immediately
+
+    // 3. Buttons: the wake stub's classified gesture is pushed to the queue here
     if (!is_cold_boot)
     {
         if (raw_wakeup == WAKEUP_REASON_BOOT_BUTTON)
@@ -276,10 +283,12 @@ void app_main(void)
     }
     ESP_ERROR_CHECK(button_init(&s_btn_queue));
 
-    // 3. Settings, once. text_pager_init() first (font is applied to the pager);
-    //    must run before reader_ui_init() (rotation is read there).
+    // 4. Pager, module links, apply settings (already read in step 2).
+    //    text_pager_init() before apply: apply sets the pager font.
+    //    apply before ui_display_init(): it stores the rotation used to build the canvas.
     text_pager_init();
-    app_settings_load(is_cold_boot);
+    app_links_init();
+    app_settings_apply();
 
     ESP_LOGI(TAG, "Starting BacaIn firmware (wakeup=%d, cold=%d)...", raw_wakeup, is_cold_boot);
 
@@ -302,7 +311,7 @@ void app_main(void)
     }
 
     // 5. Display
-    ESP_ERROR_CHECK(reader_ui_init(is_cold_boot));
+    ESP_ERROR_CHECK(ui_display_init(is_cold_boot)); /* CHANGED: was reader_ui_init() */
 
     // Protect all board output lines from floating in light sleep before enabling PM
     board_light_sleep_pins_init();
@@ -313,19 +322,20 @@ void app_main(void)
         .light_sleep_enable = true,
     };
     esp_err_t pm_err = esp_pm_configure(&pm);
-    if (pm_err != ESP_OK) {
+    if (pm_err != ESP_OK)
+    {
         ESP_LOGE(TAG, "esp_pm_configure failed (0x%x), running without light sleep", pm_err);
     }
 
     // Show splash before the slow library scan so the screen updates sooner
     if (is_cold_boot)
     {
-        reader_ui_render_splash(NULL, NULL);
+        ui_screen_splash(NULL, NULL); /* CHANGED: was reader_ui_render_splash() */
     }
 
     // 6. Reader core
     book_library_init();
-#if CONFIG_BOARD_MUSHAF_ENABLE
+#if VIEWS_HAS_MUSHAF /* CHANGED */
     view_mushaf_init(is_cold_boot);
 #endif
     storage_target_t active_target =
@@ -350,7 +360,7 @@ void app_main(void)
         wait_for_splash_dismiss();
         set_view(VIEW_MENU);
         view_menu_set_index(0);
-        view_menu_render(false);
+        views_render(VIEW_MENU, false); /* CHANGED: was view_menu_render(false) */
     }
     else
     {
@@ -407,6 +417,7 @@ void app_main(void)
 
         if (view == VIEW_BLE_SYNC)
         {
+            /* Returns the next view; on timeout it has already navigated to the menu. */
             set_view(view_ble_sync_check_timeout(&s_last_activity_us));
         }
     }

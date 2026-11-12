@@ -1,132 +1,156 @@
 #include "view_reading.h"
-#include <stdio.h>
-#include "esp_attr.h"
 #include "esp_log.h"
-#include "epaper_port.h"
-#include "GUI_Paint.h"
-#include "fonts.h"
 #include "text_pager.h"
 #include "book_library.h"
-#include "app_config.h"
+#include "ui_display.h"
+#include "ui_pager.h"
 #include "view_menu.h"
-#include "view_bookmarks.h"
 
 static const char *TAG = "view_reading";
 
-esp_err_t view_reading_ensure_book_open(void) {
-    if (text_pager_is_book_open()) {
+esp_err_t view_reading_ensure_book_open(void)
+{
+    if (text_pager_is_book_open())
+    {
         return ESP_OK;
     }
 
     reading_state_t state;
-    if (book_library_get_current_state(&state) == ESP_OK && state.active_book_path[0] != '\0') {
-        if (text_pager_open_book(state.active_book_path, state.byte_offset) == ESP_OK) {
-            return ESP_OK;
-        }
+    if (book_library_get_current_state(&state) == ESP_OK && state.active_book_path[0] != '\0' &&
+        text_pager_open_book(state.active_book_path, state.byte_offset) == ESP_OK)
+    {
+        return ESP_OK;
     }
 
-    // Fallback: open first LIBRARY_ENTRY_FILE found in library
     size_t count = book_library_get_count();
-    for (size_t i = 0; i < count; i++) {
+    for (size_t i = 0; i < count; i++)
+    {
         const book_info_t *book = book_library_get_book(i);
         if (book && book->type == LIBRARY_ENTRY_FILE &&
-            text_pager_open_book(book->path, 0) == ESP_OK) {
-            book_library_set_active_book(book->path, true);
-            return ESP_OK;
+            text_pager_open_book(book->path, 0) == ESP_OK)
+        {
+            return ESP_OK; /* pager listener sets the active book */
         }
     }
-
     return ESP_ERR_NOT_FOUND;
 }
 
-void view_reading_render(bool full_refresh) {
-    uint8_t *canvas = reader_ui_get_canvas();
-    if (!canvas) return;
-
-    if (view_reading_ensure_book_open() != ESP_OK) {
-        ESP_LOGW(TAG, "No book open to render");
+static void draw_page(void)
+{
+    const text_page_t *page = text_pager_get_layout_page();
+    char pct[8] = "";
+    bool bookmarked = false;
+    if (page)
+    {
+        ui_pager_format_progress(page, pct, sizeof(pct));
+        bookmarked = book_library_is_bookmarked(page->start);
     }
 
-    epaper_power_on();
-
-    Paint_SelectImage(canvas);
-    text_pager_render_to_buffer(canvas);
-
-    // Add Battery & Status to top header right corner
-    char bat_str[16];
-    snprintf(bat_str, sizeof(bat_str), "%u%%", reader_ui_get_battery_percentage());
-    Paint_DrawString_EN(165, 2, bat_str, &Font12, BLACK, WHITE);
-
-    reader_ui_flush_canvas(full_refresh);
+    ui_pager_chrome_t chrome = {
+        .title = text_pager_get_title(),
+        .header_inverted = false,
+        .show_battery = true,
+        .footer = TEXT_PAGER_FOOTER,
+        .footer_left = bookmarked ? "[BM]" : NULL,
+        .footer_right = page ? pct : NULL,
+        .empty_text = "No book. Hold ▲/▼ for menu",
+    };
+    ui_pager_draw(page, text_pager_get_style(), &chrome);
 }
 
-void reader_ui_render_reading(void) {
-    view_reading_render(false);
-}
-
-void reader_ui_render_reading_full(void) {
-    view_reading_render(true);
-}
-
-void reader_ui_render_reading_force_full(void) {
-    view_reading_render(true);
-}
-
-void view_reading_render_page_turn(void) {
-    bool full = reader_ui_page_turn_needs_full();
-    view_reading_render(full);
-}
-
-reader_view_t view_reading_on_wake(void) {
-    if (view_reading_ensure_book_open() == ESP_OK && text_pager_get_current_page() != NULL) {
-        return VIEW_READING;
+static void render_mode(ui_refresh_t mode)
+{
+    if (!ui_begin(true))
+    {
+        return;
     }
+    draw_page();
+    ui_end(mode);
+}
 
+static void render(reader_view_t self, bool full_refresh)
+{
+    (void)self;
+    render_mode(full_refresh ? UI_REFRESH_FULL : UI_REFRESH_PARTIAL);
+}
+
+static void enter(reader_view_t self)
+{
+    (void)self;
+    if (view_reading_ensure_book_open() != ESP_OK)
+    {
+        ESP_LOGW(TAG, "no book to open");
+    }
+}
+
+static reader_view_t wake(reader_view_t self)
+{
+    if (view_reading_ensure_book_open() == ESP_OK && text_pager_get_current_page() != NULL)
+    {
+        return self;
+    }
     view_menu_set_index(0);
     return VIEW_MENU;
 }
 
-reader_view_t view_reading_handle_event(button_event_t evt) {
-    if (evt.type == BTN_EVENT_CUSTOM_REFRESH) {
-        view_reading_render(true);
-        return VIEW_READING;
+static void toggle_bookmark(void)
+{
+    size_t off = text_pager_get_current_offset(); /* == page start (Step 3) */
+    if (book_library_is_bookmarked(off))
+    {
+        book_library_remove_bookmark(off);
     }
-
-    if (evt.type == BTN_LONG_PRESS) {
-        view_menu_set_index(0);
-        view_menu_render(false);
-        return VIEW_MENU;
-    } else if (evt.button == BTN_ID_BOOT) {
-        if (evt.type == BTN_CLICK) {
-            if (text_pager_prev_page() == ESP_OK) {
-                book_library_update_offset(text_pager_get_current_offset());
-                view_reading_render_page_turn();
-            } else {
-                view_reading_render(false);
-            }
-        } else if (evt.type == BTN_DOUBLE_CLICK) {
-            size_t off = text_pager_get_current_offset();
-            if (book_library_is_bookmarked(off)) {
-                book_library_remove_bookmark(off);
-            } else {
-                book_library_add_bookmark(off);
-            }
-            view_reading_render(false);
-        }
-    } else if (evt.button == BTN_ID_PWR) {
-        if (evt.type == BTN_CLICK) {
-            if (text_pager_next_page() == ESP_OK) {
-                book_library_update_offset(text_pager_get_current_offset());
-                view_reading_render_page_turn();
-            } else {
-                view_reading_render(false);
-            }
-        } else if (evt.type == BTN_DOUBLE_CLICK) {
-            view_bookmarks_set_index(0);
-            view_bookmarks_render(false);
-            return VIEW_BOOKMARKS;
-        }
+    else
+    {
+        book_library_add_bookmark(off);
     }
-
-    return VIEW_READING;
 }
+
+static reader_view_t event(reader_view_t self, button_event_t evt)
+{
+    if (evt.type == BTN_EVENT_CUSTOM_REFRESH)
+    {
+        return self;
+    }
+    if (evt.type == BTN_LONG_PRESS)
+    {
+        view_menu_set_index(0);
+        return VIEW_MENU;
+    }
+
+    if (evt.button == BTN_ID_BOOT)
+    {
+        if (evt.type == BTN_CLICK)
+        {
+            /* offset persistence is done by the pager listener (app_links) */
+            render_mode(text_pager_prev_page() == ESP_OK ? UI_REFRESH_PAGE_TURN : UI_REFRESH_PARTIAL);
+        }
+        else if (evt.type == BTN_DOUBLE_CLICK)
+        {
+            toggle_bookmark();
+            render_mode(UI_REFRESH_PARTIAL);
+        }
+    }
+    else if (evt.button == BTN_ID_PWR)
+    {
+        if (evt.type == BTN_CLICK)
+        {
+            render_mode(text_pager_next_page() == ESP_OK ? UI_REFRESH_PAGE_TURN : UI_REFRESH_PARTIAL);
+        }
+        else if (evt.type == BTN_DOUBLE_CLICK)
+        {
+            return VIEW_BOOKMARKS; /* bookmarks.enter resets its index */
+        }
+    }
+    return self;
+}
+
+const view_def_t VIEW_DEF_READING = {
+    .first = VIEW_READING,
+    .last = VIEW_READING,
+    .full_on_refresh = true,
+    .enter = enter,
+    .wake = wake,
+    .render = render,
+    .event = event,
+};

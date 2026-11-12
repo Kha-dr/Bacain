@@ -1,19 +1,17 @@
 #ifndef VIEW_NAV_HINTS_H
 #define VIEW_NAV_HINTS_H
 
-#include "reader_ui.h"
-#include "button.h"
+#include "views.h"
 
 #ifdef __cplusplus
-extern "C" {
+extern "C"
+{
 #endif
 
-void view_nav_hints_render(void);
-reader_view_t view_nav_hints_on_wake(void);
-reader_view_t view_nav_hints_handle_event(button_event_t evt);
+  extern const view_def_t VIEW_DEF_NAV_HINTS;
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif // VIEW_NAV_HINTS_H
+#endif /* VIEW_NAV_HINTS_H */

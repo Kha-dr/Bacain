@@ -1,31 +1,26 @@
 #ifndef VIEW_MUSHAF_H
 #define VIEW_MUSHAF_H
 
-#include "sdkconfig.h"
-#include "board_config.h"
-
-#if CONFIG_BOARD_MUSHAF_ENABLE || BOARD_MUSHAF_ENABLE
-
 #include <stdbool.h>
-#include <stdint.h>
-#include "reader_ui.h"
-#include "button.h"
-#include "mushaf_reader.h"
+#include "views.h" /* VIEWS_HAS_MUSHAF, view_def_t */
+
+#if VIEWS_HAS_MUSHAF
 
 #ifdef __cplusplus
-extern "C" {
+extern "C"
+{
 #endif
 
-void          view_mushaf_init(bool is_cold_boot);
-void          view_mushaf_save_before_sleep(void);
-void          view_mushaf_enter_menu(void);
-reader_view_t view_mushaf_on_wake(void);
-reader_view_t view_mushaf_handle_event(reader_view_t view, button_event_t evt);
+  /* Owns VIEW_MUSHAF_MENU .. VIEW_MUSHAF_BOOKMARKS. */
+  extern const view_def_t VIEW_DEF_MUSHAF;
+
+  void view_mushaf_init(bool is_cold_boot);
+  void view_mushaf_save_before_sleep(void);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif // CONFIG_BOARD_MUSHAF_ENABLE || BOARD_MUSHAF_ENABLE
+#endif /* VIEWS_HAS_MUSHAF */
 
-#endif // VIEW_MUSHAF_H
+#endif /* VIEW_MUSHAF_H */

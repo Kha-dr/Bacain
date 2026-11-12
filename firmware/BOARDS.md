@@ -35,13 +35,14 @@ Four parts make up a board profile.
 
 1. **Board definition (`firmware/boards/<board_id>/board_def.h`)**: pins, display geometry, signal polarities, feature flags (`BOARD_HAS_*`), the battery discharge table (`BOARD_BATTERY_OCV_TABLE`), and the light-sleep pin list (`BOARD_LIGHT_SLEEP_KEEP_PINS`).
 
-2. **Board hooks (`firmware/boards/<board_id>/board.c`)**: mandatory. Implements every board hook listed in section 4.2. There are no weak default implementations: a missing hook fails the build at link time. Every hook symbol is listed with `-u <symbol>` in [`components/board_config/CMakeLists.txt`](./components/board_config/CMakeLists.txt).
+2. **Board hooks (`firmware/boards/<board_id>/board.c`)**: required file. `board_light_sleep_pins_init()` has no default and must be implemented. The `board_power_*` hooks have weak defaults in [`power_mgr.c`](./components/power_mgr/power_mgr.c) (see section 4.2); a definition in `board.c` replaces the default. Every hook symbol is listed with `-u <symbol>` in [`components/board_config/CMakeLists.txt`](./components/board_config/CMakeLists.txt).
 
 3. **Configuration contract ([`board_config.h`](./components/board_config/include/board_config.h))**:
    - `#error` guards on every mandatory (Category A) macro, and on every Category B macro whose feature flag is `1`.
    - When a feature flag is explicitly `0`, the matching pins resolve to the sentinel `-1`. This is the only derived default; a missing macro is always an `#error`.
    - No aliases that carry silicon labels into application code.
-   - Derived constants such as `BOARD_DISPLAY_BUFFER_SIZE`.
+
+- Derived constants such as `BOARD_DISPLAY_BUFFER_SIZE` = `((BOARD_DISPLAY_WIDTH + 7) / 8) * BOARD_DISPLAY_HEIGHT` (rows padded to whole bytes).
 
 4. **Catalog ([`boards.json`](./boards/boards.json))**: SoC, flash size, display parameters, controller, header path and output image name per board. Read by the Web Serial Flasher, `package_firmware.py` and the CI build matrix (`.github/workflows/firmware_ci.yml`).
 
@@ -49,22 +50,33 @@ Four parts make up a board profile.
 
 ## 3. Display Controller Compatibility
 
-### Current Driver
+### 3.1 Current Driver
 
 The driver in `firmware/components/epaper/` supports:
 
 - Controller: Solomon Systech SSD1681.
 - Resolution: `BOARD_DISPLAY_WIDTH` x `BOARD_DISPLAY_HEIGHT` (200x200 px on `waveshare_154`).
-- Framebuffer: `BOARD_DISPLAY_BUFFER_SIZE` bytes per plane (`BOARD_DISPLAY_WIDTH * BOARD_DISPLAY_HEIGHT / 8`, 5000 bytes at 200x200).
+- Framebuffer: `BOARD_DISPLAY_BUFFER_SIZE` bytes per plane (`((W + 7) / 8) * H`, 5000 bytes at 200x200). `ui_kit` checks it against its own canvas size with `_Static_assert`.
+- Wake-up differential refresh: the last frame is kept in RTC memory only if it is at most `UI_RTC_CANVAS_MAX` bytes (default 6144; 200x200 and 296x128 fit, 400x300 does not). Larger panels use a plain partial refresh for the first frame after wake.
 - Busy polarity: `BOARD_EPD_BUSY_ACTIVE_LVL` (1 = high while busy).
 - Power rail polarity: `BOARD_EPD_PWR_ACTIVE_LVL` (0 = active-low PMOS switch).
 - Refresh timing and light-sleep behavior: see [RULES.md section 2.2 and 2.5](./RULES.md).
 
-### Adding a Controller
+### 3.2 Adding a Controller
 
 1. **Catalog**: controller model, resolution and default rotation in `boards.json` under `display`.
 2. **Board definition**: display pins (`BOARD_EPD_DC_PIN`, `BOARD_EPD_CS_PIN`, `BOARD_EPD_SCK_PIN`, `BOARD_EPD_MOSI_PIN`, `BOARD_EPD_RST_PIN`, `BOARD_EPD_BUSY_PIN`, `BOARD_EPD_PWR_PIN`) and polarities in `board_def.h`.
-3. **Driver**: initialization, LUTs and RAM write commands in `firmware/components/epaper/`. Multi-step SPI sequences hold the EPD `ESP_PM_NO_LIGHT_SLEEP` lock and release it before every BUSY wait (RULES.md section 2.5). Higher-level code (`reader_core`, UI layout, pagination) is unchanged.
+3. **Driver**: initialization, LUTs and RAM write commands in `firmware/components/epaper/`. Multi-step SPI sequences hold the EPD `ESP_PM_NO_LIGHT_SLEEP` lock and release it before every BUSY wait (RULES.md section 2.5). Higher-level code is unchanged: `reader_core`, `text_engine` and `ui_kit` derive layout from `BOARD_DISPLAY_WIDTH` / `BOARD_DISPLAY_HEIGHT` and the current rotation.
+
+### 3.3 Resolution-Dependent Behavior
+
+| Item                         | Rule                               | 200x200      | 400x300      |
+| :--------------------------- | :--------------------------------- | :----------- | :----------- |
+| Text columns x lines (max)   | larger dimension / 7 px, / 14 px   | 28 x 14      | 57 x 28      |
+| Body area                    | `UI_BODY_TOP` (22) to `H - 18`     | rows 22..181 | rows 22..281 |
+| QR module size (sync screen) | largest integer that fits the body | 4 px         | 7 px         |
+| Splash logo                  | 1x below 400 px, 2x from 400 px    | 1x           | 1x           |
+| RTC frame copy               | canvas <= 6144 bytes               | kept         | not kept     |
 
 ---
 
@@ -115,15 +127,19 @@ Each optional peripheral has a flag (`0` = absent, `1` = present). With `1`, its
 
 ### 4.2 Board Hooks (`board.c`)
 
-Create `firmware/boards/<board_id>/board.c` implementing every hook. A hook for an absent feature reports it explicitly (for example `board_power_is_charging()` returns `false`, `board_power_get_battery_mv()` returns 0 and the UI shows an error indicator); it never returns invented data.
+### 4.2 Board Hooks (`board.c`)
 
-- `esp_err_t board_power_early_init(void)`: early hardware setup before driver registration.
-- `esp_err_t board_power_init(void)`: main power configuration and GPIO direction setup.
-- `bool board_power_is_charging(void)`: charge detection.
-- `uint32_t board_power_get_battery_mv(void)`: battery voltage.
-- `void board_power_pre_sleep(void)`: bus isolation and rail shutdown just before deep sleep.
-- `void board_power_post_wake(void)`: rail re-enable just after wake.
-- `void board_light_sleep_pins_init(void)`: calls `gpio_sleep_sel_dis()` on every valid entry of `BOARD_LIGHT_SLEEP_KEEP_PINS` and logs `light sleep: N pins kept`. Called by `main.c` after display init, before `esp_pm_configure()`.
+Create `firmware/boards/<board_id>/board.c`. Implement `board_light_sleep_pins_init()` and any `board_power_*` hook whose default does not fit the board. A hook for an absent feature reports it explicitly (for example `board_power_is_charging()` returns `false`, `board_power_get_battery_mv()` returns 0); it never returns invented data.
+
+| Hook                                        | Default (`power_mgr.c`, weak)                                                                                                                                                                                | `waveshare_154` |
+| :------------------------------------------ | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :-------------- |
+| `esp_err_t board_power_early_init(void)`    | No action, `ESP_OK`                                                                                                                                                                                          | default         |
+| `esp_err_t board_power_init(void)`          | No action, `ESP_OK`                                                                                                                                                                                          | default         |
+| `bool board_power_is_charging(void)`        | `BOARD_CHARGE_DETECT_PIN` at `BOARD_CHARGE_ACTIVE_LEVEL`, else `BOARD_VBUS_SENSE_PIN` high, else `false`                                                                                                     | default         |
+| `uint32_t board_power_get_battery_mv(void)` | `0`: `power_mgr` reads the battery ADC (`BOARD_HAS_BATTERY_ADC`)                                                                                                                                             | default         |
+| `void board_power_pre_sleep(void)`          | No action                                                                                                                                                                                                    | `board.c`       |
+| `void board_power_post_wake(void)`          | No action                                                                                                                                                                                                    | default         |
+| `void board_light_sleep_pins_init(void)`    | none (required): calls `gpio_sleep_sel_dis()` on every valid entry of `BOARD_LIGHT_SLEEP_KEEP_PINS` and logs `light sleep: N pins kept`. Called by `main.c` after display init, before `esp_pm_configure()`. | `board.c`       |
 
 Add each symbol with `-u <symbol>` in `components/board_config/CMakeLists.txt`.
 
@@ -174,7 +190,12 @@ The CI workflow reads this file to generate the build matrix.
    - Both buttons wake the board, and the waking press is handled.
    - Partial and full refreshes render cleanly after an idle wait.
    - With a power latch: Power Off, then power on with the documented button.
-4. Add the board to the table in section 1 and submit a pull request.
+4. Display checks:
+   - The build passes the `UI_CANVAS_BYTES == BOARD_DISPLAY_BUFFER_SIZE` assertion.
+   - Splash, menu, library, nav hints and the sync screen are centered and inside the frame in every supported rotation.
+   - Switching the font size in the menu changes list and reading text, not headers or footers.
+   - Mushaf builds only: a `.bqm` built for this board's size loads; the log shows no `sprite px outside body rows` warning.
+5. Add the board to the table in section 1 and submit a pull request.
 
 ---
 

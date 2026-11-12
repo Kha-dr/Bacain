@@ -8,7 +8,7 @@ menu "BacaIn Application Configuration"
 
     config APP_INACTIVITY_SLEEP_SEC
         int "Inactivity Sleep Timeout (seconds)"
-        default 60
+        default 5
         range 10 3600
         help
             Device deep sleep timeout after user inactivity.

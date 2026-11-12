@@ -46,7 +46,7 @@
     // Toast Container
     toastContainer: document.getElementById("toastContainer"),
 
-    // Upload Dropzone Fallback (if non-component)
+    // Upload Dropzone Fallback (only used when <book-uploader> is absent)
     dropzone: document.getElementById("dropzone"),
     fileInput: document.getElementById("fileInput"),
     uploadActiveCard: document.getElementById("uploadActiveCard"),
@@ -175,7 +175,10 @@
       ) {
         el.statusDashboard.updateDeviceStatus({
           state: true,
-          name: deviceName || (window.BleClient && window.BleClient.getDeviceName()) || "BacaIn",
+          name:
+            deviceName ||
+            (window.BleClient && window.BleClient.getDeviceName()) ||
+            "BacaIn",
         });
       }
       if (
@@ -327,36 +330,126 @@
   // ============================================================================
   // Upload Processing
   // ============================================================================
+
+  // Adapter over <book-uploader>'s real API: showProgress / setProgress / reset / showError.
+  // Falls back to plain DOM nodes only when the component is absent.
+  const uploaderUI = {
+    hasComponent() {
+      return (
+        el.bookUploader && typeof el.bookUploader.setProgress === "function"
+      );
+    },
+    start(fileName) {
+      if (this.hasComponent()) {
+        el.bookUploader.showProgress(fileName);
+        el.bookUploader.setProgress({
+          fileName,
+          pct: 0,
+          statusText: "Starting transfer...",
+        });
+        return;
+      }
+      if (el.uploadActiveCard) el.uploadActiveCard.style.display = "block";
+      if (el.uploadFileName) el.uploadFileName.textContent = fileName;
+    },
+    progress(data) {
+      if (this.hasComponent()) {
+        el.bookUploader.setProgress(data);
+        return;
+      }
+      const pct = Math.min(100, Math.max(0, data.pct || 0)).toFixed(1);
+      if (el.uploadProgressBar) el.uploadProgressBar.style.width = `${pct}%`;
+      if (el.uploadPercentText) el.uploadPercentText.textContent = `${pct}%`;
+      if (el.uploadBytesText && data.metricsText)
+        el.uploadBytesText.textContent = data.metricsText;
+      if (el.uploadSpeedText)
+        el.uploadSpeedText.textContent = `${(data.speedKbps || 0).toFixed(1)} KB/s`;
+    },
+    finish() {
+      if (el.bookUploader && typeof el.bookUploader.reset === "function") {
+        el.bookUploader.reset();
+      } else if (el.uploadActiveCard) {
+        el.uploadActiveCard.style.display = "none";
+      }
+    },
+    error(message) {
+      // BookUploader.showError() already raises a toast; avoid a second one.
+      if (el.bookUploader && typeof el.bookUploader.showError === "function") {
+        el.bookUploader.showError(message);
+      } else {
+        showToast(message, "error");
+      }
+    },
+  };
+
+  // BleClient.executeFileUpload calls onProgress with a single object:
+  //   { bytesSent, totalBytes, seqId, totalChunks, startTime }
+  // Positional (pct, sent, total, speed) is still accepted as a fallback.
+  function normalizeProgress(args) {
+    const a = args[0];
+    if (a && typeof a === "object") {
+      return {
+        pct: Number(a.pct ?? a.percent ?? 0),
+        sent: Number(a.bytesSent ?? a.sent ?? 0),
+        total: Number(a.totalBytes ?? a.total ?? 0),
+        speed: Number(a.speed ?? a.bytesPerSec ?? 0),
+        totalSeq: a.totalChunks ?? a.totalSeq,
+        startTime: typeof a.startTime === "number" ? a.startTime : undefined,
+      };
+    }
+    return {
+      pct: Number(args[0]) || 0,
+      sent: Number(args[1]) || 0,
+      total: Number(args[2]) || 0,
+      speed: Number(args[3]) || 0,
+      totalSeq: undefined,
+      startTime: undefined,
+    };
+  }
+
+  function isConnected() {
+    return Boolean(
+      window.BleClient &&
+      typeof window.BleClient.isConnected === "function" &&
+      window.BleClient.isConnected(),
+    );
+  }
+
+  // Entry point for files that are ALREADY converted (from <book-uploader>).
+  function enqueueFiles(files) {
+    if (!files || files.length === 0) return;
+    if (!isConnected()) {
+      showToast("Connect device before uploading books", "warning");
+      return;
+    }
+    for (const f of files) uploadQueue.push(f);
+    if (isUploading) {
+      showToast(`Queued ${files.length} file(s)`, "info");
+    }
+    processUploadQueue();
+  }
+
+  // Entry point for RAW files (fallback dropzone, mushaf .bqm, etc.).
   async function handleFilesSelected(files) {
     if (!files || files.length === 0) return;
-    if (!window.BleClient.isConnected()) {
+    if (!isConnected()) {
       showToast("Connect device before uploading books", "warning");
       return;
     }
 
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      let processedFile = file;
-
+    const processed = [];
+    for (const file of Array.from(files)) {
+      let out = file;
       try {
         const lower = file.name.toLowerCase();
-        if (
-          lower.endsWith(".epub") &&
-          typeof window.EpubProcessor !== "undefined"
-        ) {
+        if (lower.endsWith(".epub") && window.EpubProcessor) {
           showToast(`Converting EPUB: "${file.name}"...`, "info");
-          processedFile = await window.EpubProcessor.process(file);
-        } else if (
-          lower.endsWith(".fb2") &&
-          typeof window.Fb2Processor !== "undefined"
-        ) {
+          out = await window.EpubProcessor.process(file);
+        } else if (lower.endsWith(".fb2") && window.Fb2Processor) {
           showToast(`Converting FB2: "${file.name}"...`, "info");
-          processedFile = await window.Fb2Processor.process(file);
-        } else if (
-          lower.endsWith(".txt") &&
-          typeof window.TextCleaner !== "undefined"
-        ) {
-          processedFile = await window.TextCleaner.clean(file);
+          out = await window.Fb2Processor.process(file);
+        } else if (lower.endsWith(".txt") && window.TextCleaner) {
+          out = await window.TextCleaner.clean(file);
         }
       } catch (err) {
         log(
@@ -364,68 +457,115 @@
           "warning",
         );
       }
-
-      uploadQueue.push(processedFile);
+      processed.push(out);
     }
 
-    processUploadQueue();
+    enqueueFiles(processed);
   }
 
   async function processUploadQueue() {
-    if (isUploading) return;
-    if (uploadQueue.length === 0) return;
+    if (isUploading || uploadQueue.length === 0) return;
+    if (!isConnected()) {
+      uploadQueue.length = 0;
+      showToast("Device disconnected — upload queue cleared", "warning");
+      return;
+    }
 
     isUploading = true;
     cancelUploadRequested = false;
 
     const file = uploadQueue.shift();
-    if (el.bookUploader && typeof el.bookUploader.setUploading === "function") {
-      el.bookUploader.setUploading(true, file.name);
-    }
-    if (el.uploadActiveCard) {
-      el.uploadActiveCard.style.display = "block";
-      if (el.uploadFileName) el.uploadFileName.textContent = file.name;
-    }
+    const startedAt = performance.now();
+    let lastStatus = "";
+    let failureMessage = null;
+    let chunksSent = 0;
+
+    uploaderUI.start(file.name);
 
     try {
       showToast(`Uploading "${file.name}"...`, "info");
+
       await window.BleClient.executeFileUpload(file, {
-        onProgress: (pct, sent, total, speed) => {
-          if (
-            el.bookUploader &&
-            typeof el.bookUploader.updateProgress === "function"
-          ) {
-            el.bookUploader.updateProgress(pct, sent, total, speed);
+        onProgress: (...args) => {
+          chunksSent += 1; // one callback per chunk; avoids seqId 0xFFFF wrap
+          const p = normalizeProgress(args);
+          const total = p.total > 0 ? p.total : file.size;
+
+          // Prefer byte counts over a reported pct (avoids 0–1 vs 0–100 ambiguity).
+          const pct = total > 0 && p.sent > 0 ? (p.sent / total) * 100 : p.pct;
+
+          // BleClient reports no speed; derive it from its startTime (same clock).
+          let speed = p.speed;
+          if (!(speed > 0)) {
+            const t0 = p.startTime ?? startedAt;
+            const elapsed = (performance.now() - t0) / 1000;
+            speed = elapsed > 0 ? p.sent / elapsed : 0;
           }
-          if (el.uploadProgressBar)
-            el.uploadProgressBar.style.width = `${pct}%`;
-          if (el.uploadPercentText)
-            el.uploadPercentText.textContent = `${pct}%`;
-          if (el.uploadBytesText)
-            el.uploadBytesText.textContent = `${formatBytes(sent)} / ${formatBytes(total)}`;
-          if (el.uploadSpeedText)
-            el.uploadSpeedText.textContent = `${(speed / 1024).toFixed(1)} KB/s`;
+          const etaSec = speed > 0 && total > 0 ? (total - p.sent) / speed : -1;
+
+          uploaderUI.progress({
+            fileName: file.name,
+            pct,
+            speedKbps: speed / 1024,
+            etaSec,
+            currentSeq: chunksSent,
+            totalSeq: p.totalSeq,
+            statusText: lastStatus || undefined,
+            metricsText:
+              total > 0
+                ? `${formatBytes(p.sent)} / ${formatBytes(total)}`
+                : undefined,
+          });
         },
-        onStatus: (msg) => log(msg, "info"),
+        onStatus: (msg) => {
+          lastStatus = msg;
+          log(msg, "info");
+        },
         checkCancelled: () => cancelUploadRequested,
       });
 
-      showToast(`Upload complete: "${file.name}"`, "success");
-      log(`Uploaded "${file.name}" successfully.`, "success");
+      if (cancelUploadRequested) {
+        showToast(`Upload cancelled: "${file.name}"`, "warning");
+        log(`Upload cancelled for "${file.name}".`, "warning");
+      } else {
+        showToast(`Upload complete: "${file.name}"`, "success");
+        log(`Uploaded "${file.name}" successfully.`, "success");
+      }
       await refreshBooksList();
     } catch (err) {
-      log(`Upload failed for "${file.name}": ${err.message}`, "error");
-      showToast(`Upload failed: ${err.message}`, "error");
+      if (cancelUploadRequested) {
+        showToast(`Upload cancelled: "${file.name}"`, "warning");
+        log(`Upload cancelled for "${file.name}": ${err.message}`, "warning");
+        await refreshBooksList(); // a partial file may remain on the device
+      } else {
+        failureMessage = `Upload failed for "${file.name}": ${err.message}`;
+        log(failureMessage, "error");
+      }
     } finally {
       isUploading = false;
-      if (el.bookUploader && typeof el.bookUploader.reset === "function") {
-        el.bookUploader.reset();
-      }
-      if (el.uploadActiveCard) el.uploadActiveCard.style.display = "none";
+      uploaderUI.finish(); // reset() clears errors, so show errors AFTER this
 
-      if (uploadQueue.length > 0 && !cancelUploadRequested) {
+      if (failureMessage) uploaderUI.error(failureMessage);
+
+      if (cancelUploadRequested) {
+        if (uploadQueue.length > 0) {
+          log(
+            `Cleared ${uploadQueue.length} queued file(s) after cancel.`,
+            "warning",
+          );
+        }
+        uploadQueue.length = 0;
+        cancelUploadRequested = false;
+      } else if (uploadQueue.length > 0) {
         processUploadQueue();
       }
+    }
+  }
+
+  function requestCancelUpload() {
+    if (isUploading && !cancelUploadRequested) {
+      cancelUploadRequested = true;
+      showToast("Cancelling upload...", "warning");
     }
   }
 
@@ -449,9 +589,10 @@
 
       if (qb) {
         qb.style.display = "block";
-        const isConn = window.BleClient && typeof window.BleClient.isConnected === "function"
-          ? window.BleClient.isConnected()
-          : false;
+        const isConn =
+          window.BleClient && typeof window.BleClient.isConnected === "function"
+            ? window.BleClient.isConnected()
+            : false;
         if (typeof qb.setDisplayGeometry === "function") {
           qb.setDisplayGeometry(width, height);
         }
@@ -585,14 +726,9 @@
     if (el.confirmDeleteBtn)
       el.confirmDeleteBtn.addEventListener("click", confirmDeleteBook);
 
-    // Cancel Upload
-    if (el.cancelUploadBtn) {
-      el.cancelUploadBtn.addEventListener("click", () => {
-        if (isUploading) {
-          cancelUploadRequested = true;
-          showToast("Cancelling upload...", "warning");
-        }
-      });
+    // Cancel Upload (fallback only — <book-uploader> dispatches "cancel-upload" itself)
+    if (el.cancelUploadBtn && !el.bookUploader) {
+      el.cancelUploadBtn.addEventListener("click", requestCancelUpload);
     }
 
     // Component Events: <book-library>
@@ -613,23 +749,25 @@
 
     // Component Events: <book-uploader>
     if (el.bookUploader) {
+      // Files arrive already converted + cleaned by the component.
       el.bookUploader.addEventListener("file-select", (e) =>
-        handleFilesSelected(e.detail?.files),
+        enqueueFiles(e.detail?.files),
       );
-      el.bookUploader.addEventListener("cancel-upload", () => {
-        if (isUploading) {
-          cancelUploadRequested = true;
-          showToast("Cancelling upload...", "warning");
-        }
-      });
+      el.bookUploader.addEventListener("cancel-upload", requestCancelUpload);
     }
 
-    // Dropzone fallback
-    if (el.dropzone && el.fileInput) {
-      el.dropzone.addEventListener("click", () => el.fileInput.click());
-      el.fileInput.addEventListener("change", (e) =>
-        handleFilesSelected(e.target.files),
-      );
+    // Dropzone fallback — only when <book-uploader> is NOT present,
+    // otherwise these IDs belong to the component and get double-bound.
+    if (!el.bookUploader && el.dropzone && el.fileInput) {
+      el.dropzone.addEventListener("click", (e) => {
+        if (e.target === el.fileInput) return; // input sits inside dropzone
+        el.fileInput.click();
+      });
+      el.fileInput.addEventListener("change", (e) => {
+        const files = Array.from(e.target.files || []);
+        e.target.value = "";
+        handleFilesSelected(files);
+      });
       el.dropzone.addEventListener("dragover", (e) => {
         e.preventDefault();
         el.dropzone.classList.add("dragover");
@@ -705,7 +843,10 @@
           } catch (err) {
             showToast(`Status LED failed: ${err.message}`, "error");
           }
-        } else if (e.detail?.key === "refresh_interval" || e.detail?.key === "refresh-interval") {
+        } else if (
+          e.detail?.key === "refresh_interval" ||
+          e.detail?.key === "refresh-interval"
+        ) {
           try {
             await window.BleClient.sendSetRefreshInterval(e.detail.value);
             showToast("Full refresh interval updated", "success");
@@ -809,15 +950,25 @@
       }
     });
 
+    // Field names match BleClient.parseConfigPayload():
+    //   font, navHints(bool), rotation, buttonInvert(bool), statusLed(bool),
+    //   storageTarget, sleepTimeout, caps, screenW, screenH,
+    //   mushafSupported, refreshIntervalSupported, refreshInterval
     window.addEventListener("ble-config-changed", (e) => {
       const cfg = e.detail;
       if (cfg.storageTarget !== undefined) {
-        if (el.statusDashboard && typeof el.statusDashboard.setStorageTarget === "function") {
+        if (
+          el.statusDashboard &&
+          typeof el.statusDashboard.setStorageTarget === "function"
+        ) {
           el.statusDashboard.setStorageTarget(cfg.storageTarget);
         } else if (el.statusDashboard) {
           el.statusDashboard.currentStorageTarget = cfg.storageTarget;
         }
-        if (el.bookLibrary && typeof el.bookLibrary.setStorageTargetBadge === "function") {
+        if (
+          el.bookLibrary &&
+          typeof el.bookLibrary.setStorageTargetBadge === "function"
+        ) {
           el.bookLibrary.setStorageTargetBadge(cfg.storageTarget);
         }
       }
@@ -827,18 +978,20 @@
         typeof el.deviceSettingsModal.updateConfig === "function"
       ) {
         el.deviceSettingsModal.updateConfig({
-          font: cfg.pwaFontId,
-          navHints: cfg.navHints !== 0,
+          font: cfg.font,
+          navHints: Boolean(cfg.navHints),
           orientation: cfg.rotation,
-          buttonInvert: cfg.buttonInvert !== 0,
-          statusLed: cfg.statusLed !== 0,
+          buttonInvert: Boolean(cfg.buttonInvert),
+          statusLed: Boolean(cfg.statusLed),
           storageTarget: cfg.storageTarget,
           sleepTimeout: cfg.sleepTimeout,
+          refreshInterval: cfg.refreshInterval,
+          refreshIntervalSupported: cfg.refreshIntervalSupported,
         });
       }
 
       if (cfg.mushafSupported) {
-        mountMushafBuilder(cfg.screenWidth, cfg.screenHeight);
+        mountMushafBuilder(cfg.screenW, cfg.screenH);
       } else {
         unmountMushafBuilder();
       }
@@ -859,10 +1012,16 @@
     initTheme();
     checkBluetoothCompatibility();
     setupEventListeners();
-    if (el.statusDashboard && typeof el.statusDashboard.setStorageTarget === "function") {
+    if (
+      el.statusDashboard &&
+      typeof el.statusDashboard.setStorageTarget === "function"
+    ) {
       el.statusDashboard.setStorageTarget(1);
     }
-    if (el.bookLibrary && typeof el.bookLibrary.setStorageTargetBadge === "function") {
+    if (
+      el.bookLibrary &&
+      typeof el.bookLibrary.setStorageTargetBadge === "function"
+    ) {
       el.bookLibrary.setStorageTargetBadge(1);
     }
     registerServiceWorker();

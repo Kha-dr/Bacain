@@ -64,33 +64,17 @@ EXTRA_IDF_ARGS="-DBOARD_DISPLAY_WIDTH=250" FACTORY_BIN="bacain_custom.bin" docke
 
 ### D. Adding or Customizing Board Definitions (`boards.json` & `board_def.h`)
 
-To add a permanent board profile under `firmware/boards/` instead of passing CLI flags:
-
-1. **Create `firmware/boards/<board_id>/board_def.h`**:
+1. **Create `firmware/boards/<board_id>/board_def.h` and `board.c`**
+   with every Category A macro, the Category B flags and all board hooks listed in [BOARDS.md section 4](BOARDS.md#4-adding-a-board).
+   Display size and rotation are the only values the UI needs; layout, text bounds and canvas size are derived from `BOARD_DISPLAY_WIDTH` and `BOARD_DISPLAY_HEIGHT`.
 
    ```c
-   #ifndef BOARD_CUSTOM_213_H
-   #define BOARD_CUSTOM_213_H
-
-   #define BOARD_NAME                  "Custom ESP32-S3 ePaper 2.13"
-   #define BOARD_DISPLAY_WIDTH         250
-   #define BOARD_DISPLAY_HEIGHT        122
-   #define BOARD_DISPLAY_ROTATION      1
-
-   #define BOARD_EPD_DC_PIN            10
-   #define BOARD_EPD_CS_PIN            11
-   #define BOARD_EPD_SCK_PIN           12
-   #define BOARD_EPD_MOSI_PIN          13
-   #define BOARD_EPD_RST_PIN           9
-   #define BOARD_EPD_BUSY_PIN          8
-   #define BOARD_EPD_PWR_PIN           6
-
-   #define BOARD_BTN_UP_PIN            0
-   #define BOARD_BTN_DOWN_PIN          18
-   #define BOARD_PWR_LATCH_PIN         17
-   #define BOARD_BATTERY_ADC_CHANNEL   3
-
-   #endif
+   #define BOARD_NAME               "Custom ESP32-S3 ePaper 2.13"
+   #define BOARD_DISPLAY_CONTROLLER "SSD1681"
+   #define BOARD_DISPLAY_WIDTH      250
+   #define BOARD_DISPLAY_HEIGHT     122
+   #define BOARD_DISPLAY_ROTATION   1
+   /* ... remaining Category A and B macros, see BOARDS.md ... */
    ```
 
 2. **Register in `firmware/boards/boards.json`**:
@@ -271,41 +255,46 @@ Windows note: Docker Desktop runs inside a WSL2 virtual machine that does not fo
 
 ## 6. Navigation & Menu Subsystem
 
-Navigation uses two physical buttons: UP (`BOARD_BTN_UP_PIN`, default GPIO 0 / BOOT) and DOWN (`BOARD_BTN_DOWN_PIN`, default GPIO 18 / PWR).
+Navigation uses two physical buttons, ▲ (`BOARD_BTN_UP_PIN`) and ▼ (`BOARD_BTN_DOWN_PIN`). Button invert swaps them; on-screen text always shows the arrow currently assigned.
 
 ### Button Architecture
 
-The `button` component samples GPIO levels with hardware debouncing and dispatches events via FreeRTOS queue to `main.c`:
+The `button` component debounces the GPIO levels and posts `button_event_t` records to a bounded FreeRTOS queue read by `main.c`. `main.c` passes each event to the active view through `views_dispatch_event()` ([views.c](main/views/views.c)).
 
-- **Cold Boot Dismissal**: Pressing UP or DOWN dismisses the sleep screen.
+- **Cold Boot Dismissal**: pressing ▲ or ▼ dismisses the splash screen.
 - **Short Click** (`BTN_CLICK`):
-  - Reading: Previous page (UP) / Next page (DOWN).
-  - Menu & Library: Move cursor up (UP) / Move cursor down (DOWN).
+  - Reading: previous page (▲) / next page (▼).
+  - Menus and lists: move selection up (▲) / down (▼).
 - **Double Click** (`BTN_DOUBLE_CLICK`):
-  - Reading: Toggle bookmark (UP) / Open bookmarks list (DOWN).
-  - Menu & Library: Select or activate item.
-- **Long Press (>1.2s)** (`BTN_HOLD`):
-  - Reading: Open Reader Menu.
-  - Menu, Library & Sync: Back / Exit.
-- **Simultaneous Hold (2.0s)**: Detected when UP + DOWN are held together for 2.0s, triggering an immediate hardware reboot with status LED strobe.
+  - Reading: toggle bookmark (▲) / open bookmark list (▼).
+  - Menus and lists: select or open the item.
+- **Long Press (>1.2s)** (`BTN_LONG_PRESS`):
+  - Reading: open the Reader Menu.
+  - Menus, lists, Nav Hints and Sync: back.
+- **Simultaneous Hold (2.0s)**: ▲ + ▼ held together for 2.0 s reboots the device with a status LED strobe.
 
-For the end-user contextual button action table, see [Controls in README.md](../README.md#controls).
+For the end-user button table, see [Controls in README.md](../README.md#controls).
 
 ### On-Device Menu
 
-The Reader Menu (`reader_ui_render_menu`) provides strictly 7 items managed in `main.c` (Status LED is configured via the companion PWA and removed from the on-device menu):
+The Reader Menu ([view_menu.c](main/views/view_menu.c)) has 7 items, or 8 on Mushaf builds. The status LED is configured from the companion PWA.
 
-1. **Continue Reading**: Resume reading active book at saved byte offset.
-2. **Book Library**: Browse and open books from internal FATFS or MicroSD storage.
-3. **Font Size: [12px/16px]**: Toggle text pager font between Font12 (12px, 6x12, default) and Font16 (16px, 8x16). Persisted in NVS (`font_size`) and RTC memory (`s_rtc_font_size`). Default font is 12px (Font12 / `TEXT_PAGER_FONT_12`). Note: Font20 and Font24 were deleted from the firmware build to conserve flash and memory footprints (Font8 is internal to epaper).
-4. **Sync Books**: Initialize BLE GATT server for companion PWA transfer and display pairing QR code.
-5. **Nav Hints**: Toggle on-screen button navigation hints in reading view.
-6. **Refresh Screen**: Trigger manual full display refresh (`epaper_refresh_full`) to clear ghosting.
-7. **Power Off**: Display power-off screen and enter deep sleep (`enter_deep_sleep_with_state`).
+1. **Continue Reading**: resume the active book at its saved byte offset.
+2. **Book Library**: browse and open books on internal flash or MicroSD.
+3. **Mushaf** (Mushaf builds only): open the Mushaf menu, see [Mushaf_Reader.md](Mushaf_Reader.md).
+4. **Font Size: [12px/16px]**: switch the body font between Font12 (7x12 px, default) and Font16 (11x16 px). It applies to reading text, list rows, messages, Nav Hints and Mushaf text layers. Headers, footers, splash, power-off and the sync screen stay Font12. Saved in NVS (`font_size`) and cached in RTC memory (`app_settings`).
+5. **Sync Books**: start the BLE GATT server for the companion PWA and show the pairing QR code.
+6. **Nav Hints**: open the hints screen (paged with ▲ / ▼); a double click toggles footer hints on every screen.
+7. **Refresh Screen**: redraw the menu with a full refresh to clear ghosting.
+8. **Power Off**: show the power-off screen and release the power latch (with USB connected the device enters deep sleep instead).
+
+### Screen Layout
+
+All screens use the shared `ui_kit` helpers and adapt to `BOARD_DISPLAY_WIDTH` x `BOARD_DISPLAY_HEIGHT` and the rotation setting: a 19 px header, the body, and a 16 px footer. Long lists scroll; rows wrap to up to 2 or 3 lines depending on the screen. See [RULES.md section 2.6](RULES.md).
 
 ---
 
-## 8. BLE GATT Protocol
+## 7. BLE GATT Protocol
 
 BacaIn provides a custom BLE GATT service (`0000fe60-0000-1000-8000-00805f9b34fb`) for wireless book transfers, status telemetry, and bidirectional configuration synchronization with the companion PWA.
 
@@ -319,35 +308,37 @@ BacaIn provides a custom BLE GATT service (`0000fe60-0000-1000-8000-00805f9b34fb
 
 ### Control Characteristic OpCodes
 
-Commands are written to the Control Characteristic. Responses and operation statuses are returned via GATT notifications on the same characteristic.
+Commands are written to the Control Characteristic. Responses are returned as notifications on the same characteristic. Multi-byte values are little-endian. Payload layouts follow [`ble_sync.c`](./components/ble_sync/ble_sync.c); opcode values are defined in [`ble_sync.h`](./components/ble_sync/ble_sync.h).
 
-| OpCode | Name                             | Direction        | Request Payload                        | Response Payload                                                                         | Purpose                                                                                        |
-| :----- | :------------------------------- | :--------------- | :------------------------------------- | :--------------------------------------------------------------------------------------- | :--------------------------------------------------------------------------------------------- |
-| `0x01` | `BLE_SYNC_OP_LIST_BOOKS`         | Client -> Server | `[0x01]`                               | `[0x01, target, size(4B LE), name\0, offset(4B LE), bm_cnt(1B)]` / EOF `[0x01, 0xFF]`    | List all files in storage with saved reading offset and bookmark count                         |
-| `0x02` | `BLE_SYNC_OP_START_UPLOAD`       | Client -> Server | `[0x02, target, size(4B LE), name]`    | `[0x02, status]`                                                                         | Prepare file reception                                                                         |
-| `0x03` | `BLE_SYNC_OP_FINISH_UPLOAD`      | Client -> Server | `[0x03]`                               | `[0x03, status]`                                                                         | Finalize file upload and close file                                                            |
-| `0x04` | `BLE_SYNC_OP_DELETE_BOOK`        | Client -> Server | `[0x04, target, name]`                 | `[0x04, status]`                                                                         | Delete book and its `.bmk` bookmark sidecar from target storage                                |
-| `0x05` | `BLE_SYNC_OP_ABORT_UPLOAD`       | Client -> Server | `[0x05]`                               | `[0x05, status]`                                                                         | Abort active upload and cleanup temp file                                                      |
-| `0x06` | `BLE_SYNC_OP_SET_STORAGE_TARGET` | Client -> Server | `[0x06, target]`                       | `[0x06, status]`                                                                         | Switch active storage (`0`: MicroSD, `1`: Flash)                                               |
-| `0x07` | `BLE_SYNC_OP_GET_BOOKMARKS`      | Client -> Server | `[0x07, target, name]`                 | `[0x07, status, offset(4B LE), count, bookmarks(4B LE)[]]`                              | Query saved reading offset and bookmark byte offsets (`uint32_le[]`) for book                  |
-| `0x08` | `BLE_SYNC_OP_DELETE_BOOKMARK`    | Client -> Server | `[0x08, target, index, name]`          | `[0x08, status, count]`                                                                  | Delete bookmark at `index` (or `0xFF` to clear all bookmarks for book)                         |
-| `0x09` | `BLE_SYNC_OP_ADD_BOOKMARK`       | Client -> Server | `[0x09, target, offset(4B LE), name]`  | `[0x09, status, count]`                                                                  | Add a bookmark at `offset` (`uint32_le`) for book                                              |
-| `0x0A` | `BLE_SYNC_OP_SET_BOOK_OFFSET`    | Client -> Server | `[0x0A, target, offset(4B LE), name]`  | `[0x0A, status, offset(4B LE)]`                                                          | Set saved reading position (`byte_offset`, `uint32_le`) for book                               |
-| `0x10` | `BLE_SYNC_OP_SET_FONT`           | Client -> Server | `[0x10, font_id]`                      | `[0x10, status]`                                                                         | Set font size (`0`: 16px, `1`: 12px)                                                           |
-| `0x12` | `BLE_SYNC_OP_FORCE_REFRESH`      | Client -> Server | `[0x12]`                               | `[0x12, status]`                                                                         | Trigger manual full screen refresh                                                             |
-| `0x13` | `BLE_SYNC_OP_SET_SLEEP_TIMEOUT`  | Client -> Server | `[0x13, timeout(2B LE)]`               | `[0x13, status]`                                                                         | Configure sleep inactivity timeout in seconds                                                  |
-| `0x14` | `BLE_SYNC_OP_TRIGGER_SLEEP`      | Client -> Server | `[0x14]`                               | `[0x14, status]`                                                                         | Immediately enter deep sleep                                                                   |
-| `0x15` | `BLE_SYNC_OP_SET_NAV_HINTS`      | Client -> Server | `[0x15, enabled]`                      | `[0x15, status]`                                                                         | Toggle reading footer navigation hints (`0`: off, `1`: on)                                     |
-| `0x16` | `BLE_SYNC_OP_SET_ROTATION`       | Client -> Server | `[0x16, rotation]`                     | `[0x16, status]`                                                                         | Set display orientation (`0`: 0°, `1`: 90°, `2`: 180°, `3`: 270°)                              |
-| `0x17` | `BLE_SYNC_OP_SET_BUTTON_INVERT`  | Client -> Server | `[0x17, invert]`                       | `[0x17, status]`                                                                         | Invert UP/DOWN button assignments (`0`: normal, `1`: inverted)                                 |
-| `0x18` | `BLE_SYNC_OP_SET_STATUS_LED`     | Client -> Server | `[0x18, enabled]`                      | `[0x18, status]`                                                                         | Enable or disable status LED indications (`0`: off, `1`: on)                                   |
-| `0x19` | `BLE_SYNC_OP_GET_CONFIG`         | Client -> Server | `[0x19]`                               | `[0x19, status, font_size, nav_hints, rotation, btn_invert, status_led, storage_target]` | Query active on-device and NVS configuration to synchronize PWA UI on connect                  |
-| `0x20` | `BLE_SYNC_OP_GET_MUSHAF_STATE`   | Client -> Server | `[0x20]`                               | `[0x20, status, started, surah, ayah(2B LE), layer, count, bookmarks[0..7]]`             | Query Mushaf reading cursor and 8 bookmarks (see [Mushaf_Reader.md](./Mushaf_Reader.md))  |
-| `0x21` | `BLE_SYNC_OP_SET_MUSHAF_STATE`   | Client -> Server | `[0x21, sub, data]`                    | `[0x21, status]`                                                                         | Mutate Mushaf cursor (`sub=1`) or bookmarks (`sub=2`) and commit to NVS                       |
+| OpCode           | Name                   | Request                        | Response                                                                                                                                                           | Purpose                                                                                                     |
+| :--------------- | :--------------------- | :----------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------------------- |
+| `0x01`           | `LIST_BOOKS`           | `[0x01]`                       | Per book: `[0x01, status, is_last, size(4B), name\0, offset(4B), bm_count]`<br>Empty list: `[0x01, status, 1, 0, 0, 0, 0, 0]`                                      | List `.txt` books in the active storage, with saved reading offset and bookmark count                       |
+| `0x02`           | `START_UPLOAD`         | `[0x02, size(4B), name]`       | `[0x02, status]`                                                                                                                                                   | Open the target file. Rejected if size + 16 KB exceeds free space                                           |
+| `0x03`           | `FINISH_UPLOAD`        | `[0x03]`                       | `[0x03, status, bytes(4B)]`                                                                                                                                        | Flush and close the file; an incomplete upload is deleted. `mushaf.bqm` is validated after upload           |
+| `0x04`           | `DELETE_BOOK`          | `[0x04, name]`                 | `[0x04, status]`                                                                                                                                                   | Delete a book and its saved state                                                                           |
+| `0x05`           | `ABORT_UPLOAD`         | `[0x05]`                       | `[0x05, status]`                                                                                                                                                   | Abort the upload and delete the partial file                                                                |
+| `0x06`           | `SET_STORAGE_TARGET`   | `[0x06, target]`               | `[0x06, status]`                                                                                                                                                   | Switch active storage (`0`: MicroSD, `1`: Flash)                                                            |
+| `0x07`           | `GET_BOOKMARKS`        | `[0x07, rel_path]`             | `[0x07, status, offset(4B), total(4B), count, bookmarks[count] (4B each)]`                                                                                         | Saved reading offset, file size and bookmark byte offsets                                                   |
+| `0x08`           | `DELETE_BOOKMARK`      | `[0x08, offset(4B), rel_path]` | `[0x08, status]`                                                                                                                                                   | Delete the bookmark at a byte offset                                                                        |
+| `0x09`           | `ADD_BOOKMARK`         | `[0x09, offset(4B), rel_path]` | `[0x09, status]`                                                                                                                                                   | Add a bookmark at a byte offset                                                                             |
+| `0x0A`           | `SET_BOOK_OFFSET`      | `[0x0A, offset(4B), rel_path]` | `[0x0A, status]`                                                                                                                                                   | Set the saved reading position                                                                              |
+| `0x10`           | `SET_FONT`             | `[0x10, font_id]`              | `[0x10, status]`                                                                                                                                                   | Body font size (`0`: 16 px, `1`: 12 px). Saved and applied on the next screen refresh                       |
+| `0x12`           | `FORCE_REFRESH`        | `[0x12]`                       | `[0x12, status]`                                                                                                                                                   | Redraw the current screen (full refresh in the reading view)                                                |
+| `0x13`           | `SET_SLEEP_TIMEOUT`    | `[0x13, seconds(2B)]`          | `[0x13, status]`                                                                                                                                                   | Inactivity timeout before deep sleep in seconds (`0`: never). Saved as a device setting                     |
+| `0x15`           | `SET_NAV_HINTS`        | `[0x15, enabled]`              | `[0x15, status]`                                                                                                                                                   | Footer navigation hints (`0`: off, `1`: on). Saved and applied on the next screen refresh                   |
+| `0x16`           | `SET_ROTATION`         | `[0x16, rotation]`             | `[0x16, status]`                                                                                                                                                   | Display orientation (`0`: 0°, `1`: 90°, `2`: 180°, `3`: 270°). Saved and applied on the next screen refresh |
+| `0x17`           | `SET_BUTTON_INVERT`    | `[0x17, invert]`               | `[0x17, status]`                                                                                                                                                   | Swap ▲ / ▼ (`0`: normal, `1`: inverted). Saved and applied on the next event                                |
+| `0x18`           | `SET_STATUS_LED`       | `[0x18, enabled]`              | `[0x18, status]`                                                                                                                                                   | Status LED on or off. `NOT_SUPPORTED` if the board has no LED                                               |
+| `0x19`           | `GET_CONFIG`           | `[0x19]`                       | 16 bytes: `[0x19, status, font_id, nav_hints, rotation, btn_invert, status_led, storage_target, sleep_timeout(2B), caps, width(2B), height(2B), refresh_interval]` | Current settings, capabilities and display size                                                             |
+| see `ble_sync.h` | `SET_REFRESH_INTERVAL` | `[op, pages]` (`0` to `100`)   | `[op, status]`                                                                                                                                                     | Full refresh every N page turns (`0`: never)                                                                |
+| `0x20`           | `GET_MUSHAF_STATE`     | `[0x20]`                       | See [Mushaf_Reader.md](./Mushaf_Reader.md)                                                                                                                         | Mushaf reading cursor and 8 bookmarks                                                                       |
+| `0x21`           | `SET_MUSHAF_STATE`     | `[0x21, sub, data]`            | `[0x21, status]`                                                                                                                                                   | Set Mushaf cursor (`sub=1`) or bookmarks (`sub=2`) and save to NVS                                          |
+
+Settings received over BLE are saved by the `ble_sync` worker task and applied by the main task before it handles the next event. In `GET_CONFIG`, `storage_target` is `1` for Flash and `0` for MicroSD, and `caps` contains `BLE_SYNC_CAP_REFRESH_INTERVAL` and, on Mushaf builds, `BLE_SYNC_CAP_MUSHAF`. An unknown opcode is rejected with ATT error `BLE_ATT_ERR_UNLIKELY`.
 
 ---
 
-## 9. References & Links
+## 8. References & Links
 
 - **Hardware Reference Repository & Schematics**: [Waveshare ESP32-S3-ePaper-1.54](https://github.com/waveshareteam/ESP32-S3-ePaper-1.54)
 - **Official ESP-IDF v5.3 Programming Guide**: [Espressif Documentation](https://docs.espressif.com/projects/esp-idf/en/v5.3.1/esp32s3/)

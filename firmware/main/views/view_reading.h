@@ -1,22 +1,21 @@
 #ifndef VIEW_READING_H
 #define VIEW_READING_H
 
-#include <stdbool.h>
-#include "reader_ui.h"
-#include "button.h"
+#include "esp_err.h"
+#include "views.h"
 
 #ifdef __cplusplus
-extern "C" {
+extern "C"
+{
 #endif
 
-esp_err_t view_reading_ensure_book_open(void);
-void view_reading_render(bool full_refresh);
-void view_reading_render_page_turn(void);
-reader_view_t view_reading_on_wake(void);
-reader_view_t view_reading_handle_event(button_event_t evt);
+  extern const view_def_t VIEW_DEF_READING;
+
+  /* Opens the active book (or the first file in the library) if none is open. */
+  esp_err_t view_reading_ensure_book_open(void);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif // VIEW_READING_H
+#endif /* VIEW_READING_H */

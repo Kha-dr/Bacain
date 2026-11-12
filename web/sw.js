@@ -1,4 +1,4 @@
-const CACHE_NAME = "bacain-pwa-v8";
+const CACHE_NAME = "bacain-pwa-v9";
 const ASSETS_TO_CACHE = [
   "./",
   "./index.html",
@@ -9,13 +9,13 @@ const ASSETS_TO_CACHE = [
   "./app.js",
   "./components/mushaf-builder.js",
   "./manifest.json",
-  "./icon.svg",
-  "./icon-192.png",
-  "./icon-512.png",
-  "./icon-maskable-192.png",
-  "./icon-maskable-512.png",
-  "./screenshot-wide.png",
-  "./screenshot-narrow.png",
+  "./assets/icon.svg",
+  "./assets/icon-192.png",
+  "./assets/icon-512.png",
+  "./assets/icon-maskable-192.png",
+  "./assets/icon-maskable-512.png",
+  "./assets/screenshot-wide.png",
+  "./assets/screenshot-narrow.png",
 ];
 
 // Install event: cache application shell

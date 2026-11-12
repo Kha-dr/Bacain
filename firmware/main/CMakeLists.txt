@@ -1,6 +1,8 @@
 set(MAIN_SRCS
     "main.c"
-    "reader_ui.c"
+    "app_links.c"
+    "app_settings_apply.c"
+    "ui_screens.c"
     "views/views.c"
     "views/view_reading.c"
     "views/view_menu.c"
@@ -21,7 +23,11 @@ set(MAIN_REQUIRES
     sdcard
     button
     epaper
+    board_config
+    app_settings
     reader_core
+    text_engine
+    ui_kit
     ble_sync
     status_led
 )

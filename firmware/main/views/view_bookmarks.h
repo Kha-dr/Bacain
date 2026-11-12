@@ -1,22 +1,20 @@
 #ifndef VIEW_BOOKMARKS_H
 #define VIEW_BOOKMARKS_H
 
-#include <stdbool.h>
-#include "reader_ui.h"
-#include "button.h"
+#include "views.h"
 
 #ifdef __cplusplus
-extern "C" {
+extern "C"
+{
 #endif
 
-int view_bookmarks_get_index(void);
-void view_bookmarks_set_index(int index);
-void view_bookmarks_render(bool full_refresh);
-reader_view_t view_bookmarks_on_wake(void);
-reader_view_t view_bookmarks_handle_event(button_event_t evt);
+  extern const view_def_t VIEW_DEF_BOOKMARKS;
+
+  int view_bookmarks_get_index(void);
+  void view_bookmarks_set_index(int index);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif // VIEW_BOOKMARKS_H
+#endif /* VIEW_BOOKMARKS_H */
