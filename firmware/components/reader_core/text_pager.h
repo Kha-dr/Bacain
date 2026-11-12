@@ -5,146 +5,89 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "esp_err.h"
-#include "GUI_Paint.h"
-#include "fonts.h"
+#include "text_layout.h"
+#include "ui_pager.h"
 
 #ifdef __cplusplus
-extern "C" {
+extern "C"
+{
 #endif
 
-#define TEXT_PAGER_HISTORY_DEPTH  16
-#define TEXT_PAGER_MAX_LINES      16
-#define TEXT_PAGER_MAX_LINE_CHARS 40
+#define TEXT_PAGER_HISTORY_DEPTH 16
+#define TEXT_PAGER_MAX_LINES TEXT_LAYOUT_MAX_LINES     /* 16 */
+#define TEXT_PAGER_MAX_LINE_CHARS TEXT_LAYOUT_MAX_COLS /* 48 */
 
-typedef enum {
-    TEXT_PAGER_FONT_16 = 0, // 8x16 px, ~22 chars per line, max 8 lines per page
-    TEXT_PAGER_FONT_12 = 1, // 6x12 px, ~30 chars per line, max 11 lines per page
-} text_pager_font_size_t;
+/* Geometry contract: layout and renderer must use the same footer kind. */
+#define TEXT_PAGER_FOOTER UI_PAGER_FOOTER_STATUS
+#define TEXT_PAGER_KEEP_BLANK false /* books: old behavior, blank lines dropped */
 
-typedef struct {
-    char lines[TEXT_PAGER_MAX_LINES][TEXT_PAGER_MAX_LINE_CHARS * 4 + 1];
-    size_t line_count;
-    size_t page_start_offset;
-    size_t page_end_offset;
-    uint32_t progress_pct;
-    bool is_eof;
-    bool is_bof;
-} text_pager_page_t;
+    typedef enum
+    {
+        TEXT_PAGER_FONT_16 = 0, /* Font16 11x16: 16 cols x 8 lines on 200x200  */
+        TEXT_PAGER_FONT_12 = 1, /* Font12  7x12: 26 cols x 11 lines on 200x200 */
+    } text_pager_font_size_t;
 
-typedef struct {
-    char active_book_path[256];
-    char book_title[128];
-    size_t total_bytes;
-    size_t current_offset;
-    text_pager_font_size_t font_size;
+    typedef struct
+    {
+        char lines[TEXT_PAGER_MAX_LINES][TEXT_PAGER_MAX_LINE_CHARS + 1]; /* ASCII after folding */
+        size_t line_count;
+        size_t page_start_offset;
+        size_t page_end_offset;
+        uint32_t progress_pct;
+        bool is_eof;
+        bool is_bof;
+    } text_pager_page_t;
 
-    // Rolling history of byte offsets (16 pages deep) for instant reverse paging
-    size_t history[TEXT_PAGER_HISTORY_DEPTH];
-    size_t history_count;
+    typedef struct
+    {
+        char active_book_path[256];
+        char book_title[128];
+        size_t total_bytes;
+        size_t current_offset; /* always == current_page.page_start_offset */
+        text_pager_font_size_t font_size;
 
-    // Current page content
-    text_pager_page_t current_page;
-    bool book_open;
-} text_pager_t;
+        size_t history[TEXT_PAGER_HISTORY_DEPTH];
+        size_t history_count;
 
-/**
- * @brief Initialize the text pager module.
- * @return ESP_OK on success.
- */
-esp_err_t text_pager_init(void);
+        text_pager_page_t current_page;
+        bool book_open;
+    } text_pager_t;
 
-/**
- * @brief Deinitialize text pager and release resources.
- */
-void text_pager_deinit(void);
+    /* Notifications instead of direct book_library calls. Called outside the pager mutex. */
+    typedef struct
+    {
+        void (*on_open)(const char *path, size_t offset, void *ctx);
+        void (*on_offset)(size_t offset, void *ctx);
+        void *ctx;
+    } text_pager_listener_t;
 
-/**
- * @brief Open a book file and seek to byte_offset.
- * @param path Full file path (e.g. "/sdcard/books/example.txt").
- * @param byte_offset Starting byte offset (0 for start).
- * @return ESP_OK on success, or an esp_err_t error code.
- */
-esp_err_t text_pager_open_book(const char *path, size_t byte_offset);
+    esp_err_t text_pager_init(void);
+    void text_pager_deinit(void);
+    void text_pager_set_listener(const text_pager_listener_t *listener);
 
-/**
- * @brief Close currently open book.
- */
-void text_pager_close_book(void);
+    esp_err_t text_pager_open_book(const char *path, size_t byte_offset);
+    void text_pager_close_book(void);
+    bool text_pager_is_book_open(void);
 
-/**
- * @brief Check whether a book is currently open.
- * @return true if open, false otherwise.
- */
-bool text_pager_is_book_open(void);
+    /* Re-lays out the current page. Does NOT render. */
+    esp_err_t text_pager_set_font_size(text_pager_font_size_t font_size);
+    text_pager_font_size_t text_pager_get_font_size(void);
 
-/**
- * @brief Set the font size (Font16 or Font12).
- * @param font_size TEXT_PAGER_FONT_16 or TEXT_PAGER_FONT_12.
- * @return ESP_OK on success.
- */
-esp_err_t text_pager_set_font_size(text_pager_font_size_t font_size);
+    esp_err_t text_pager_seek(size_t byte_offset);
+    esp_err_t text_pager_next_page(void); /* ESP_ERR_NOT_FOUND at EOF */
+    esp_err_t text_pager_prev_page(void); /* ESP_ERR_NOT_FOUND at BOF */
 
-/**
- * @brief Get current font size.
- * @return Current text_pager_font_size_t.
- */
-text_pager_font_size_t text_pager_get_font_size(void);
+    const text_pager_page_t *text_pager_get_current_page(void); /* NULL if no book open */
+    size_t text_pager_get_current_offset(void);
+    size_t text_pager_get_total_bytes(void);
 
-/**
- * @brief Seek to a specific byte offset in the current book.
- * @param byte_offset Target byte offset.
- * @return ESP_OK on success, or an error code.
- */
-esp_err_t text_pager_seek(size_t byte_offset);
-
-/**
- * @brief Advance to the next page.
- *        Pushes current offset onto 16-deep rolling history and parses next page.
- * @return ESP_OK on success, ESP_ERR_NOT_FOUND at EOF.
- */
-esp_err_t text_pager_next_page(void);
-
-/**
- * @brief Go back to previous page.
- *        Pops from 16-deep rolling history for instant reverse paging.
- * @return ESP_OK on success, ESP_ERR_NOT_FOUND at beginning of file.
- */
-esp_err_t text_pager_prev_page(void);
-
-/**
- * @brief Get current page data structure.
- * @return Pointer to current text_pager_page_t, or NULL if no book open.
- */
-const text_pager_page_t *text_pager_get_current_page(void);
-
-/**
- * @brief Get current byte offset.
- * @return Current byte offset in active book.
- */
-size_t text_pager_get_current_offset(void);
-
-/**
- * @brief Get total bytes of current book.
- * @return Total file size in bytes.
- */
-size_t text_pager_get_total_bytes(void);
-
-/**
- * @brief Render current page into GUI_Paint canvas buffer.
- *        Draws Header (book title), Body (text lines), and Footer (progress %).
- * @return ESP_OK on success.
- */
-esp_err_t text_pager_render_page(void);
-
-/**
- * @brief Render current page into an explicit canvas buffer and select it in Paint.
- * @param canvas_buffer Pointer to display buffer (at least DISPLAY_BUFFER_SIZE bytes).
- * @return ESP_OK on success.
- */
-esp_err_t text_pager_render_to_buffer(uint8_t *canvas_buffer);
+    /* For renderers: layout-native page, title, style. Valid until the next pager call. */
+    const text_page_t *text_pager_get_layout_page(void); /* NULL if no book open */
+    const char *text_pager_get_title(void);
+    const ui_pager_style_t *text_pager_get_style(void);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif // TEXT_PAGER_H
+#endif /* TEXT_PAGER_H */

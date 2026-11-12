@@ -9,4 +9,6 @@ idf_component_register(
         sdcard
         log
         freertos
+        text_engine     # text_pager.h: text_layout.h
+        ui_kit          # text_pager.h: ui_pager.h
 )

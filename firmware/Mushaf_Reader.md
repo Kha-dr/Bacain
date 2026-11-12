@@ -1,15 +1,16 @@
 # Mushaf Reader
 
-Optional offline Mushaf reader for BacaIn e-paper devices using pre-rendered .bqm packages.
+Optional offline Mushaf reader for BacaIn e-paper devices using pre-rendered `.bqm` packages.
 
-Arabic script requires complex contextual glyph shaping and ligatures that are heavy for an MCU, so the companion web app pre-renders the Mushaf words into 1-bit bitmaps and packs them with wrapped text into a binary file (`mushaf.bqm`) for direct streaming from flash or MicroSD.
+Arabic script requires contextual glyph shaping and ligatures that are heavy for an MCU, so the companion web app pre-renders the Mushaf words into 1-bit bitmaps and packs them with the text layers into a binary file (`mushaf.bqm`) for streaming from flash or MicroSD.
 
 ## Features
 
 - **4 Reading Layers**: Mushaf 1-bit word sprites, Latin transliteration, Translation, and Tafsir.
 - **Quick Navigation**: Direct jump to Sunnah surahs (Al-Kahf, Yasin, Ar-Rahman, Al-Waqiah, Al-Mulk) and 30 Juz.
 - **Bookmarks**: 8 persistent bookmark slots stored in NVS.
-- **Zero Overhead**: Zero flash and RAM footprint when disabled in standard builds (`CONFIG_BOARD_MUSHAF_ENABLE=n`).
+- **Same Reading Frame as Books**: header, footer and font size setting are shared with the book reader.
+- **Zero Overhead When Disabled**: Mushaf sources compile to nothing when `CONFIG_BOARD_MUSHAF_ENABLE=n`.
 
 <div align="center">
   <img src="../assets/ui-mushaf.png" width="220" alt="1-Bit Mushaf View" />
@@ -41,18 +42,37 @@ Binaries can also be flashed via the browser at [bacain.khadr.dev/flasher.html](
 
 ## Controls
 
-Two-button navigation using **UP** (BOOT, GPIO 0) and **DOWN** (PWR, GPIO 18).
+Two-button navigation with **▲** and **▼**. The arrows swap when button invert is enabled.
 
-| Context                     | Action       | Button            | Function                                         |
-| :-------------------------- | :----------- | :---------------- | :----------------------------------------------- |
-| **Reading**                 | Click        | **UP**            | Previous page or subpage                         |
-|                             | Click        | **DOWN**          | Next page or subpage                             |
-|                             | Double Click | **UP**            | Cycle layer (Mushaf, Latin, Translation, Tafsir) |
-|                             | Double Click | **DOWN**          | Toggle bookmark                                  |
-|                             | Hold (>1.2s) | **UP** / **DOWN** | Open Mushaf menu                                 |
-| **Menu / Jump / Bookmarks** | Click        | **UP** / **DOWN** | Navigate items                                   |
-|                             | Double Click | **UP** / **DOWN** | Select or jump                                   |
-|                             | Hold (>1.2s) | **UP** / **DOWN** | Back / Exit                                      |
+| Context                     | Action       | Button    | Function                                         |
+| :-------------------------- | :----------- | :-------- | :----------------------------------------------- |
+| **Reading**                 | Click        | **▲**     | Previous page or subpage                         |
+|                             | Click        | **▼**     | Next page or subpage                             |
+|                             | Double Click | **▲**     | Cycle layer (Mushaf, Latin, Translation, Tafsir) |
+|                             | Double Click | **▼**     | Toggle bookmark                                  |
+|                             | Hold (>1.2s) | **▲ / ▼** | Open Mushaf menu                                 |
+| **Menu / Jump / Bookmarks** | Click        | **▲ / ▼** | Move selection                                   |
+|                             | Double Click | **▲ / ▼** | Select or jump                                   |
+|                             | Hold (>1.2s) | **▲ / ▼** | Back                                             |
+
+The same table is shown on the device under **Nav Hints**.
+
+## Screens
+
+**Mushaf menu**: `Start Tilawah` or `Resume s:a (Juz n)`, `Layer: [name]`, `Sunnah & Juz Jump`, `Bookmarks (n/8)`.
+
+**Reading** uses the book reader frame:
+
+| Area   | Content                                                                                                                         |
+| :----- | :------------------------------------------------------------------------------------------------------------------------------ |
+| Header | `surah:ayah Name` on the left, battery on the right                                                                             |
+| Body   | Mushaf layer: word sprites. Text layers: wrapped text in the reading font                                                       |
+| Footer | Left: `J<juz> <layer>` (`MUS`, `LAT`, `TRN`, `TAF`) and `[BM]` when bookmarked. Right: `subpage/total` and percent of the Quran |
+
+- Text layers follow the **Font Size** setting (12 or 16 px) and are re-wrapped on the device for the current screen and rotation.
+- Accented transliteration letters are shown without accents (`ā` → `a`, `ḥ` → `h`, `ʿ` → `'`).
+- Page turns use the periodic full refresh setting, like books.
+- The cursor is saved to NVS at sleep and on explicit edits (bookmarks, jumps), not on every page turn.
 
 ## Companion Web Builder (`mushaf.bqm`)
 
@@ -60,9 +80,11 @@ Two-button navigation using **UP** (BOOT, GPIO 0) and **DOWN** (PWR, GPIO 18).
   <img src="../assets/mushaf-builder.png" width="100%" alt="Companion Web Builder" />
 </div>
 
-1. Connect device in [BacaIn PWA](https://bacain.khadr.dev).
+1. Connect the device in [BacaIn PWA](https://bacain.khadr.dev). The builder reads the display width and height from the device.
 2. Open Mushaf Builder, select script (Madinah Uthmani or IndoPak), layers, and Surah or Juz range.
-3. Generate binary file and upload to internal flash (`/spiflash/books/mushaf.bqm`) or MicroSD (`/sdcard/books/mushaf.bqm`).
+3. Generate the file and upload it to internal flash (`/spiflash/books/mushaf.bqm`) or MicroSD (`/sdcard/books/mushaf.bqm`).
+
+A package is built for one display size. A package built for another size or format version is rejected at load and logged as `BQM header invalid`; rebuild it in the web builder.
 
 | Target Storage   | Usable Capacity           | Recommended Scope                                   |
 | :--------------- | :------------------------ | :-------------------------------------------------- |
@@ -70,33 +92,45 @@ Two-button navigation using **UP** (BOOT, GPIO 0) and **DOWN** (PWR, GPIO 18).
 | **4 MB Flash**   | ~2.94 MB (`/spiflash`)    | Juz 30 ('Amma), custom Surah ranges, or MicroSD     |
 | **MicroSD Card** | Card capacity (`/sdcard`) | Full 30 Juz with complete Tafsir (~8.7 MB)          |
 
-## Binary File Layout (`mushaf.bqm`)
+Sizes were measured for 200x200 with format version 1; version 2 uses slightly more subpages per ayah.
 
-Pre-rendered binary container (`BQM1`) designed for zero-heap streaming:
+## Binary File Layout (`mushaf.bqm`, format version 2)
 
-| Section             | Offset               | Purpose                                                                   |
-| :------------------ | :------------------- | :------------------------------------------------------------------------ |
-| **Header**          | `0x0000` (64 B)      | File signature `"BQM1"`, version, layer mask, dimensions, section offsets |
-| **Surah Table**     | `0x0040` (2,736 B)   | 114 entries (24 B each): Surah number, Ayah count, first Ayah, Latin name |
-| **Ayah Table**      | `0x0AF0` (149,664 B) | 6,236 entries (24 B each): Juz, subpage counts, layer offsets             |
-| **Word Dictionary** | `word_dict_off`      | Sprite descriptors (8 B each): width, height, baseline, bitmap offset     |
-| **Sprite Blob**     | `sprite_blob_off`    | Packed 1-bit monochrome glyph bitmaps (8 px/byte, MSB-first)              |
-| **Mushaf Pages**    | `mushaf_pages_off`   | Subpage layouts: placed word coordinates `(word_id, x, y)`                |
-| **Text Blob**       | `text_blob_off`      | Pre-wrapped UTF-8 lines for Latin, Translation, and Tafsir                |
+Pre-rendered binary container with signature `"BQM1"` and `version = 2`:
+
+| Section             | Offset               | Purpose                                                                                           |
+| :------------------ | :------------------- | :------------------------------------------------------------------------------------------------ |
+| **Header**          | `0x0000` (64 B)      | Signature, version, layer mask, script id, display width and height, section offsets, edition tag |
+| **Surah Table**     | `0x0040` (2,736 B)   | 114 entries (24 B): surah number, ayah count, first global ayah, start juz, Latin name (18 B)     |
+| **Ayah Table**      | `0x0AF0` (149,664 B) | 6,236 entries (24 B): juz, hizb quarter, subpage count per layer, offset per layer                |
+| **Word Dictionary** | `word_dict_off`      | Sprite descriptors (8 B): width, height, y offset, row stride, bitmap offset                      |
+| **Sprite Blob**     | `sprite_blob_off`    | 1-bit word bitmaps (8 px per byte, MSB first)                                                     |
+| **Mushaf Pages**    | `mushaf_pages_off`   | Per ayah: subpage offsets, then per subpage a word count and placed words `(word_id, x, y)`       |
+| **Text Blob**       | `text_blob_off`      | Per ayah and layer: subpage offsets, then length-prefixed ASCII lines                             |
+
+Constraints the firmware relies on:
+
+| Item                    | Limit                                                                                           |
+| :---------------------- | :---------------------------------------------------------------------------------------------- |
+| Sprite size             | width and height up to 255 px                                                                   |
+| Words per subpage       | up to 64                                                                                        |
+| Sprite placement        | rows `22` to `display_height - 19` (reader body); pixels outside are clipped and logged once    |
+| Rotation                | sprites are placed for the board's native orientation; on non-square panels use rotation 0 or 2 |
+| Text per ayah and layer | up to 2047 bytes after joining lines (`MUSHAF_TEXT_BUF_MAX`); longer text is cut and logged     |
+| Stored text line breaks | ignored; the device re-wraps text for its font and screen                                       |
 
 ## BLE Sync Protocol
 
 Mushaf extensions for the BacaIn BLE GATT service (`0000fe60-0000-1000-8000-00805f9b34fb`):
 
-| OpCode | Name               | Payload (Request / Response)                                                                    | Purpose                                                 |
-| :----- | :----------------- | :---------------------------------------------------------------------------------------------- | :------------------------------------------------------ |
-| `0x19` | `GET_CONFIG`       | Req: `[0x19]`<br>Resp: standard config + `caps`                                                 | Bit 0 (`0x01`) in `caps` signals Mushaf feature support |
-| `0x20` | `GET_MUSHAF_STATE` | Req: `[0x20]`<br>Resp: `[0x20, status, started, surah, ayah(2B), layer, count, bookmarks[0-7]]` | Query active cursor and 8 bookmarks                     |
-| `0x21` | `SET_MUSHAF_STATE` | Req: `[0x21, sub, data]`<br>Resp: `[0x21, status]`                                              | Mutate cursor (`sub=1`) or bookmarks (`sub=2`) in NVS   |
+| OpCode | Name               | Payload (Request / Response)                                                                                                         | Purpose                                                   |
+| :----- | :----------------- | :----------------------------------------------------------------------------------------------------------------------------------- | :-------------------------------------------------------- |
+| `0x19` | `GET_CONFIG`       | Req: `[0x19]`<br>Resp: see README section 7, `caps` includes `BLE_SYNC_CAP_MUSHAF`                                                   | Mushaf support flag and display size for the builder      |
+| `0x20` | `GET_MUSHAF_STATE` | Req: `[0x20]`<br>Resp (40 B): `[0x20, status, started, surah, ayah(2B LE), layer, count, bookmarks[8] x (surah, ayah(2B LE), juz)]`  | Query cursor and 8 bookmarks                              |
+| `0x21` | `SET_MUSHAF_STATE` | Req: `[0x21, 0x01, surah, ayah(2B LE), layer]` or `[0x21, 0x02, count, count x (surah, ayah(2B LE), juz)]`<br>Resp: `[0x21, status]` | Set cursor (`0x01`) or bookmarks (`0x02`) and save to NVS |
 
 ## Acknowledgments
 
-- Mushaf fonts: King Fahd Complex (Uthmanic Hafs) and QUL (IndoPak Nastaleeq)
-- Mushaf text, translations, and tafsir datasets: Fawaz Ahmed datasets
-- Indonesian translation and Tafsir Ringkas: Lajnah Pentashihan Mushaf (LPMQ) Kemenag RI
-- English translations and tafsir: Saheeh International, Abdullah Yusuf Ali, and Tafsir Ibn Kathir
+- Mushaf fonts: KFGQPC Uthmanic Hafs (King Fahd Complex) and IndoPak Nastaleeq (QUL), served by quran.foundation
+- Uthmani text, transliteration, translations and tafsir: [alquran.cloud](https://alquran.cloud) editions `quran-uthmani`, `en.transliteration`, `id.indonesian`, `en.sahih`, `id.jalalayn`, `en.jalalayn`
+- IndoPak text: Fawaz Ahmed `quran-api` (`ara-quranindopak`)

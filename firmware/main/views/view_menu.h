@@ -1,22 +1,20 @@
 #ifndef VIEW_MENU_H
 #define VIEW_MENU_H
 
-#include <stdbool.h>
-#include "reader_ui.h"
-#include "button.h"
+#include "views.h"
 
 #ifdef __cplusplus
-extern "C" {
+extern "C"
+{
 #endif
 
-int view_menu_get_index(void);
-void view_menu_set_index(int index);
-void view_menu_render(bool full_refresh);
-reader_view_t view_menu_on_wake(void);
-reader_view_t view_menu_handle_event(button_event_t evt);
+  extern const view_def_t VIEW_DEF_MENU;
+
+  int view_menu_get_index(void);
+  void view_menu_set_index(int index);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif // VIEW_MENU_H
+#endif /* VIEW_MENU_H */

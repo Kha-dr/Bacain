@@ -50,7 +50,6 @@ extern "C"
 #define BLE_SYNC_OP_SET_FONT 0x10
 #define BLE_SYNC_OP_FORCE_REFRESH 0x12
 #define BLE_SYNC_OP_SET_SLEEP_TIMEOUT 0x13
-#define BLE_SYNC_OP_TRIGGER_SLEEP 0x14
 #define BLE_SYNC_OP_SET_NAV_HINTS 0x15
 #define BLE_SYNC_OP_SET_ROTATION 0x16
 #define BLE_SYNC_OP_SET_BUTTON_INVERT 0x17
@@ -121,7 +120,6 @@ extern "C"
         BLE_SYNC_EVT_UPLOAD_ABORTED,
         BLE_SYNC_EVT_FILE_DELETED,
         BLE_SYNC_EVT_REQUEST_REFRESH,
-        BLE_SYNC_EVT_REQUEST_SLEEP,
     } ble_sync_event_t;
 
     typedef void (*ble_sync_event_cb_t)(ble_sync_event_t event, const void *param, void *user_data);
@@ -219,20 +217,6 @@ extern "C"
      * @return Current storage target.
      */
     storage_target_t ble_sync_get_storage_target(void);
-
-    /**
-     * @brief Get current sleep inactivity timeout in seconds.
-     *
-     * @return Inactivity timeout in seconds (0 = disabled).
-     */
-    uint16_t ble_sync_get_sleep_timeout(void);
-
-    /**
-     * @brief Set sleep inactivity timeout in seconds.
-     *
-     * @param sec Inactivity timeout in seconds (0 = disabled).
-     */
-    void ble_sync_set_sleep_timeout(uint16_t sec);
 
     /**
      * @brief Register an optional callback for BLE synchronization events.

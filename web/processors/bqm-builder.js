@@ -231,7 +231,152 @@ export const MUSHAF_LAYERS = [
     title: "Tafsir Ringkas",
   },
 ];
+// ---------------------------------------------------------------------------
+// Firmware geometry (must match ui_kit/ui_layout.h, ui_pager.c, mushaf_reader.c)
+// ---------------------------------------------------------------------------
+export const BQM_FORMAT_VERSION = 2; // mushaf_reader.h BQM_VERSION
+export const BQM_MAX_WORDS_PER_SUBPAGE = 64; // mushaf_reader.c words[64]
+export const BQM_MAX_SPRITE_W = 255; // bqm_word_sprite_t.width is uint8
 
+export const FW_LAYOUT = {
+  headerHeight: 19, // UI_HEADER_HEIGHT
+  footerHeight: 16, // UI_FOOTER_HEIGHT
+  bodyTop: 22, // UI_BODY_TOP = header + 3
+  marginX: 8, // UI_MARGIN_X
+};
+
+/** Reader body rows [top, bottom): same rect the firmware clips sprites and text to. */
+export function fwBodyRect(screenH) {
+  return {
+    top: FW_LAYOUT.bodyTop,
+    bottom: screenH - FW_LAYOUT.footerHeight - 2, // status footer: ui_footer_y() - 2
+  };
+}
+
+/** Reader text styles (ui_pager.c UI_PAGER_STYLE_SMALL / _LARGE, Waveshare Font12/Font16). */
+export const FW_TEXT_STYLES = {
+  12: { charW: 7, charH: 12, pitch: 14, padX: 8 },
+  16: { charW: 11, charH: 16, pitch: 20, padX: 10 },
+};
+
+/** Columns / lines / left margin the firmware uses for text layers on this screen. */
+export function fwTextGeometry(screenW, screenH, bodyFont = 12) {
+  const st = FW_TEXT_STYLES[bodyFont] || FW_TEXT_STYLES[12];
+  const { top, bottom } = fwBodyRect(screenH);
+  const cols = Math.max(1, Math.floor((screenW - 2 * st.padX) / st.charW));
+  const area = bottom - top;
+  const lines =
+    area < st.charH ? 1 : Math.floor((area - st.charH) / st.pitch) + 1;
+  const marginX = Math.max(0, Math.floor((screenW - cols * st.charW) / 2));
+  return { ...st, cols, lines, marginX, top, bottom };
+}
+
+const MUSHAF_MARGIN = 6;
+const MUSHAF_WORD_SPACING = 4;
+
+export function mushafLineHeight(fontSize) {
+  return Math.max(fontSize + 8, 28);
+}
+
+/** Groups word sprites into right-to-left lines that fit the screen width. */
+export function layoutMushafLines(sprites, screenW) {
+  const maxLineWidth = screenW - MUSHAF_MARGIN * 2;
+  const lines = [];
+  let cur = [];
+  let curW = 0;
+  for (const sp of sprites) {
+    const added = cur.length === 0 ? sp.width : sp.width + MUSHAF_WORD_SPACING;
+    if (curW + added <= maxLineWidth) {
+      cur.push(sp);
+      curW += added;
+    } else {
+      if (cur.length > 0) lines.push(cur);
+      cur = [sp];
+      curW = sp.width;
+    }
+  }
+  if (cur.length > 0) lines.push(cur);
+  return lines;
+}
+
+/** Splits lines into subpages by body height and by the firmware's 64-word cap. */
+export function paginateMushafLines(lines, screenH, fontSize) {
+  const { top, bottom } = fwBodyRect(screenH);
+  const maxLines = Math.max(
+    1,
+    Math.floor((bottom - top) / mushafLineHeight(fontSize)),
+  );
+  const pages = [];
+  let cur = [];
+  let words = 0;
+  for (const line of lines) {
+    if (
+      cur.length > 0 &&
+      (cur.length >= maxLines ||
+        words + line.length > BQM_MAX_WORDS_PER_SUBPAGE)
+    ) {
+      pages.push(cur);
+      cur = [];
+      words = 0;
+    }
+    cur.push(line);
+    words += line.length;
+  }
+  if (cur.length > 0 || pages.length === 0) pages.push(cur);
+  return pages;
+}
+
+/**
+ * Places one subpage. Returns [{ sprite, x, y }] where y is the stored bqm_placed_word_t.y:
+ * the firmware draws rows y + sprite.yOffset .. + height - 1. All words of a line share the
+ * same y (same text origin), so the baseline stays aligned; only out-of-body words are shifted.
+ */
+export function placeMushafPage(pageLines, screenW, screenH, fontSize) {
+  const { top, bottom } = fwBodyRect(screenH);
+  const lh = mushafLineHeight(fontSize);
+  const startY =
+    top + Math.max(0, Math.floor((bottom - top - pageLines.length * lh) / 2));
+  const placed = [];
+
+  pageLines.forEach((line, i) => {
+    const lineY = startY + i * lh;
+    let cursorX = screenW - MUSHAF_MARGIN;
+    for (const sp of line) {
+      const x = Math.max(0, cursorX - sp.width);
+      let y = lineY;
+      const drawTop = y + sp.yOffset;
+      if (drawTop < top) y = top - sp.yOffset;
+      if (y + sp.yOffset + sp.height > bottom)
+        y = bottom - sp.height - sp.yOffset;
+      placed.push({ sprite: sp, x, y: Math.max(0, y) });
+      cursorX = x - MUSHAF_WORD_SPACING;
+    }
+  });
+  return placed;
+}
+
+/** Draws placed words exactly as mushaf_reader_draw_mushaf_page() does (with clipping). */
+function drawPlacedWords(ctx, placed, screenW, screenH) {
+  const { top, bottom } = fwBodyRect(screenH);
+  ctx.fillStyle = "#000000";
+  for (const { sprite: sp, x, y } of placed) {
+    for (let r = 0; r < sp.height; r++) {
+      const py = y + sp.yOffset + r;
+      if (py < top || py >= bottom) continue;
+      for (let c = 0; c < sp.width; c++) {
+        const px = x + c;
+        if (px < 0 || px >= screenW) continue;
+        if (
+          (sp.bitmapBytes[r * sp.strideBytes + (c >> 3)] &
+            (0x80 >> (c & 7))) !==
+          0
+        ) {
+          ctx.fillRect(px, py, 1, 1);
+        }
+      }
+    }
+  }
+}
 // ---------------------------------------------------------------------------
 // Upstream CORS Font & Corpus Endpoints + CacheStorage ('bacain-mushaf-assets-v1')
 // ---------------------------------------------------------------------------
@@ -614,12 +759,12 @@ export function calculateCrc32(bytes, length) {
 export function sanitizeAscii(str) {
   if (!str) return "";
   return str
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[\u2018\u2019]/g, "'")
-    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/[\u02BB\u02BC\u02BE\u02BF\u2018\u2019\u201B\u0060\u00B4]/g, "'") // ayn/hamza/quotes
+    .replace(/[\u201C\u201D\u201E]/g, '"')
     .replace(/[\u2013\u2014]/g, "-")
     .replace(/…/g, "...")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // ā -> a, ḥ -> h
     .replace(/[^\x20-\x7E\n]/g, "")
     .trim();
 }
@@ -718,7 +863,11 @@ export function rasterizeWordTo1Bit(
 
   const textMetrics = ctx.measureText(wordStr);
   const measuredW = Math.max(8, Math.ceil(textMetrics.width));
-  const canvasW = Math.min(screenW - 16, Math.max(32, measuredW + 16));
+  const canvasW = Math.min(
+    screenW - 16,
+    BQM_MAX_SPRITE_W,
+    Math.max(32, measuredW + 16),
+  );
   const canvasH = Math.max(36, ayahFontSize + 16);
 
   if (canvas.width < canvasW || canvas.height < canvasH) {
@@ -818,207 +967,116 @@ export async function renderAyahPreviewToCanvas(canvas, options = {}) {
   const screenH =
     options.screenH || options.displayHeight || canvas.height || 200;
   const ayahFontSize = options.ayahFontSize || options.mushafFontSize || 24;
-  const latinFontId = options.latinFontId || 0;
+  /* Device reading font (Settings > Font Size): 12 or 16. latinFontId kept for old callers. */
+  const bodyFont = options.bodyFont ?? (options.latinFontId === 1 ? 16 : 12);
 
   canvas.width = screenW;
   canvas.height = screenH;
 
-  // Ensure font is loaded in browser
-  if (typeof ensureMushafFont === "function") {
-    try {
-      await ensureMushafFont(scriptId);
-    } catch (fontErr) {
-      console.warn(
-        "Font load warning in renderAyahPreviewToCanvas:",
-        fontErr.message,
-      );
-    }
+  try {
+    await ensureMushafFont(scriptId);
+  } catch (fontErr) {
+    console.warn(
+      "Font load warning in renderAyahPreviewToCanvas:",
+      fontErr.message,
+    );
   }
 
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
   if (!ctx) {
     throw new Error("Canvas 2D rendering context unavailable");
   }
-
-  // Clear canvas buffer to pure white
   ctx.fillStyle = "#FFFFFF";
   ctx.fillRect(0, 0, screenW, screenH);
 
-  const surahInfo = CANONICAL_SURAHS[surah - 1] || {
-    number: surah,
-    name: "Mushaf",
-    ayahs: 7,
-    startJuz: 1,
-  };
+  const surahInfo = CANONICAL_SURAHS[surah - 1] || { name: "Mushaf" };
   const juz = getJuzForSurahAyah(surah, ayah);
 
-  // 1. Exact Header Geometry (y = 0..15, height 16px matching view_mushaf.c)
+  // Look up ayah data
+  const found = options.mushafBase?.ayahs?.find(
+    (a) => a.surah === surah && a.ayah === ayah,
+  );
+  if (!found) {
+    throw new Error(`Ayah ${surah}:${ayah} not found in loaded Mushaf dataset`);
+  }
+
+  // --- Body (computed first: footer shows the page count) ---
+  let pageCount = 1;
+  if (layer === 0) {
+    const words =
+      (scriptId === 1 ? found.indopakWords : found.uthmaniWords) ||
+      found.uthmaniWords;
+    const sprites = words.map((w) =>
+      rasterizeWordTo1Bit(w, ayahFontSize, scriptId, screenW),
+    );
+    const pages = paginateMushafLines(
+      layoutMushafLines(sprites, screenW),
+      screenH,
+      ayahFontSize,
+    );
+    pageCount = pages.length;
+    drawPlacedWords(
+      ctx,
+      placeMushafPage(pages[0], screenW, screenH, ayahFontSize),
+      screenW,
+      screenH,
+    );
+  } else {
+    const text =
+      layer === 1
+        ? found.latin
+        : layer === 2
+          ? translationId === 2
+            ? found.translationEn
+            : found.translationId
+          : tafsirId === 2
+            ? found.tafsirEn
+            : found.tafsirId;
+    const g = fwTextGeometry(screenW, screenH, bodyFont);
+    const lines = wrapTextToLines(text || "", g.cols);
+    pageCount = Math.max(1, Math.ceil(lines.length / g.lines));
+
+    ctx.fillStyle = "#000000";
+    ctx.font = `${g.charH}px monospace`;
+    ctx.textBaseline = "top";
+    lines.slice(0, g.lines).forEach((ln, i) => {
+      const y = g.top + i * g.pitch;
+      for (let k = 0; k < ln.length; k++) {
+        ctx.fillText(ln[k], g.marginX + k * g.charW, y); // fixed advance, like the bitmap font
+      }
+    });
+  }
+
+  // --- Header: plain bar like the reader (title left, battery right, line at y = 19) ---
   ctx.fillStyle = "#000000";
   ctx.font = "12px monospace";
   ctx.textBaseline = "top";
+  ctx.fillText(`${surah}:${ayah} ${surahInfo.name}`, FW_LAYOUT.marginX, 3);
+  const bat = "100%";
+  ctx.fillText(bat, screenW - bat.length * 7 - FW_LAYOUT.marginX, 3);
+  ctx.fillRect(0, FW_LAYOUT.headerHeight, screenW, 1);
 
-  const headerLeft = `${String(surah).padStart(2, "0")}:${ayah} ${surahInfo.name.slice(0, 9)}`;
-  ctx.fillText(headerLeft, 4, 2);
-
-  const layerTags = ["[M]", "[LAT]", "[TRN]", "[TAF]"];
-  const midX = Math.round(screenW * 0.64);
-  ctx.fillText(layerTags[layer] || "[M]", midX, 2);
-
-  const batX = screenW - 35;
-  ctx.fillText("100%", batX, 2);
-
-  // Header separator line at y = 15
-  ctx.fillRect(0, 15, screenW, 1);
-
-  // 2. Exact Footer Geometry (y = screenH - 16..screenH - 1, height 16px)
-  ctx.fillRect(0, screenH - 16, screenW, 1);
-  ctx.fillText(`Juz ${juz}`, 4, screenH - 14);
-
-  const pageStr = "1/1";
-  const pageStrWidth = ctx.measureText(pageStr).width || 21;
-  ctx.fillText(pageStr, screenW - pageStrWidth - 4, screenH - 14);
-
-  // 3. Exact Body Geometry (y = 16 .. screenH - 17, height = screenH - 32)
-  const key = `${surah}:${ayah}`;
-  let ref = null;
-  if (options.mushafBase && Array.isArray(options.mushafBase.ayahs)) {
-    const found = options.mushafBase.ayahs.find(
-      (a) => a.surah === surah && a.ayah === ayah,
+  // --- Footer: status bar like the reader (line at H-17, text at H-14) ---
+  const footerY = screenH - FW_LAYOUT.footerHeight;
+  ctx.fillRect(0, footerY - 1, screenW, 1);
+  const tags = ["MUS", "LAT", "TRN", "TAF"];
+  ctx.fillText(`J${juz} ${tags[layer]}`, FW_LAYOUT.marginX, footerY + 2);
+  const right = pageCount > 1 ? `1/${pageCount}` : "";
+  if (right)
+    ctx.fillText(
+      right,
+      screenW - right.length * 7 - FW_LAYOUT.marginX,
+      footerY + 2,
     );
-    if (found) {
-      ref = {
-        uthmaniWords: found.uthmaniWords,
-        indopakWords: found.indopakWords,
-        latin: found.latin,
-        trId:
-          found.translationId ||
-          options.editionsData?.translations?.id_kemenag?.[
-            found.globalAyahIndex ?? -1
-          ],
-        trEn:
-          found.translationEn ||
-          options.editionsData?.translations?.en_saheeh?.[
-            found.globalAyahIndex ?? -1
-          ],
-        tafsirId:
-          found.tafsirId ||
-          options.editionsData?.tafsirs?.id_kemenag_ringkas?.[
-            found.globalAyahIndex ?? -1
-          ],
-        tafsirEn:
-          found.tafsirEn ||
-          options.editionsData?.tafsirs?.jalalayn?.[
-            found.globalAyahIndex ?? -1
-          ],
-      };
-    }
-  }
-  if (!ref) {
-    throw new Error(`Ayah ${key} not found in loaded Mushaf dataset`);
-  }
 
-  if (layer === 0) {
-    // Mushaf Calligraphy (RTL Word Layout)
-    const words =
-      (scriptId === 1 ? ref.indopakWords : ref.uthmaniWords) ||
-      ref.uthmaniWords;
-    const lineHeight = Math.max(ayahFontSize + 8, 28);
-    const bodyHeight = screenH - 32;
-    const margin = 6;
-    const wordSpacing = 4;
-
-    const wordSprites = words.map((w) => {
-      const sp = rasterizeWordTo1Bit(w, ayahFontSize, scriptId, screenW);
-      return { word: w, ...sp };
-    });
-
-    const lines = [];
-    let currentLine = [];
-    let currentLineWidth = 0;
-    const maxLineWidth = screenW - margin * 2;
-
-    for (const sp of wordSprites) {
-      const addedWidth =
-        currentLine.length === 0 ? sp.width : sp.width + wordSpacing;
-      if (currentLineWidth + addedWidth <= maxLineWidth) {
-        currentLine.push(sp);
-        currentLineWidth += addedWidth;
-      } else {
-        if (currentLine.length > 0) lines.push(currentLine);
-        currentLine = [sp];
-        currentLineWidth = sp.width;
-      }
-    }
-    if (currentLine.length > 0) lines.push(currentLine);
-
-    const totalLinesHeight = lines.length * lineHeight;
-    const startY =
-      16 + Math.max(2, Math.floor((bodyHeight - totalLinesHeight) / 2));
-
-    for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
-      const lineWords = lines[lineIdx];
-      const lineY = startY + lineIdx * lineHeight;
-      if (lineY + lineHeight > screenH - 16) break;
-
-      let cursorX = screenW - margin;
-      for (const sp of lineWords) {
-        const placedX = cursorX - sp.width;
-        const placedY =
-          lineY + Math.max(0, Math.floor((lineHeight - sp.height) / 2));
-
-        for (let r = 0; r < sp.height; r++) {
-          const py = placedY + r;
-          if (py < 16 || py >= screenH - 16) continue;
-          for (let c = 0; c < sp.width; c++) {
-            const px = placedX + c;
-            if (px < 0 || px >= screenW) continue;
-            const byteVal = sp.bitmapBytes[r * sp.strideBytes + (c >> 3)];
-            if ((byteVal & (0x80 >> (c & 7))) !== 0) {
-              ctx.fillRect(px, py, 1, 1);
-            }
-          }
-        }
-        cursorX = placedX - wordSpacing;
-      }
-    }
-  } else {
-    // Text Layers: Latin (1), Translation (2), Tafsir (3)
-    let textToDraw = "";
-    if (layer === 1) {
-      textToDraw = ref.latin;
-    } else if (layer === 2) {
-      textToDraw = translationId === 2 ? ref.trEn : ref.trId;
-    } else {
-      textToDraw = tafsirId === 2 ? ref.tafsirEn : ref.tafsirId;
-    }
-
-    const charW = latinFontId === 1 ? 11 : 7;
-    const charH = latinFontId === 1 ? 16 : 12;
-    const maxCols = Math.floor((screenW - 8) / charW);
-    const lines = wrapTextToLines(textToDraw, maxCols);
-
-    ctx.font = `${charH}px monospace`;
-    ctx.textBaseline = "top";
-
-    let curY = 18;
-    for (const ln of lines) {
-      if (curY + charH >= screenH - 16) break;
-      ctx.fillText(ln, 4, curY);
-      curY += charH + 2;
-    }
-  }
-
-  // 4. Strict 1-Bit Luminance Thresholding
+  // --- Strict 1-bit threshold (same as before) ---
   try {
     const frame = ctx.getImageData(0, 0, screenW, screenH);
     const d = frame.data;
     for (let i = 0; i < d.length; i += 4) {
       const lum = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-      const a = d[i + 3];
-      const bit = lum < 160 && a > 64 ? 0 : 255;
-      d[i] = bit;
-      d[i + 1] = bit;
-      d[i + 2] = bit;
+      const bit = lum < 160 && d[i + 3] > 64 ? 0 : 255;
+      d[i] = d[i + 1] = d[i + 2] = bit;
       d[i + 3] = 255;
     }
     ctx.putImageData(frame, 0, 0);
@@ -1161,8 +1219,11 @@ export async function buildBqmPackage(options = {}, onProgress = null) {
       word_id: wordSprites.length,
       width: raster.width,
       height: raster.height,
+      yOffset: raster.yOffset,
       y_offset: raster.yOffset,
+      strideBytes: raster.strideBytes,
       stride_bytes: raster.strideBytes,
+      bitmapBytes: raster.bitmapBytes,
       bitmap_off: spriteBlobLen,
       bytes: raster.bitmapBytes,
     };
@@ -1179,21 +1240,11 @@ export async function buildBqmPackage(options = {}, onProgress = null) {
 
   const textLayerRecords = [];
   let textBlobLen = 0;
-
-  const charW = latinFontId === 1 ? 11 : 7;
-  const charH = latinFontId === 1 ? 16 : 12;
-  const maxCols = Math.floor((screenW - 8) / charW);
-  const maxLines = Math.floor((screenH - 36) / (charH + 2));
-
-  const lineHeight = Math.max(ayahFontSize + 8, 28);
-  const bodyHeight = screenH - 32;
-  const margin = 6;
-  const wordSpacing = 4;
-  const maxLineWidth = screenW - margin * 2;
-  const maxMushafLinesPerSubpage = Math.max(
-    1,
-    Math.floor(bodyHeight / lineHeight),
-  );
+  // Text layers: the firmware re-wraps text for the device's reading font, so stored
+  // line breaks only keep each line < 255 bytes. Use the Font12 reader geometry.
+  const textGeom = fwTextGeometry(screenW, screenH, 12);
+  const maxCols = textGeom.cols;
+  const maxLines = textGeom.lines;
 
   const ayahEntries = [];
 
@@ -1241,95 +1292,47 @@ export async function buildBqmPackage(options = {}, onProgress = null) {
         }
 
         const sprites = words.map(getWordSprite);
+        const pages = paginateMushafLines(
+          layoutMushafLines(sprites, screenW),
+          screenH,
+          ayahFontSize,
+        );
 
-        // Group into lines (RTL)
-        const lines = [];
-        let curLine = [];
-        let curLineWidth = 0;
-
-        for (const sp of sprites) {
-          const added =
-            curLine.length === 0 ? sp.width : sp.width + wordSpacing;
-          if (curLineWidth + added <= maxLineWidth) {
-            curLine.push(sp);
-            curLineWidth += added;
-          } else {
-            if (curLine.length > 0) lines.push(curLine);
-            curLine = [sp];
-            curLineWidth = sp.width;
-          }
-        }
-        if (curLine.length > 0) lines.push(curLine);
-
-        // Paginate lines into subpages
-        const subpages = [];
-        for (let i = 0; i < lines.length; i += maxMushafLinesPerSubpage) {
-          subpages.push(lines.slice(i, i + maxMushafLinesPerSubpage));
-        }
-        if (subpages.length === 0) subpages.push([]);
-
-        mushafSubpages = subpages.length;
+        mushafSubpages = pages.length;
         mushafOff = mushafPagesLen;
 
         const subpageRelOffsets = new Uint16Array(mushafSubpages);
         const subpageByteChunks = [];
-        let subpageHeaderSize = mushafSubpages * 2;
-        let runningRelOffset = subpageHeaderSize;
+        let runningRelOffset = mushafSubpages * 2;
 
         for (let spIdx = 0; spIdx < mushafSubpages; spIdx++) {
           subpageRelOffsets[spIdx] = runningRelOffset;
-          const pageLines = subpages[spIdx];
-          const totalPageHeight = pageLines.length * lineHeight;
-          const startY =
-            16 + Math.max(2, Math.floor((bodyHeight - totalPageHeight) / 2));
+          const placed = placeMushafPage(
+            pages[spIdx],
+            screenW,
+            screenH,
+            ayahFontSize,
+          );
 
-          const placedWords = [];
-          for (let lIdx = 0; lIdx < pageLines.length; lIdx++) {
-            const lineWords = pageLines[lIdx];
-            const lineY = startY + lIdx * lineHeight;
-            let cursorX = screenW - margin;
-
-            for (const sp of lineWords) {
-              const placedX = Math.max(0, cursorX - sp.width);
-              let placedY = lineY;
-
-              if (placedY < 16) placedY = 16;
-              if (placedY + sp.height > screenH - 16) {
-                placedY = screenH - 16 - sp.height;
-              }
-
-              placedWords.push({
-                word_id: sp.word_id,
-                x: placedX,
-                y: placedY,
-              });
-
-              cursorX = placedX - wordSpacing;
-            }
-          }
-
-          const count = Math.min(64, placedWords.length);
-          const chunk = new Uint8Array(1 + count * 6);
-          chunk[0] = count;
+          const chunk = new Uint8Array(1 + placed.length * 6); // <= 64 by paginateMushafLines
+          chunk[0] = placed.length;
           const view = new DataView(
             chunk.buffer,
             chunk.byteOffset,
             chunk.byteLength,
           );
-
-          for (let pw = 0; pw < count; pw++) {
-            const off = 1 + pw * 6;
-            view.setUint16(off, placedWords[pw].word_id, true);
-            view.setUint16(off + 2, placedWords[pw].x, true);
-            view.setUint16(off + 4, placedWords[pw].y, true);
-          }
+          placed.forEach((pw, i) => {
+            const off = 1 + i * 6;
+            view.setUint16(off, pw.sprite.word_id, true);
+            view.setUint16(off + 2, pw.x, true);
+            view.setUint16(off + 4, pw.y, true);
+          });
 
           subpageByteChunks.push(chunk);
           runningRelOffset += chunk.length;
         }
 
-        const headerBytes = new Uint8Array(subpageRelOffsets.buffer);
-        mushafAyahRecords.push(headerBytes);
+        mushafAyahRecords.push(new Uint8Array(subpageRelOffsets.buffer));
         for (const ch of subpageByteChunks) mushafAyahRecords.push(ch);
         mushafPagesLen += runningRelOffset;
       }
@@ -1455,7 +1458,7 @@ export async function buildBqmPackage(options = {}, onProgress = null) {
   bqmBuffer[1] = 0x51;
   bqmBuffer[2] = 0x4d;
   bqmBuffer[3] = 0x31;
-  dv.setUint16(4, 1, true); // Version = 1
+  dv.setUint16(4, BQM_FORMAT_VERSION, true); // must match firmware BQM_VERSION
 
   let layerMask = 0;
   if (showMushaf) layerMask |= 0x01;
@@ -1579,5 +1582,9 @@ if (typeof window !== "undefined") {
     SUNNAH_PRESETS,
     MUSHAF_LAYERS,
     calculateCrc32,
+    BQM_FORMAT_VERSION,
+    FW_LAYOUT,
+    fwBodyRect,
+    fwTextGeometry,
   };
 }

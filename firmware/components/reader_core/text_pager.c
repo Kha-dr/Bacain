@@ -1,699 +1,415 @@
 #include "text_pager.h"
-#include "book_library.h"
-#include "board_config.h"
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <ctype.h>
-#include <sys/stat.h>
-
+#include <string.h>
+#include <strings.h>
 #include "esp_log.h"
-#include "esp_err.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
-#include "GUI_Paint.h"
-#include "fonts.h"
-#include "epaper_port.h"
+#include "text_source.h"
 
 static const char *TAG = "text_pager";
 
-#ifndef BOARD_DISPLAY_WIDTH
-#define BOARD_DISPLAY_WIDTH    200
-#endif
-#ifndef BOARD_DISPLAY_HEIGHT
-#define BOARD_DISPLAY_HEIGHT   200
-#endif
-#ifndef DISPLAY_WIDTH
-#define DISPLAY_WIDTH          BOARD_DISPLAY_WIDTH
-#endif
-#ifndef DISPLAY_HEIGHT
-#define DISPLAY_HEIGHT         BOARD_DISPLAY_HEIGHT
-#endif
-#ifndef UI_HEADER_HEIGHT
-#define UI_HEADER_HEIGHT       19
-#endif
-#ifndef UI_FOOTER_HEIGHT
-#define UI_FOOTER_HEIGHT       16
-#endif
-#ifndef UI_BODY_Y_START
-#define UI_BODY_Y_START        22
-#endif
-#ifndef UI_BODY_MAX_HEIGHT
-#define UI_BODY_MAX_HEIGHT     160
-#endif
+_Static_assert(TEXT_PAGER_MAX_LINES == TEXT_LAYOUT_MAX_LINES, "line count mismatch");
+_Static_assert(sizeof(((text_pager_page_t *)0)->lines[0]) ==
+                   sizeof(((text_page_t *)0)->lines[0]),
+               "line width mismatch");
 
-static inline uint16_t get_ui_footer_y(uint16_t disp_h) {
-    return (disp_h > UI_FOOTER_HEIGHT) ? (disp_h - UI_FOOTER_HEIGHT) : 0;
+static text_pager_t s_pager;
+static text_source_t s_src;
+static text_page_t s_layout_page; /* layout-native copy of the current page */
+static text_layout_cfg_t s_cfg;   /* geometry the history was built with */
+static text_pager_listener_t s_listener;
+static bool s_warned_no_listener;
+static SemaphoreHandle_t s_mutex;
+
+#define LOCK() xSemaphoreTake(s_mutex, portMAX_DELAY)
+#define UNLOCK() xSemaphoreGive(s_mutex)
+
+/* ---------- internal (call with mutex held) ---------- */
+
+static const ui_pager_style_t *style_for(text_pager_font_size_t f)
+{
+    return (f == TEXT_PAGER_FONT_16) ? &UI_PAGER_STYLE_LARGE : &UI_PAGER_STYLE_SMALL;
 }
 
-static text_pager_t      s_pager = {0};
-static FILE             *s_book_fp = NULL;
-static SemaphoreHandle_t s_mutex = NULL;
-static bool              s_initialized = false;
-
-static inline size_t get_max_cols(text_pager_font_size_t font_size, uint16_t disp_w) {
-    uint16_t font_w = (font_size == TEXT_PAGER_FONT_16) ? Font16.Width : Font12.Width;
-    uint16_t min_padding = (font_size == TEXT_PAGER_FONT_16) ? 10 : 8;
-    if (disp_w <= min_padding * 2 || font_w == 0) {
-        return 1;
+/* Geometry from current font + screen. A change (font, rotation) invalidates history,
+ * because stored offsets were page starts under the old geometry. */
+static text_layout_cfg_t current_cfg(void)
+{
+    static const ui_pager_chrome_t k_geometry = {.footer = TEXT_PAGER_FOOTER};
+    text_layout_cfg_t cfg = ui_pager_layout_cfg(style_for(s_pager.font_size), &k_geometry,
+                                                TEXT_PAGER_KEEP_BLANK);
+    if (cfg.cols != s_cfg.cols || cfg.lines != s_cfg.lines)
+    {
+        s_pager.history_count = 0;
+        s_cfg = cfg;
     }
-    uint16_t usable_w = disp_w - (min_padding * 2);
-    size_t cols = (size_t)(usable_w / font_w);
-    if (cols > TEXT_PAGER_MAX_LINE_CHARS) {
-        cols = TEXT_PAGER_MAX_LINE_CHARS;
+    return cfg;
+}
+
+static void copy_to_public(const text_page_t *src, text_pager_page_t *dst)
+{
+    dst->line_count = src->line_count;
+    for (size_t i = 0; i < src->line_count; i++)
+    {
+        memcpy(dst->lines[i], src->lines[i], sizeof(dst->lines[i]));
     }
-    return (cols > 0) ? cols : 1;
+    dst->page_start_offset = src->start;
+    dst->page_end_offset = src->end;
+    dst->progress_pct = src->progress_pct;
+    dst->is_eof = src->is_eof;
+    dst->is_bof = src->is_bof;
 }
 
-static inline UWORD get_margin_x(text_pager_font_size_t font_size, uint16_t disp_w) {
-    uint16_t font_w = (font_size == TEXT_PAGER_FONT_16) ? Font16.Width : Font12.Width;
-    size_t cols = get_max_cols(font_size, disp_w);
-    uint16_t total_text_w = (uint16_t)(cols * font_w);
-    if (disp_w > total_text_w) {
-        return (UWORD)((disp_w - total_text_w) / 2);
+static esp_err_t layout_at(size_t offset)
+{
+    text_layout_cfg_t cfg = current_cfg();
+    esp_err_t err = text_layout_page(&s_src, offset, &cfg, &s_layout_page);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "layout at %u failed: %s", (unsigned)offset, esp_err_to_name(err));
+        return err;
     }
-    return 0;
+    copy_to_public(&s_layout_page, &s_pager.current_page);
+    s_pager.current_offset = s_layout_page.start; /* canonical offset (finding 1) */
+    return ESP_OK;
 }
 
-static inline size_t get_max_lines(text_pager_font_size_t font_size, uint16_t disp_h) {
-    uint16_t line_pitch = (font_size == TEXT_PAGER_FONT_16) ? 20 : 14;
-    int32_t footer_y = get_ui_footer_y(disp_h);
-    int32_t footer_h = (int32_t)disp_h - footer_y;
-    int32_t body_area_h = (int32_t)disp_h - UI_HEADER_HEIGHT - footer_h - 4;
-    if (body_area_h <= 0 || line_pitch == 0) {
-        return 1;
+static void history_push(size_t offset)
+{
+    if (s_pager.history_count < TEXT_PAGER_HISTORY_DEPTH)
+    {
+        s_pager.history[s_pager.history_count++] = offset;
     }
-    size_t lines = (size_t)(body_area_h / line_pitch);
-    if (lines > TEXT_PAGER_MAX_LINES) {
-        lines = TEXT_PAGER_MAX_LINES;
-    }
-    return (lines > 0) ? lines : 1;
-}
-
-static inline UWORD get_color_black(void) {
-    return (Paint.Scale == 4) ? EPD_COLOR_BLACK : BLACK;
-}
-
-static inline UWORD get_color_white(void) {
-    return (Paint.Scale == 4) ? EPD_COLOR_WHITE : WHITE;
-}
-
-static void draw_safe_char(UWORD x, UWORD y, char c, sFONT *font, UWORD fg, UWORD bg) {
-    if (c < 32 || c > 126) {
-        c = ' ';
-    }
-    Paint_DrawChar(x, y, c, font, fg, bg);
-}
-
-static void draw_safe_string(UWORD x, UWORD y, const char *str, sFONT *font, UWORD fg, UWORD bg) {
-    if (!str || !font) return;
-    UWORD cur_x = x;
-    while (*str) {
-        if (cur_x + font->Width > Paint.Width) {
-            break;
-        }
-        draw_safe_char(cur_x, y, *str, font, fg, bg);
-        cur_x += font->Width;
-        str++;
+    else
+    {
+        memmove(&s_pager.history[0], &s_pager.history[1],
+                sizeof(size_t) * (TEXT_PAGER_HISTORY_DEPTH - 1));
+        s_pager.history[TEXT_PAGER_HISTORY_DEPTH - 1] = offset;
     }
 }
 
-static void extract_clean_title(const char *path, char *out_title, size_t max_len) {
-    if (!path || !out_title || max_len == 0) return;
-
+static void extract_clean_title(const char *path, char *out, size_t max_len)
+{
+    if (!path || !out || max_len == 0)
+    {
+        return;
+    }
     const char *slash = strrchr(path, '/');
-    const char *name = slash ? (slash + 1) : path;
-
     char temp[128];
-    strncpy(temp, name, sizeof(temp) - 1);
+    strncpy(temp, slash ? slash + 1 : path, sizeof(temp) - 1);
     temp[sizeof(temp) - 1] = '\0';
 
     char *dot = strrchr(temp, '.');
-    if (dot && strcasecmp(dot, ".txt") == 0) {
+    if (dot && strcasecmp(dot, ".txt") == 0)
+    {
         *dot = '\0';
     }
 
     bool cap_next = true;
-    for (size_t i = 0; temp[i] != '\0'; i++) {
-        if (temp[i] == '_' || temp[i] == '-') {
+    for (size_t i = 0; temp[i] != '\0'; i++)
+    {
+        if (temp[i] == '_' || temp[i] == '-')
+        {
             temp[i] = ' ';
             cap_next = true;
-        } else if (cap_next && isalpha((unsigned char)temp[i])) {
+        }
+        else if (cap_next && isalpha((unsigned char)temp[i]))
+        {
             temp[i] = (char)toupper((unsigned char)temp[i]);
             cap_next = false;
-        } else {
+        }
+        else
+        {
             cap_next = false;
         }
     }
-
-    if (strlen(temp) > 28 && max_len > 31) {
-        temp[25] = '.';
-        temp[26] = '.';
-        temp[27] = '.';
-        temp[28] = '\0';
-    }
-
-    strncpy(out_title, temp, max_len - 1);
-    out_title[max_len - 1] = '\0';
+    /* No fixed 28-char cut: the header clips to the space left by the battery. */
+    strncpy(out, temp, max_len - 1);
+    out[max_len - 1] = '\0';
 }
 
-static size_t align_utf8_forward(const uint8_t *buf, size_t cur, size_t len) {
-    while (cur < len && (buf[cur] & 0xC0) == 0x80) {
-        cur++;
+/* ---------- notifications (call without mutex) ---------- */
+
+static void notify_offset(size_t offset)
+{
+    if (s_listener.on_offset)
+    {
+        s_listener.on_offset(offset, s_listener.ctx);
     }
-    return cur;
+    else if (!s_warned_no_listener)
+    {
+        ESP_LOGW(TAG, "no listener set: reading position is not persisted");
+        s_warned_no_listener = true;
+    }
 }
 
-static inline uint32_t decode_utf8(const uint8_t *buf, size_t cur, size_t len, int *out_len) {
-    uint8_t b0 = buf[cur];
-    if ((b0 & 0x80) == 0) {
-        *out_len = 1;
-        return b0;
-    } else if ((b0 & 0xE0) == 0xC0) {
-        if (cur + 1 < len && (buf[cur + 1] & 0xC0) == 0x80) {
-            *out_len = 2;
-            return ((b0 & 0x1F) << 6) | (buf[cur + 1] & 0x3F);
-        }
-    } else if ((b0 & 0xF0) == 0xE0) {
-        if (cur + 2 < len && (buf[cur + 1] & 0xC0) == 0x80 && (buf[cur + 2] & 0xC0) == 0x80) {
-            *out_len = 3;
-            return ((b0 & 0x0F) << 12) | ((buf[cur + 1] & 0x3F) << 6) | (buf[cur + 2] & 0x3F);
-        }
-    } else if ((b0 & 0xF8) == 0xF0) {
-        if (cur + 3 < len && (buf[cur + 1] & 0xC0) == 0x80 && (buf[cur + 2] & 0xC0) == 0x80 && (buf[cur + 3] & 0xC0) == 0x80) {
-            *out_len = 4;
-            return ((b0 & 0x07) << 18) | ((buf[cur + 1] & 0x3F) << 12) | ((buf[cur + 2] & 0x3F) << 6) | (buf[cur + 3] & 0x3F);
-        }
-    }
-    *out_len = 1;
-    return '?';
-}
+/* ---------- public ---------- */
 
-static inline char map_unicode_to_ascii(uint32_t cp) {
-    if (cp == 0x2018 || cp == 0x2019) return '\'';
-    if (cp == 0x201C || cp == 0x201D) return '"';
-    if (cp == 0x2013 || cp == 0x2014) return '-';
-    if (cp == 0x2026) return '.';
-    if (cp == 0x00A0) return ' ';
-    if (cp >= 32 && cp <= 126) return (char)cp;
-    return ' ';
-}
-
-static esp_err_t parse_page_at_offset(size_t offset, text_pager_page_t *page) {
-    if (!s_book_fp || !page) {
-        return ESP_ERR_INVALID_STATE;
-    }
-
-    memset(page, 0, sizeof(*page));
-    page->page_start_offset = offset;
-
-    if (offset >= s_pager.total_bytes) {
-        page->page_end_offset = s_pager.total_bytes;
-        page->is_eof = true;
-        page->is_bof = (offset == 0);
-        return ESP_OK;
-    }
-
-    if (fseek(s_book_fp, (long)offset, SEEK_SET) != 0) {
-        ESP_LOGE(TAG, "fseek failed to offset %u", (unsigned int)offset);
-        return ESP_FAIL;
-    }
-
-    uint8_t *read_buf = malloc(2048);
-    if (read_buf == NULL) {
-        ESP_LOGE(TAG, "Failed to allocate read buffer");
-        return ESP_ERR_NO_MEM;
-    }
-    size_t bytes_read = fread(read_buf, 1, 2048, s_book_fp);
-    if (bytes_read == 0) {
-        free(read_buf);
-        page->page_end_offset = s_pager.total_bytes;
-        page->is_eof = true;
-        page->is_bof = (offset == 0);
-        return ESP_OK;
-    }
-
-    size_t cursor = 0;
-    cursor = align_utf8_forward(read_buf, cursor, bytes_read);
-    page->page_start_offset = offset + cursor;
-
-    uint16_t disp_w = (Paint.Width > 0) ? Paint.Width : BOARD_DISPLAY_WIDTH;
-    uint16_t disp_h = (Paint.Height > 0) ? Paint.Height : BOARD_DISPLAY_HEIGHT;
-    size_t max_lines = get_max_lines(s_pager.font_size, disp_h);
-    size_t max_cols  = get_max_cols(s_pager.font_size, disp_w);
-
-    page->line_count = 0;
-    bool force_page_break = false;
-
-    while (page->line_count < max_lines && cursor < bytes_read) {
-        char *line = page->lines[page->line_count];
-        size_t line_bytes = 0;
-        size_t line_cols = 0;
-
-        size_t last_space_cursor = 0;
-        size_t last_space_bytes = 0;
-        bool have_space = false;
-
-        while (cursor < bytes_read) {
-            uint8_t b0 = read_buf[cursor];
-
-            if (b0 == '\f') {
-                cursor++;
-                if (cursor < bytes_read && read_buf[cursor] == '\r') {
-                    cursor++;
-                }
-                if (cursor < bytes_read && read_buf[cursor] == '\n') {
-                    cursor++;
-                }
-
-                // Jika sudah di awal halaman baru (line_count == 0 && line_bytes == 0),
-                // abaikan karakter page-break berlebih/leading agar tidak ada blank page kosong
-                if (page->line_count == 0 && line_bytes == 0) {
-                    continue;
-                }
-
-                force_page_break = true;
-                break;
-            } else if (b0 == '\r') {
-                cursor++;
-                if (cursor < bytes_read && read_buf[cursor] == '\n') {
-                    cursor++;
-                }
-                break;
-            } else if (b0 == '\n') {
-                cursor++;
-                break;
-            }
-
-            int cp_len = 1;
-            uint32_t cp = decode_utf8(read_buf, cursor, bytes_read, &cp_len);
-            char ch = map_unicode_to_ascii(cp);
-            size_t col_width = 1;
-            if (cp >= 0x4E00 && cp <= 0x9FFF) {
-                col_width = 2;
-            }
-
-            if (line_cols + col_width > max_cols) {
-                if (have_space && last_space_bytes > 0) {
-                    cursor = last_space_cursor;
-                    line_bytes = last_space_bytes;
-                    while (cursor < bytes_read && (read_buf[cursor] == ' ' || read_buf[cursor] == '\t')) {
-                        cursor++;
-                    }
-                }
-                break;
-            }
-
-            if (ch == ' ' || cp == '\t') {
-                ch = ' ';
-                if (line_cols > 0) {
-                    last_space_cursor = cursor + cp_len;
-                    last_space_bytes = line_bytes;
-                    have_space = true;
-                }
-            }
-
-            if (line_bytes < sizeof(page->lines[0]) - 1) {
-                line[line_bytes++] = ch;
-            }
-            line_cols += col_width;
-            cursor += cp_len;
-        }
-
-        while (line_bytes > 0 && line[line_bytes - 1] == ' ') {
-            line_bytes--;
-        }
-        line[line_bytes] = '\0';
-
-        if (line_bytes > 0) {
-            page->line_count++;
-        }
-
-        if (force_page_break) {
-            break;
-        }
-    }
-
-    page->page_end_offset = offset + cursor;
-    if (page->page_end_offset >= s_pager.total_bytes || (bytes_read < 2048 && cursor >= bytes_read)) {
-        page->page_end_offset = s_pager.total_bytes;
-        page->is_eof = true;
-    } else {
-        page->is_eof = false;
-    }
-
-    page->is_bof = (page->page_start_offset == 0);
-
-    if (s_pager.total_bytes > 0) {
-        if (page->is_eof) {
-            page->progress_pct = 100;
-        } else {
-            page->progress_pct = (uint32_t)((uint64_t)page->page_start_offset * 100 / s_pager.total_bytes);
-            if (page->progress_pct > 100) page->progress_pct = 100;
-        }
-    } else {
-        page->progress_pct = 0;
-    }
-
-    free(read_buf);
-    return ESP_OK;
-}
-
-static size_t backtrack_prev_page_offset(size_t current_offset) {
-    if (current_offset == 0) return 0;
-
-    uint16_t disp_w = (Paint.Width > 0) ? Paint.Width : BOARD_DISPLAY_WIDTH;
-    uint16_t disp_h = (Paint.Height > 0) ? Paint.Height : BOARD_DISPLAY_HEIGHT;
-    size_t max_lines = get_max_lines(s_pager.font_size, disp_h);
-    size_t max_cols  = get_max_cols(s_pager.font_size, disp_w);
-    size_t avg_page_bytes = max_lines * max_cols;
-
-    size_t backtrack = avg_page_bytes * 2;
-    size_t candidate = (current_offset > backtrack) ? (current_offset - backtrack) : 0;
-
-    text_pager_page_t *temp_page = malloc(sizeof(text_pager_page_t));
-    if (temp_page == NULL) {
-        ESP_LOGE(TAG, "Failed to allocate temp_page in backtrack");
-        return candidate;
-    }
-    size_t curr = candidate;
-    size_t prev_start = candidate;
-
-    while (curr < current_offset) {
-        if (parse_page_at_offset(curr, temp_page) != ESP_OK) {
-            break;
-        }
-        if (temp_page->page_end_offset >= current_offset) {
-            size_t ret = temp_page->page_start_offset;
-            free(temp_page);
-            return ret;
-        }
-        if (temp_page->page_end_offset <= curr) {
-            break;
-        }
-        prev_start = temp_page->page_start_offset;
-        curr = temp_page->page_end_offset;
-    }
-
-    free(temp_page);
-    return prev_start;
-}
-
-static inline size_t calculate_prev_page_offset(size_t current_offset) {
-    return backtrack_prev_page_offset(current_offset);
-}
-
-esp_err_t text_pager_init(void) {
-    if (s_mutex == NULL) {
+esp_err_t text_pager_init(void)
+{
+    if (!s_mutex)
+    {
         s_mutex = xSemaphoreCreateMutex();
-        if (s_mutex == NULL) {
-            ESP_LOGE(TAG, "Failed to create mutex");
+        if (!s_mutex)
+        {
+            ESP_LOGE(TAG, "failed to create mutex");
             return ESP_ERR_NO_MEM;
         }
     }
-
-    xSemaphoreTake(s_mutex, portMAX_DELAY);
+    LOCK();
     memset(&s_pager, 0, sizeof(s_pager));
+    memset(&s_cfg, 0, sizeof(s_cfg));
     s_pager.font_size = TEXT_PAGER_FONT_16;
-    s_initialized = true;
-    xSemaphoreGive(s_mutex);
-
-    ESP_LOGI(TAG, "Text pager initialized");
+    UNLOCK();
+    ESP_LOGI(TAG, "initialized");
     return ESP_OK;
 }
 
-void text_pager_deinit(void) {
+void text_pager_deinit(void)
+{
     text_pager_close_book();
-
-    if (s_mutex) {
-        xSemaphoreTake(s_mutex, portMAX_DELAY);
+    if (s_mutex)
+    {
+        LOCK();
         memset(&s_pager, 0, sizeof(s_pager));
-        s_initialized = false;
-        xSemaphoreGive(s_mutex);
-
+        UNLOCK();
         vSemaphoreDelete(s_mutex);
         s_mutex = NULL;
     }
 }
 
-esp_err_t text_pager_open_book(const char *path, size_t byte_offset) {
-    if (!path || s_mutex == NULL) {
+void text_pager_set_listener(const text_pager_listener_t *listener)
+{
+    if (listener)
+    {
+        s_listener = *listener;
+    }
+    else
+    {
+        memset(&s_listener, 0, sizeof(s_listener));
+    }
+}
+
+esp_err_t text_pager_open_book(const char *path, size_t byte_offset)
+{
+    if (!path || !s_mutex)
+    {
         return ESP_ERR_INVALID_ARG;
     }
 
-    xSemaphoreTake(s_mutex, portMAX_DELAY);
+    LOCK();
+    text_source_close(&s_src);
+    s_pager.book_open = false;
 
-    if (s_book_fp) {
-        fclose(s_book_fp);
-        s_book_fp = NULL;
+    esp_err_t err = text_source_open_file(&s_src, path);
+    if (err != ESP_OK)
+    {
+        UNLOCK();
+        ESP_LOGE(TAG, "failed to open book: %s", path);
+        return err;
     }
 
-    s_book_fp = fopen(path, "rb");
-    if (!s_book_fp) {
-        ESP_LOGE(TAG, "Failed to open book file: %s", path);
-        s_pager.book_open = false;
-        xSemaphoreGive(s_mutex);
-        return ESP_ERR_NOT_FOUND;
-    }
-
-    fseek(s_book_fp, 0, SEEK_END);
-    long fsize = ftell(s_book_fp);
-    fseek(s_book_fp, 0, SEEK_SET);
-
-    s_pager.total_bytes = (fsize > 0) ? (size_t)fsize : 0;
+    s_pager.total_bytes = text_source_size(&s_src);
     strncpy(s_pager.active_book_path, path, sizeof(s_pager.active_book_path) - 1);
     s_pager.active_book_path[sizeof(s_pager.active_book_path) - 1] = '\0';
-
     extract_clean_title(path, s_pager.book_title, sizeof(s_pager.book_title));
-
-    s_pager.current_offset = (byte_offset < s_pager.total_bytes) ? byte_offset : 0;
     s_pager.history_count = 0;
+
+    err = layout_at((byte_offset < s_pager.total_bytes) ? byte_offset : 0);
+    if (err != ESP_OK)
+    {
+        text_source_close(&s_src);
+        UNLOCK();
+        return err;
+    }
     s_pager.book_open = true;
+    size_t offset = s_pager.current_offset;
+    UNLOCK();
 
-    parse_page_at_offset(s_pager.current_offset, &s_pager.current_page);
-
-    xSemaphoreGive(s_mutex);
-
-    book_library_set_active_book(path, false);
-    book_library_update_offset(s_pager.current_offset);
-
-    ESP_LOGI(TAG, "Opened '%s' (title: '%s', size: %u bytes, offset: %u)",
-             path, s_pager.book_title, (unsigned int)s_pager.total_bytes, (unsigned int)s_pager.current_offset);
-
+    if (s_listener.on_open)
+    {
+        s_listener.on_open(path, offset, s_listener.ctx);
+    }
+    ESP_LOGI(TAG, "opened '%s' (title '%s', %u bytes, offset %u)", path,
+             s_pager.book_title, (unsigned)s_pager.total_bytes, (unsigned)offset);
     return ESP_OK;
 }
 
-void text_pager_close_book(void) {
-    if (s_mutex) {
-        xSemaphoreTake(s_mutex, portMAX_DELAY);
-        if (s_book_fp) {
-            fclose(s_book_fp);
-            s_book_fp = NULL;
-        }
-        s_pager.book_open = false;
-        s_pager.history_count = 0;
-        s_pager.active_book_path[0] = '\0';
-        s_pager.book_title[0] = '\0';
-        memset(&s_pager.current_page, 0, sizeof(s_pager.current_page));
-        xSemaphoreGive(s_mutex);
+void text_pager_close_book(void)
+{
+    if (!s_mutex)
+    {
+        return;
     }
+    LOCK();
+    text_source_close(&s_src);
+    s_pager.book_open = false;
+    s_pager.history_count = 0;
+    s_pager.active_book_path[0] = '\0';
+    s_pager.book_title[0] = '\0';
+    s_pager.total_bytes = 0;
+    s_pager.current_offset = 0;
+    memset(&s_pager.current_page, 0, sizeof(s_pager.current_page));
+    memset(&s_layout_page, 0, sizeof(s_layout_page));
+    UNLOCK();
 }
 
-bool text_pager_is_book_open(void) {
+bool text_pager_is_book_open(void)
+{
     return s_pager.book_open;
 }
 
-esp_err_t text_pager_set_font_size(text_pager_font_size_t font_size) {
-    if (s_mutex == NULL) {
+esp_err_t text_pager_set_font_size(text_pager_font_size_t font_size)
+{
+    if (!s_mutex)
+    {
         return ESP_ERR_INVALID_STATE;
     }
-
-    xSemaphoreTake(s_mutex, portMAX_DELAY);
-    if (s_pager.font_size != font_size) {
+    esp_err_t err = ESP_OK;
+    LOCK();
+    if (s_pager.font_size != font_size)
+    {
         s_pager.font_size = font_size;
-        s_pager.history_count = 0; // Clear history on font size change
-
-        if (s_pager.book_open) {
-            parse_page_at_offset(s_pager.current_offset, &s_pager.current_page);
+        s_pager.history_count = 0;
+        if (s_pager.book_open)
+        {
+            err = layout_at(s_pager.current_offset);
         }
     }
-    xSemaphoreGive(s_mutex);
-
-    if (s_pager.book_open) {
-        text_pager_render_page();
-    }
-    return ESP_OK;
+    UNLOCK();
+    return err;
 }
 
-text_pager_font_size_t text_pager_get_font_size(void) {
+text_pager_font_size_t text_pager_get_font_size(void)
+{
     text_pager_font_size_t size = TEXT_PAGER_FONT_16;
-    if (s_mutex) {
-        xSemaphoreTake(s_mutex, portMAX_DELAY);
+    if (s_mutex)
+    {
+        LOCK();
         size = s_pager.font_size;
-        xSemaphoreGive(s_mutex);
+        UNLOCK();
     }
     return size;
 }
 
-esp_err_t text_pager_seek(size_t byte_offset) {
-    if (s_mutex == NULL || !s_pager.book_open) {
+esp_err_t text_pager_seek(size_t byte_offset)
+{
+    if (!s_mutex || !s_pager.book_open)
+    {
         return ESP_ERR_INVALID_STATE;
     }
-
-    xSemaphoreTake(s_mutex, portMAX_DELAY);
-    if (byte_offset >= s_pager.total_bytes) {
-        byte_offset = (s_pager.total_bytes > 0) ? (s_pager.total_bytes - 1) : 0;
+    LOCK();
+    if (byte_offset >= s_pager.total_bytes)
+    {
+        byte_offset = (s_pager.total_bytes > 0) ? s_pager.total_bytes - 1 : 0;
     }
-
-    s_pager.current_offset = byte_offset;
     s_pager.history_count = 0;
+    esp_err_t err = layout_at(byte_offset);
+    size_t offset = s_pager.current_offset;
+    UNLOCK();
 
-    parse_page_at_offset(s_pager.current_offset, &s_pager.current_page);
-    xSemaphoreGive(s_mutex);
-
-    book_library_update_offset(s_pager.current_offset);
-    return text_pager_render_page();
+    if (err == ESP_OK)
+    {
+        notify_offset(offset);
+    }
+    return err;
 }
 
-esp_err_t text_pager_next_page(void) {
-    if (s_mutex == NULL || !s_pager.book_open) {
+esp_err_t text_pager_next_page(void)
+{
+    if (!s_mutex || !s_pager.book_open)
+    {
         return ESP_ERR_INVALID_STATE;
     }
-
-    xSemaphoreTake(s_mutex, portMAX_DELAY);
-
-    if (s_pager.current_page.is_eof) {
-        xSemaphoreGive(s_mutex);
+    LOCK();
+    if (s_pager.current_page.is_eof)
+    {
+        UNLOCK();
         return ESP_ERR_NOT_FOUND;
     }
 
-    // Push into rolling history (16 pages deep)
-    if (s_pager.history_count < TEXT_PAGER_HISTORY_DEPTH) {
-        s_pager.history[s_pager.history_count++] = s_pager.current_offset;
-    } else {
-        memmove(&s_pager.history[0], &s_pager.history[1], sizeof(size_t) * (TEXT_PAGER_HISTORY_DEPTH - 1));
-        s_pager.history[TEXT_PAGER_HISTORY_DEPTH - 1] = s_pager.current_offset;
+    size_t from = s_pager.current_offset;
+    size_t saved_count = s_pager.history_count;
+    (void)current_cfg(); /* drop stale history before pushing */
+    history_push(from);
+
+    esp_err_t err = layout_at(s_pager.current_page.page_end_offset);
+    if (err != ESP_OK)
+    {
+        s_pager.history_count = saved_count < s_pager.history_count ? saved_count
+                                                                    : s_pager.history_count;
+        UNLOCK();
+        return err;
     }
+    size_t offset = s_pager.current_offset;
+    UNLOCK();
 
-    s_pager.current_offset = s_pager.current_page.page_end_offset;
-    parse_page_at_offset(s_pager.current_offset, &s_pager.current_page);
-
-    xSemaphoreGive(s_mutex);
-
-    book_library_update_offset(s_pager.current_offset);
-
+    notify_offset(offset);
     return ESP_OK;
 }
 
-esp_err_t text_pager_prev_page(void) {
-    if (s_mutex == NULL || !s_pager.book_open) {
+esp_err_t text_pager_prev_page(void)
+{
+    if (!s_mutex || !s_pager.book_open)
+    {
         return ESP_ERR_INVALID_STATE;
     }
+    LOCK();
+    text_layout_cfg_t cfg = current_cfg(); /* may clear history on geometry change */
 
-    xSemaphoreTake(s_mutex, portMAX_DELAY);
-
-    size_t target_offset = 0;
-
-    if (s_pager.history_count > 0) {
-        target_offset = s_pager.history[--s_pager.history_count];
-    } else if (s_pager.current_offset > 0) {
-        target_offset = backtrack_prev_page_offset(s_pager.current_offset);
-    } else {
-        xSemaphoreGive(s_mutex);
+    size_t target;
+    if (s_pager.history_count > 0)
+    {
+        target = s_pager.history[--s_pager.history_count];
+    }
+    else if (s_pager.current_offset > 0)
+    {
+        target = text_layout_prev_offset(&s_src, s_pager.current_offset, &cfg);
+    }
+    else
+    {
+        UNLOCK();
         return ESP_ERR_NOT_FOUND;
     }
 
-    s_pager.current_offset = target_offset;
-    parse_page_at_offset(s_pager.current_offset, &s_pager.current_page);
+    esp_err_t err = layout_at(target);
+    size_t offset = s_pager.current_offset;
+    UNLOCK();
 
-    xSemaphoreGive(s_mutex);
-
-    book_library_update_offset(s_pager.current_offset);
-
-    return ESP_OK;
-}
-
-const text_pager_page_t *text_pager_get_current_page(void) {
-    if (!s_pager.book_open) {
-        return NULL;
+    if (err == ESP_OK)
+    {
+        notify_offset(offset);
     }
-    return &s_pager.current_page;
+    return err;
 }
 
-size_t text_pager_get_current_offset(void) {
+const text_pager_page_t *text_pager_get_current_page(void)
+{
+    return s_pager.book_open ? &s_pager.current_page : NULL;
+}
+
+size_t text_pager_get_current_offset(void)
+{
     return s_pager.current_offset;
 }
 
-size_t text_pager_get_total_bytes(void) {
+size_t text_pager_get_total_bytes(void)
+{
     return s_pager.total_bytes;
 }
 
-esp_err_t text_pager_render_page(void) {
-    if (Paint.Image == NULL) {
-        ESP_LOGW(TAG, "Paint.Image is NULL, canvas not selected");
-        return ESP_ERR_INVALID_STATE;
-    }
-
-    UWORD fg_col = get_color_black();
-    UWORD bg_col = get_color_white();
-
-    // 1. Header (0 .. UI_HEADER_HEIGHT)
-    Paint_ClearWindows(0, 0, Paint.Width - 1, UI_HEADER_HEIGHT - 1, bg_col);
-    if (s_pager.book_title[0] != '\0') {
-        draw_safe_string(6, 3, s_pager.book_title, &Font12, fg_col, bg_col);
-    }
-    Paint_DrawLine(0, UI_HEADER_HEIGHT, Paint.Width - 1, UI_HEADER_HEIGHT, fg_col, DOT_PIXEL_1X1, LINE_STYLE_SOLID);
-
-    uint16_t disp_w   = (Paint.Width > 0) ? Paint.Width : BOARD_DISPLAY_WIDTH;
-    uint16_t disp_h   = (Paint.Height > 0) ? Paint.Height : BOARD_DISPLAY_HEIGHT;
-    uint16_t footer_y = get_ui_footer_y(disp_h);
-
-    // 2. Body (UI_BODY_Y_START .. footer_y - 1)
-    Paint_ClearWindows(0, UI_HEADER_HEIGHT + 1, Paint.Width - 1, footer_y - 1, bg_col);
-
-    sFONT *body_font = (s_pager.font_size == TEXT_PAGER_FONT_16) ? &Font16 : &Font12;
-    UWORD line_pitch = (s_pager.font_size == TEXT_PAGER_FONT_16) ? 20 : 14;
-    UWORD margin_x   = get_margin_x(s_pager.font_size, disp_w);
-    UWORD body_y     = UI_BODY_Y_START;
-
-    if (!s_pager.book_open || s_pager.current_page.line_count == 0) {
-        draw_safe_string(20, 80, "No book open.", &Font12, fg_col, bg_col);
-        draw_safe_string(20, 100, "Press BOOT for menu", &Font12, fg_col, bg_col);
-    } else {
-        for (size_t i = 0; i < s_pager.current_page.line_count; i++) {
-            UWORD y_pos = body_y + (UWORD)(i * line_pitch);
-            if (y_pos + body_font->Height >= footer_y) {
-                break;
-            }
-            draw_safe_string(margin_x, y_pos, s_pager.current_page.lines[i], body_font, fg_col, bg_col);
-        }
-    }
-
-    // 3. Footer (footer_y .. Paint.Height - 1)
-    Paint_DrawLine(0, footer_y - 1, Paint.Width - 1, footer_y - 1, fg_col, DOT_PIXEL_1X1, LINE_STYLE_SOLID);
-    Paint_ClearWindows(0, footer_y, Paint.Width - 1, Paint.Height - 1, bg_col);
-
-    // Bookmark indicator on left
-    if (s_pager.book_open && book_library_is_bookmarked(s_pager.current_page.page_start_offset)) {
-        draw_safe_string(8, footer_y + 2, "[BM]", &Font12, fg_col, bg_col);
-    }
-
-    // Progress percentage on right
-    char pct_str[16];
-    snprintf(pct_str, sizeof(pct_str), "%u%%", (unsigned int)s_pager.current_page.progress_pct);
-    size_t pct_len = strlen(pct_str);
-    UWORD pct_w = (UWORD)(pct_len * Font12.Width);
-    UWORD pct_x = (Paint.Width > pct_w + 8) ? (Paint.Width - pct_w - 8) : (Paint.Width - pct_w);
-    draw_safe_string(pct_x, footer_y + 2, pct_str, &Font12, fg_col, bg_col);
-
-    return ESP_OK;
+const text_page_t *text_pager_get_layout_page(void)
+{
+    return s_pager.book_open ? &s_layout_page : NULL;
 }
 
-esp_err_t text_pager_render_to_buffer(uint8_t *canvas_buffer) {
-    if (!canvas_buffer) {
-        return ESP_ERR_INVALID_ARG;
-    }
-    Paint_SelectImage(canvas_buffer);
-    return text_pager_render_page();
+const char *text_pager_get_title(void)
+{
+    return s_pager.book_title;
+}
+
+const ui_pager_style_t *text_pager_get_style(void)
+{
+    return style_for(s_pager.font_size);
 }
