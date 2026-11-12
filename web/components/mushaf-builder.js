@@ -56,6 +56,7 @@ class MushafBuilder extends BaseElement {
       surah: 1,
       ayah: 1,
       layer: 0,
+      font: 0,
       bookmarks: [],
     };
     this._onUploadStatus = this._onUploadStatus.bind(this);
@@ -90,14 +91,22 @@ class MushafBuilder extends BaseElement {
       this._isConnected = isConn;
       this.updateConnectionStateUI();
     };
-    window.addEventListener("ble-connection-changed", this._onBleConnectionChange);
-    if (typeof window !== "undefined" && window.BleClient && typeof window.BleClient.isConnected === "function") {
+    window.addEventListener(
+      "ble-connection-changed",
+      this._onBleConnectionChange,
+    );
+    if (
+      typeof window !== "undefined" &&
+      window.BleClient &&
+      typeof window.BleClient.isConnected === "function"
+    ) {
       this._isConnected = window.BleClient.isConnected();
     }
     if (!this.querySelector(".mushaf-section")) {
       this.render();
       this.bindEvents();
       this.updateGeometryBadge();
+      this.syncRangeConstraintsUI();
       this.updateSizeEstimate();
       this.setBuilderControlsDisabled(true);
       this.preloadAssets();
@@ -110,7 +119,10 @@ class MushafBuilder extends BaseElement {
     document.removeEventListener("mushaf-upload-status", this._onUploadStatus);
     document.removeEventListener("mushaf-status", this._onUploadStatus);
     if (this._onBleConnectionChange) {
-      window.removeEventListener("ble-connection-changed", this._onBleConnectionChange);
+      window.removeEventListener(
+        "ble-connection-changed",
+        this._onBleConnectionChange,
+      );
     }
   }
 
@@ -122,14 +134,90 @@ class MushafBuilder extends BaseElement {
     if (progressWrap) progressWrap.style.display = "none";
     if (e.detail.ok === false) {
       this.setStatusText(`Upload failed: ${e.detail.error}`, true);
-    } else if (
-      e.detail.ok === true &&
-      e.detail.fileName === "mushaf.bqm"
-    ) {
+    } else if (e.detail.ok === true && e.detail.fileName === "mushaf.bqm") {
       this.setStatusText(
         `${e.detail.fileName} uploaded and verified on device.`,
       );
     }
+  }
+
+  getConfiguredSurahRange() {
+    const rangeType = this.querySelector("#mushafRangeSelect")?.value || "full";
+    const customStart = parseInt(
+      this.querySelector("#customStartSurah")?.value || "1",
+      10,
+    );
+    const customEnd = parseInt(
+      this.querySelector("#customEndSurah")?.value || "114",
+      10,
+    );
+    const startSurah =
+      rangeType === "custom"
+        ? Math.min(customStart, customEnd)
+        : rangeType === "juz30"
+          ? 78
+          : 1;
+    const endSurah =
+      rangeType === "custom" ? Math.max(customStart, customEnd) : 114;
+    return { rangeType, startSurah, endSurah };
+  }
+
+  validateSurahInRange(surah, actionLabel = "jump to") {
+    const { startSurah, endSurah } = this.getConfiguredSurahRange();
+    if (surah < startSurah || surah > endSurah) {
+      this.setStatusText(
+        `Cannot ${actionLabel} Surah ${surah} (outside configured BQM range ${startSurah}-${endSurah}).`,
+        true,
+      );
+      return false;
+    }
+    return true;
+  }
+
+  syncRangeConstraintsUI() {
+    const { startSurah, endSurah } = this.getConfiguredSurahRange();
+
+    // 1. Constrain #cursorSurahSelect options & clamp active selection
+    const curSurahSelect = this.querySelector("#cursorSurahSelect");
+    const curAyahInput = this.querySelector("#cursorAyahInput");
+    if (curSurahSelect) {
+      Array.from(curSurahSelect.options).forEach((opt) => {
+        const sNum = parseInt(opt.value, 10);
+        opt.disabled = sNum < startSurah || sNum > endSurah;
+      });
+
+      const currentSurah = parseInt(curSurahSelect.value || "1", 10);
+      if (currentSurah < startSurah || currentSurah > endSurah) {
+        curSurahSelect.value = String(startSurah);
+        if (curAyahInput) {
+          const sInfo = SURAHS[startSurah - 1] || SURAHS[0];
+          curAyahInput.max = String(sInfo.ayahs);
+          curAyahInput.value = "1";
+        }
+        this.renderAyahPreview();
+      }
+    }
+
+    // 2. Constrain Sunnah Quick Jump preset buttons
+    this.querySelectorAll(".mushaf-preset-btn").forEach((btn) => {
+      const sNum = parseInt(btn.getAttribute("data-surah"), 10);
+      const outOfRange = sNum < startSurah || sNum > endSurah;
+      btn.disabled = Boolean(outOfRange);
+      btn.style.opacity = outOfRange ? "0.45" : "1";
+      btn.title = outOfRange
+        ? `Surah ${sNum} is outside configured BQM range (${startSurah}-${endSurah})`
+        : "";
+    });
+
+    // 3. Re-render bookmarks list so out-of-range Jump buttons are updated
+    this.renderBookmarksList();
+  }
+
+  // Maps firmware NVS text_pager_font_size_t (0 = Font16, 1 = Font12)
+  // to bqm-builder latinFontId (1 = 16px, 0 = 12px)
+  getLatinFontId() {
+    const fwFont = this._deviceState?.font ?? 0;
+    return fwFont === 0 ? 1 : 0;
   }
 
   setBuilderControlsDisabled(disabled) {
@@ -160,6 +248,7 @@ class MushafBuilder extends BaseElement {
       if (uploadBtn) uploadBtn.disabled = true;
       if (downloadBtn) downloadBtn.disabled = true;
     } else {
+      this.syncRangeConstraintsUI();
       if (uploadBtn)
         uploadBtn.disabled =
           !this._isConnected ||
@@ -275,6 +364,10 @@ class MushafBuilder extends BaseElement {
       surah: Math.max(1, Math.min(114, Number(state.surah) || 1)),
       ayah: Math.max(1, Number(state.ayah) || 1),
       layer: Math.max(0, Math.min(3, Number(state.layer) || 0)),
+      font:
+        state.font !== undefined
+          ? Number(state.font)
+          : (this._deviceState?.font ?? 0),
       bookmarks: Array.isArray(state.bookmarks)
         ? state.bookmarks.slice(0, 8)
         : [],
@@ -326,14 +419,21 @@ class MushafBuilder extends BaseElement {
       badge.textContent = "Ready (1:1)";
     }
 
+    const { startSurah, endSurah } = this.getConfiguredSurahRange();
     const curSurahSelect = this.querySelector("#cursorSurahSelect");
     const curAyahInput = this.querySelector("#cursorAyahInput");
     const curLayerSelect = this.querySelector("#cursorLayerSelect");
 
-    if (curSurahSelect && document.activeElement !== curSurahSelect) {
+    const inRange = state.surah >= startSurah && state.surah <= endSurah;
+
+    if (
+      curSurahSelect &&
+      document.activeElement !== curSurahSelect &&
+      inRange
+    ) {
       curSurahSelect.value = String(state.surah);
     }
-    if (curAyahInput && document.activeElement !== curAyahInput) {
+    if (curAyahInput && document.activeElement !== curAyahInput && inRange) {
       curAyahInput.max = String(surahInfo.ayahs);
       curAyahInput.value = String(state.ayah);
     }
@@ -364,9 +464,16 @@ class MushafBuilder extends BaseElement {
       return;
     }
 
+    const { startSurah, endSurah } = this.getConfiguredSurahRange();
+
     let html = "";
     bookmarks.forEach((bm, idx) => {
       const sInfo = SURAHS[bm.surah - 1] || { name: "Surah" };
+      const outOfRange = bm.surah < startSurah || bm.surah > endSurah;
+      const jumpAttrs = outOfRange
+        ? `disabled title="Outside configured BQM range (${startSurah}-${endSurah})" style="padding: 0.2rem 0.5rem; font-size: 0.74rem; opacity: 0.45;"`
+        : `style="padding: 0.2rem 0.5rem; font-size: 0.74rem;"`;
+
       html += `
         <div class="book-item" style="padding: 0.4rem 0.65rem;">
           <div class="book-info">
@@ -377,7 +484,7 @@ class MushafBuilder extends BaseElement {
             </div>
           </div>
           <div style="display: flex; align-items: center; gap: 0.35rem;">
-            <button class="btn-control mushaf-bm-jump-btn" type="button" data-index="${idx}" style="padding: 0.2rem 0.5rem; font-size: 0.74rem;">Jump</button>
+            <button class="btn-control mushaf-bm-jump-btn" type="button" data-index="${idx}" ${jumpAttrs}>Jump</button>
             <button class="btn-control btn-danger-text mushaf-bm-del-btn" type="button" data-index="${idx}" style="padding: 0.2rem 0.5rem; font-size: 0.74rem;">Delete</button>
           </div>
         </div>
@@ -594,6 +701,7 @@ class MushafBuilder extends BaseElement {
     `;
   }
 
+  // ---> THIS IS WHERE bindEvents() GOES <---
   bindEvents() {
     const retryBtn = this.querySelector("#mushafRetryAssetsBtn");
     if (retryBtn) {
@@ -606,6 +714,7 @@ class MushafBuilder extends BaseElement {
       rangeSelect.addEventListener("change", () => {
         customRangeRow.style.display =
           rangeSelect.value === "custom" ? "grid" : "none";
+        this.syncRangeConstraintsUI();
         this.updateSizeEstimate();
       });
     }
@@ -615,6 +724,9 @@ class MushafBuilder extends BaseElement {
     );
     builderInputs.forEach((input) => {
       input.addEventListener("change", () => {
+        if (input.id === "customStartSurah" || input.id === "customEndSurah") {
+          this.syncRangeConstraintsUI();
+        }
         this.updateSizeEstimate();
         if (
           input.id === "mushafScriptSelect" ||
@@ -659,7 +771,12 @@ class MushafBuilder extends BaseElement {
     if (curSurahSelect && curAyahInput) {
       curSurahSelect.addEventListener("change", () => {
         const sNum = parseInt(curSurahSelect.value, 10);
-        const sInfo = SURAHS[sNum - 1] || SURAHS[0];
+        if (!this.validateSurahInRange(sNum, "select")) {
+          const { startSurah } = this.getConfiguredSurahRange();
+          curSurahSelect.value = String(startSurah);
+        }
+        const activeSurah = parseInt(curSurahSelect.value, 10);
+        const sInfo = SURAHS[activeSurah - 1] || SURAHS[0];
         curAyahInput.max = String(sInfo.ayahs);
         if (parseInt(curAyahInput.value, 10) > sInfo.ayahs) {
           curAyahInput.value = "1";
@@ -677,6 +794,7 @@ class MushafBuilder extends BaseElement {
         const surah = parseInt(curSurahSelect?.value || "1", 10);
         const ayah = parseInt(curAyahInput?.value || "1", 10);
         const layer = parseInt(curLayerSelect?.value || "0", 10);
+        if (!this.validateSurahInRange(surah, "sync cursor to")) return;
         this.dispatchCursorSync(surah, ayah, layer);
       });
     }
@@ -693,6 +811,8 @@ class MushafBuilder extends BaseElement {
         }
         const surah = parseInt(curSurahSelect?.value || "1", 10);
         const ayah = parseInt(curAyahInput?.value || "1", 10);
+        if (!this.validateSurahInRange(surah, "bookmark")) return;
+
         const juz = getJuzForAyah(surah, ayah);
         bookmarks.push({ surah, ayah, juz });
         this.dispatchEvent(
@@ -711,6 +831,7 @@ class MushafBuilder extends BaseElement {
         const surah = parseInt(btn.getAttribute("data-surah"), 10);
         const ayah = parseInt(btn.getAttribute("data-ayah"), 10);
         const layer = parseInt(curLayerSelect?.value || "0", 10);
+        if (!this.validateSurahInRange(surah, "jump to")) return;
 
         if (curSurahSelect) curSurahSelect.value = String(surah);
         if (curAyahInput) {
@@ -734,6 +855,7 @@ class MushafBuilder extends BaseElement {
           const idx = parseInt(jumpBtn.getAttribute("data-index"), 10);
           const bm = this._deviceState.bookmarks[idx];
           if (bm) {
+            if (!this.validateSurahInRange(bm.surah, "jump to")) return;
             const layer = parseInt(curLayerSelect?.value || "0", 10);
             if (curSurahSelect) curSurahSelect.value = String(bm.surah);
             if (curAyahInput) {
@@ -779,16 +901,7 @@ class MushafBuilder extends BaseElement {
   }
 
   updateSizeEstimate() {
-    const rangeType =
-      this.querySelector("#mushafRangeSelect")?.value || "full";
-    const customStart = parseInt(
-      this.querySelector("#customStartSurah")?.value || "1",
-      10,
-    );
-    const customEnd = parseInt(
-      this.querySelector("#customEndSurah")?.value || "114",
-      10,
-    );
+    const { startSurah, endSurah } = this.getConfiguredSurahRange();
     const scriptId = parseInt(
       this.querySelector("#mushafScriptSelect")?.value || "0",
       10,
@@ -806,15 +919,6 @@ class MushafBuilder extends BaseElement {
       this.querySelector("#mushafTranslationSelect")?.value || "id_kemenag";
     const tafsirEdition =
       this.querySelector("#mushafTafsirSelect")?.value || "id_kemenag_ringkas";
-
-    const startSurah =
-      rangeType === "custom"
-        ? Math.min(customStart, customEnd)
-        : rangeType === "juz30"
-          ? 78
-          : 1;
-    const endSurah =
-      rangeType === "custom" ? Math.max(customStart, customEnd) : 114;
 
     let totalBytes = 64 + 114 * 24 + 6236 * 24;
 
@@ -879,6 +983,7 @@ class MushafBuilder extends BaseElement {
     if (badge) badge.textContent = formatted;
   }
 
+  // ---> THIS IS WHERE renderAyahPreview() GOES <---
   async renderAyahPreview() {
     if (!this._assetsReady) return;
     const canvas = this.querySelector("#mushafPreviewCanvas");
@@ -918,6 +1023,7 @@ class MushafBuilder extends BaseElement {
         scriptStyle,
         scriptId: scriptStyle,
         mushafFontSize,
+        latinFontId: this.getLatinFontId(),
         displayWidth: this._screenW,
         displayHeight: this._screenH,
         translationEdition,
@@ -931,6 +1037,7 @@ class MushafBuilder extends BaseElement {
     }
   }
 
+  // ---> THIS IS WHERE buildAndUpload() GOES <---
   async buildAndUpload(isUpload = true) {
     if (this._isBuilding) return;
     this._isBuilding = true;
@@ -953,16 +1060,7 @@ class MushafBuilder extends BaseElement {
       this.querySelector("#mushafFontSizeSelect")?.value || "28",
       10,
     );
-    const rangeType =
-      this.querySelector("#mushafRangeSelect")?.value || "full";
-    const customStart = parseInt(
-      this.querySelector("#customStartSurah")?.value || "1",
-      10,
-    );
-    const customEnd = parseInt(
-      this.querySelector("#customEndSurah")?.value || "114",
-      10,
-    );
+    const { rangeType, startSurah, endSurah } = this.getConfiguredSurahRange();
 
     const layerLatin = Boolean(
       this.querySelector("#layerLatinCheckbox")?.checked,
@@ -983,14 +1081,10 @@ class MushafBuilder extends BaseElement {
       scriptStyle,
       scriptId: scriptStyle,
       mushafFontSize,
+      latinFontId: this.getLatinFontId(),
       rangeType,
-      startSurah:
-        rangeType === "custom"
-          ? Math.min(customStart, customEnd)
-          : rangeType === "juz30"
-            ? 78
-            : 1,
-      endSurah: rangeType === "custom" ? Math.max(customStart, customEnd) : 114,
+      startSurah,
+      endSurah,
       layers: {
         mushaf: true,
         latin: layerLatin,
