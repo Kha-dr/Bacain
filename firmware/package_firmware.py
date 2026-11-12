@@ -340,10 +340,12 @@ def main(argv: list | None = None) -> int:
     print(f"[package_firmware] Running: {' '.join(cmd)}")
     subprocess.run(cmd, check=True)
 
-    if build_dir != target_build_dir:
+    # Local multi-board layout (build/<board_id>/): keep a copy next to that board's build.
+    # Flat layout (CI: idf.py build -> build/): target_build_dir does not exist, nothing to copy.
+    if build_dir != target_build_dir and target_build_dir.is_dir():
         target_factory_bin = target_build_dir / output_name
         shutil.copy2(factory_bin, target_factory_bin)
-
+        
     print(f"[package_firmware] Finished: {factory_bin.name}")
     return 0
 
