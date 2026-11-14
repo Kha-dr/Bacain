@@ -195,7 +195,7 @@ The CI workflow reads this file to generate the build matrix.
    - Splash, menu, library, nav hints and the sync screen are centered and inside the frame in every supported rotation.
    - Switching the font size in the menu changes list and reading text, not headers or footers.
    - Mushaf builds only: a `.bqm` built for this board's size loads; the log shows no `sprite px outside body rows` warning.
-5. Add the board to the table in section 1 and submit a pull request.
+5. Add the board to the table in section 1 and submit a pull request (see [CONTRIBUTING.md](../CONTRIBUTING.md) for licensing terms).
 
 ---
 

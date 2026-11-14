@@ -13,7 +13,11 @@ Arabic script requires contextual glyph shaping and ligatures that are heavy for
 - **Zero Overhead When Disabled**: Mushaf sources compile to nothing when `CONFIG_BOARD_MUSHAF_ENABLE=n`.
 
 <div align="center">
-  <img src="../assets/ui-mushaf.png" width="220" alt="1-Bit Mushaf View" />
+
+|                                     Mushaf View                                      |                                     Latin View                                      |                                     Tafsir View                                     |
+| :----------------------------------------------------------------------------------: | :---------------------------------------------------------------------------------: | :---------------------------------------------------------------------------------: |
+| <img src="../assets/Hardware/1000288484_clean.jpg" width="220" alt="Reading View" /> | <img src="../assets/Hardware/1000288486_clean.jpg" width="220" alt="Reader Menu" /> | <img src="../assets/Hardware/1000288488_clean.jpg" width="220" alt="Sync Screen" /> |
+
 </div>
 
 ## Build & Flash

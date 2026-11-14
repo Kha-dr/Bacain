@@ -1,7 +1,7 @@
 # BacaIn
 
 <div align="center">
-  <img src="./assets/device-hero-placeholder.png" alt="BacaIn Hardware" width="100%" />
+  <img src="./assets/Hardware/1000288500_clean.jpg" alt="BacaIn Hardware" width="100%" />
 
 Mini E-reader firmware for ESP32-S3 e-paper devices with PWA management via Web Bluetooth.
 
@@ -26,9 +26,9 @@ Developed on [Waveshare ESP32-S3-ePaper-1.54](https://github.com/waveshareteam/E
 
 <div align="center">
 
-|                             Reading View                             |                           Reader Menu                            |                           Sync Screen                            |
-| :------------------------------------------------------------------: | :--------------------------------------------------------------: | :--------------------------------------------------------------: |
-| <img src="./assets/ui-reading.png" width="220" alt="Reading View" /> | <img src="./assets/ui-menu.png" width="220" alt="Reader Menu" /> | <img src="./assets/ui-sync.png" width="220" alt="Sync Screen" /> |
+|                                    Reading View                                     |                                    Reader Menu                                     |                                    Sync Screen                                     |
+| :---------------------------------------------------------------------------------: | :--------------------------------------------------------------------------------: | :--------------------------------------------------------------------------------: |
+| <img src="./assets/Hardware/1000288498_clean.jpg" width="220" alt="Reading View" /> | <img src="./assets/Hardware/1000288497_clean.jpg" width="220" alt="Reader Menu" /> | <img src="./assets/Hardware/1000288499_clean.jpg" width="220" alt="Sync Screen" /> |
 
 </div>
 
@@ -101,9 +101,21 @@ Open [bacain.khadr.dev/flasher.html](https://bacain.khadr.dev/flasher.html) in C
 │   ├── components/         # Custom UI elements (book-uploader, device-manager)
 │   ├── processors/         # Ingestion pipeline (epub-processor, fb2-processor, text-cleaner)
 │   └── services/           # Web Bluetooth GATT client and storage manager
-├── LICENSE                 # CC BY-NC-SA 4.0 license
-└── README.md
+├── CONTRIBUTING.md         # Contribution and CLA guidelines
+├── LICENSE                 # Copyright, license map, and commercial licensing terms
+├── README.md
+└── THIRD_PARTY_NOTICES.md  # Third-party attributions and Mushaf data notice
 ```
+
+## License
+
+Copyright (c) 2025-2026 khadr.dev.
+
+- **Firmware (`firmware/`):** GNU General Public License v3.0 ([firmware/LICENSE](firmware/LICENSE))
+- **Web Companion (`web/`):** GNU Affero General Public License v3.0 ([web/LICENSE](web/LICENSE))
+- **Documentation & Assets (`assets/`, `*.md`):** CC BY-NC-SA 4.0 ([assets/LICENSE](assets/LICENSE))
+- **Third-Party Code & Mushaf Data:** Retained under their respective licenses; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Generated `.bqm` Mushaf files are built client-side from external Quranic fonts and texts governed by their own rights holders.
+- **Commercial Licensing:** Separate commercial licenses for closed-source or proprietary distribution are available from `khadr.dev` (see [LICENSE](LICENSE)).
 
 ## Acknowledgments
 
