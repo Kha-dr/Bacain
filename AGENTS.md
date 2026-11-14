@@ -4,6 +4,8 @@ These rules are mandatory for all agents and subagents operating in this reposit
 
 ## 1. Code Standards (Ponytail & Zero-Mock)
 
+All agents operating in this repository must load and enforce the `ponytail` skills (`ponytail` on coding tasks, `ponytail-review` on change reviews, `ponytail-audit` on repo audits) and `antislop` skills (`antislop`, `antislop-code`, `antislop-ui`, `antislop-copywriting`, `antislop-human`, `antislop-layoutmobile`).
+
 1. **Zero Mock / Zero Fake Data**:
    - Never implement mocks, dummy returns, simulated progress, or fake metrics (`Math.random()`, fake timers).
    - If a feature or driver is not implemented, set `this.available = false` and throw `new Error('<feature> not implemented')`.
@@ -12,14 +14,21 @@ These rules are mandatory for all agents and subagents operating in this reposit
    - Forbid weak dummy symbols (`__attribute__((weak))`): never provide weak fallback stubs that return `NULL`, `0`, or no-op defaults. Missing implementations must fail the build immediately at link time.
    - Forbid silent feature degradation: any uninitialized peripheral, missing configuration, or failed driver contract must log a hard error or assert. Code must never quietly degrade fidelity or fall back to an unrequested operational mode.
    - Strict parameter integrity: all enum constants, domain selectors, register configurations, and pin numbers passed to system or SDK APIs must be verified against actual hardware specifications. Never pass speculative values or out-of-bounds sentinels.
-3. **Ponytail (Minimal Complete Change)**:
+3. **Ponytail & Surgical Changes (Minimal Complete Change)**:
+   - Load and enforce the `ponytail` skill (`full` level by default) on every coding task; end every reply with 1 to 2 lines stating what was skipped or not checked and any risk the user must know.
    - Make the smallest complete change that solves the issue. Avoid speculative abstractions, unused code, and unnecessary layers.
    - Complexity is technical debt: the deleted line is the safest line.
+   - Surgical scope: every changed line must trace directly to the user's request. Never reformat, refactor, or alter adjacent code, comments, or styles outside the task.
+   - Clean up only your own mess: remove imports, variables, or helpers that your own edit made unused. Never delete pre-existing dead code unless explicitly instructed.
 4. **KISS (Keep It Stupid Simple)**:
    - Prefer the simplest workable solution in code, architecture, and documentation.
    - Resist speculative generalization: do not add unused CLI flags, speculative options, extra abstraction layers, or configuration toggles that have only one valid production state. Hardcode constants until multiple distinct consumers exist.
    - Avoid verbose explanations, unnecessary wrapper layers, and convoluted logic when a straightforward solution exists.
-5. **User Ownership of Version Control & Atomic Commits**:
+5. **Think Before Coding (Zero Silent Assumptions)**:
+   - Never guess silently on ambiguous requirements: state assumptions explicitly before editing, or use `ask_question` (`/grill-me` interview style: walk down the decision tree one question at a time, with a `(Recommended)` option first) when design choices depend on user intent.
+   - Push back on overcomplication: if a requested approach is unnecessarily complex or conflicts with hardware/protocol constraints, state the simpler alternative before writing code.
+   - Define checkable success criteria before editing and verify each criterion against actual build or test output before reporting completion.
+6. **User Ownership of Version Control & Atomic Commits**:
    - Never commit to git autonomously without explicit user instruction. Version control history belongs entirely to the human engineer.
    - Stage and commit changes atomically by concern (for example, separate commits for font pruning, power tuning, UI layouts, or protocol changes). Never combine distinct concerns into a single dirty working tree commit.
 
@@ -152,7 +161,7 @@ Every implementation report ends with:
 
 ## 5. Communication, Style & Anti-Slop Standards
 
-All agents and subagents must enforce antislop skills (`antislop`, `antislop-code`, `antislop-ui`, `antislop-copywriting`):
+All agents and subagents must load and enforce the antislop skills (`antislop`, `antislop-code`, `antislop-ui`, `antislop-copywriting`, `antislop-human`, `antislop-layoutmobile`):
 
 1. **Direct Technical Language & Dense Status Updates**:
    - Use concise technical terms: avoid marketing buzzwords, conversational filler, and self-evident status narratives.
