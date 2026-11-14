@@ -1,0 +1,966 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1920, initial-scale=1.0">
+  <title>BacaIn Launch Composition</title>
+  <style>
+    :root {
+      --bg-primary: #09090b;
+      --bg-secondary: #121215;
+      --bg-card: #141417;
+      --bg-input: #101013;
+      --text-primary: #f4f4f5;
+      --text-secondary: #a1a1aa;
+      --text-muted: #71717a;
+      --border-color: #27272a;
+      --border-hover: #3f3f46;
+      --accent: #3b82f6;
+      --accent-sky: #38bdf8;
+      --success: #10b981;
+      --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Consolas, monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .stage {
+      position: relative;
+      width: 1920px;
+      height: 1080px;
+      background:
+        radial-gradient(ellipse 900px 560px at 50% 42%, rgba(59, 130, 246, 0.11), transparent 72%),
+        linear-gradient(180deg, #0b0b0f 0%, #09090b 100%);
+      overflow: hidden;
+    }
+
+    .grid-bg {
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(to right, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+      background-size: 64px 64px;
+      mask-image: radial-gradient(circle at 50% 50%, rgba(0, 0, 0, 0.9) 25%, transparent 85%);
+      pointer-events: none;
+    }
+
+    .scene {
+      position: absolute;
+      inset: 0;
+      padding: 80px 110px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      opacity: 0;
+      visibility: hidden;
+      will-change: transform, opacity;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 20px;
+      border-radius: 9999px;
+      border: 1px solid rgba(59, 130, 246, 0.35);
+      background: rgba(59, 130, 246, 0.12);
+      color: var(--accent-sky);
+      font-family: var(--font-mono);
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      width: fit-content;
+    }
+
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 18px;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+    }
+
+    /* Scene 1: Hook */
+    #scene1 {
+      align-items: center;
+      text-align: center;
+      gap: 44px;
+    }
+
+    .hook-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      align-items: center;
+    }
+
+    .hook-line {
+      font-size: 92px;
+      font-weight: 800;
+      line-height: 1.06;
+      letter-spacing: -0.035em;
+      color: var(--text-primary);
+    }
+
+    .hook-line.accent {
+      color: var(--accent-sky);
+    }
+
+    /* Scene 2: Hardware Reveal */
+    #scene2 {
+      flex-direction: row;
+      align-items: center;
+      justify-content: space-between;
+      gap: 64px;
+    }
+
+    .s2-copy {
+      width: 680px;
+      display: flex;
+      flex-direction: column;
+      gap: 28px;
+    }
+
+    .brand-lockup {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .brand-lockup img {
+      width: 52px;
+      height: 52px;
+      border-radius: 12px;
+    }
+
+    .brand-name {
+      font-size: 32px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+
+    .s2-title {
+      font-size: 72px;
+      font-weight: 800;
+      line-height: 1.08;
+      letter-spacing: -0.03em;
+    }
+
+    .s2-sub {
+      font-size: 28px;
+      color: var(--text-secondary);
+      line-height: 1.4;
+    }
+
+    .spec-list {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      margin-top: 8px;
+    }
+
+    .spec-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 22px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      font-size: 21px;
+    }
+
+    .spec-label {
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+
+    .spec-val {
+      font-family: var(--font-mono);
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+
+    .s2-visual {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 22px;
+      align-items: stretch;
+    }
+
+    .hw-hero-card {
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .hw-hero-frame {
+      width: 100%;
+      height: 410px;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid var(--border-color);
+      background: #0d0d10;
+    }
+
+    .hw-hero-frame img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center;
+      display: block;
+    }
+
+    .hw-sub-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 22px;
+    }
+
+    .hw-thumb-card {
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .hw-thumb-frame {
+      width: 100%;
+      height: 270px;
+      border-radius: 10px;
+      overflow: hidden;
+      border: 1px solid var(--border-color);
+      background: #0d0d10;
+    }
+
+    .hw-thumb-frame img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center;
+      display: block;
+    }
+
+    .thumb-caption {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--text-primary);
+      padding: 0 4px;
+    }
+
+    .thumb-caption span.tag {
+      font-family: var(--font-mono);
+      font-size: 14px;
+      color: var(--accent-sky);
+      background: rgba(56, 189, 248, 0.12);
+      padding: 4px 10px;
+      border-radius: 6px;
+    }
+
+    /* Scene 3: User Flow (BLE Sync) */
+    #scene3 {
+      justify-content: space-between;
+      gap: 36px;
+      padding: 72px 96px;
+    }
+
+    .scene-header {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .scene-h2 {
+      font-size: 56px;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      line-height: 1.1;
+    }
+
+    .scene-lead {
+      font-size: 25px;
+      color: var(--text-secondary);
+    }
+
+    .flow-grid {
+      display: grid;
+      grid-template-columns: 1.18fr 220px 0.88fr;
+      gap: 28px;
+      align-items: center;
+      flex: 1;
+    }
+
+    .pwa-card {
+      padding: 26px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      height: 100%;
+      justify-content: space-between;
+    }
+
+    .pwa-top-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 14px;
+    }
+
+    .pwa-title {
+      font-size: 22px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .status-pill {
+      font-family: var(--font-mono);
+      font-size: 15px;
+      font-weight: 600;
+      padding: 6px 14px;
+      border-radius: 9999px;
+      background: rgba(16, 185, 129, 0.14);
+      color: var(--success);
+      border: 1px solid rgba(16, 185, 129, 0.35);
+    }
+
+    .pwa-shot-box {
+      height: 365px;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid var(--border-color);
+      background: #0d0d10;
+    }
+
+    .pwa-shot-box img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: top center;
+      display: block;
+    }
+
+    .upload-sim {
+      padding: 18px 22px;
+      border-radius: 12px;
+      background: var(--bg-input);
+      border: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .upload-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 19px;
+      font-weight: 600;
+    }
+
+    .progress-track {
+      width: 100%;
+      height: 12px;
+      background: #1f1f26;
+      border-radius: 9999px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--accent), var(--accent-sky));
+      border-radius: 9999px;
+    }
+
+    .upload-steps {
+      display: flex;
+      justify-content: space-between;
+      font-family: var(--font-mono);
+      font-size: 15px;
+      color: var(--text-muted);
+    }
+
+    .flow-bridge {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      text-align: center;
+    }
+
+    .bridge-track {
+      width: 180px;
+      height: 4px;
+      background: var(--border-color);
+      border-radius: 4px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .bridge-pulse {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 64px;
+      height: 4px;
+      background: linear-gradient(90deg, transparent, var(--accent-sky), transparent);
+    }
+
+    .bridge-label {
+      font-family: var(--font-mono);
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--accent-sky);
+      background: rgba(59, 130, 246, 0.14);
+      border: 1px solid rgba(59, 130, 246, 0.35);
+      padding: 8px 14px;
+      border-radius: 10px;
+    }
+
+    .device-result-card {
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      height: 100%;
+      justify-content: space-between;
+    }
+
+    .device-screen-stack {
+      position: relative;
+      height: 495px;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid var(--border-color);
+      background: #0d0d10;
+    }
+
+    .device-screen-stack img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center;
+      display: block;
+    }
+
+    /* Scene 4: Mushaf + Web Flasher */
+    #scene4 {
+      justify-content: space-between;
+      gap: 36px;
+      padding: 72px 96px;
+    }
+
+    .s4-cards {
+      display: grid;
+      grid-template-columns: 1fr 1.15fr;
+      gap: 36px;
+      flex: 1;
+      align-items: stretch;
+    }
+
+    .feature-panel {
+      padding: 32px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 22px;
+    }
+
+    .panel-title {
+      font-size: 32px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .panel-desc {
+      font-size: 21px;
+      color: var(--text-secondary);
+      line-height: 1.45;
+    }
+
+    .bqm-box {
+      background: var(--bg-input);
+      border: 1px solid var(--border-color);
+      border-radius: 14px;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .chip {
+      padding: 10px 18px;
+      border-radius: 10px;
+      font-family: var(--font-mono);
+      font-size: 17px;
+      font-weight: 600;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      color: var(--text-secondary);
+    }
+
+    .chip.active {
+      background: rgba(59, 130, 246, 0.16);
+      border-color: var(--accent);
+      color: var(--text-primary);
+    }
+
+    .flasher-shot {
+      height: 335px;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid var(--border-color);
+      background: #0d0d10;
+    }
+
+    .flasher-shot img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: top center;
+      display: block;
+    }
+
+    .check-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .check-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 18px;
+      border-radius: 10px;
+      background: var(--bg-input);
+      border: 1px solid var(--border-color);
+      font-family: var(--font-mono);
+      font-size: 18px;
+    }
+
+    .check-ok {
+      color: var(--success);
+      font-weight: 700;
+    }
+
+    /* Scene 5: Outro */
+    #scene5 {
+      align-items: center;
+      text-align: center;
+      gap: 34px;
+    }
+
+    .outro-icon {
+      width: 132px;
+      height: 132px;
+      border-radius: 28px;
+      box-shadow: 0 24px 70px rgba(59, 130, 246, 0.25);
+    }
+
+    .outro-wordmark {
+      font-size: 96px;
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      line-height: 1;
+    }
+
+    .outro-line {
+      font-size: 36px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      letter-spacing: -0.01em;
+    }
+
+    .outro-links {
+      display: flex;
+      gap: 20px;
+      margin-top: 12px;
+    }
+
+    .link-pill {
+      padding: 14px 26px;
+      border-radius: 12px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      font-family: var(--font-mono);
+      font-size: 22px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .link-pill.primary {
+      border-color: var(--accent);
+      background: rgba(59, 130, 246, 0.14);
+      color: var(--accent-sky);
+    }
+  </style>
+</head>
+<body>
+  <div class="stage">
+    <div class="grid-bg" id="gridBg"></div>
+
+    <!-- Scene 1: Hook (0.00s - 3.18s) -->
+    <section class="scene" id="scene1">
+      <div class="pill" id="s1Badge">ESP32-S3 · 1.54" E-PAPER · 20s AUTO-SLEEP</div>
+      <div class="hook-stack">
+        <div class="hook-line" id="s1Line1">200 x 200 pixels.</div>
+        <div class="hook-line" id="s1Line2">Two buttons.</div>
+        <div class="hook-line accent" id="s1Line3">Zero notifications.</div>
+      </div>
+    </section>
+
+    <!-- Scene 2: Hardware Reveal (3.18s - 6.34s) -->
+    <section class="scene" id="scene2">
+      <div class="s2-copy" id="s2Copy">
+        <div class="brand-lockup">
+          <img src="../../web/assets/icon.svg" alt="BacaIn icon">
+          <span class="brand-name">Baca<span style="color: var(--accent);">In</span></span>
+        </div>
+        <div class="s2-title">Pocket e-paper.<br>Open firmware.</div>
+        <div class="s2-sub">Built for the Waveshare ESP32-S3 1.54" e-paper board with direct two-button control.</div>
+        <div class="spec-list">
+          <div class="spec-row" id="s2Spec1">
+            <span class="spec-label">Panel</span>
+            <span class="spec-val">200 x 200 SSD1681 Partial LUT</span>
+          </div>
+          <div class="spec-row" id="s2Spec2">
+            <span class="spec-label">Navigation</span>
+            <span class="spec-val">UP (GPIO 0) + DOWN (GPIO 18)</span>
+          </div>
+          <div class="spec-row" id="s2Spec3">
+            <span class="spec-label">Power</span>
+            <span class="spec-val">20s Deep Sleep · Instant Page Turn</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="s2-visual" id="s2Visual">
+        <div class="card hw-hero-card">
+          <div class="hw-hero-frame">
+            <img src="../../assets/Hardware/1000288500_clean.jpg" alt="BacaIn Hardware">
+          </div>
+          <div class="thumb-caption">
+            <span>Waveshare ESP32-S3 e-Paper 1.54</span>
+            <span class="tag">GPL-3.0</span>
+          </div>
+        </div>
+
+        <div class="hw-sub-grid">
+          <div class="card hw-thumb-card" id="s2Thumb1">
+            <div class="hw-thumb-frame">
+              <img src="../../assets/Hardware/1000288497_clean.jpg" alt="Reader Menu">
+            </div>
+            <div class="thumb-caption">
+              <span>Reader Menu</span>
+              <span class="tag">7 Items</span>
+            </div>
+          </div>
+          <div class="card hw-thumb-card" id="s2Thumb2">
+            <div class="hw-thumb-frame">
+              <img src="../../assets/Hardware/1000288498_clean.jpg" alt="Reading View">
+            </div>
+            <div class="thumb-caption">
+              <span>Reading View</span>
+              <span class="tag">12px / 16px</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Scene 3: User Flow (BLE Book Sync, 6.34s - 11.60s) -->
+    <section class="scene" id="scene3">
+      <div class="scene-header" id="s3Header">
+        <div class="pill">COMPANION PWA · WEB BLUETOOTH</div>
+        <h2 class="scene-h2">Parse in Chrome. Stream over BLE.</h2>
+        <p class="scene-lead">EPUB, FB2, and TXT cleaning run in your browser so the ESP32 only writes wrapped planar pages.</p>
+      </div>
+
+      <div class="flow-grid">
+        <div class="card pwa-card" id="s3LeftCard">
+          <div class="pwa-top-bar">
+            <div class="pwa-title">
+              <img src="../../web/assets/icon.svg" alt="BacaIn" style="width: 30px; height: 30px; border-radius: 6px;">
+              <span>BacaIn Web Companion</span>
+            </div>
+            <span class="status-pill" id="s3BleBadge">GATT CONNECTED</span>
+          </div>
+
+          <div class="pwa-shot-box">
+            <img src="../../assets/pwa-dashboard.png" alt="BacaIn Web Dashboard">
+          </div>
+
+          <div class="upload-sim">
+            <div class="upload-meta">
+              <span id="s3FileLabel">alice_in_wonderland.epub</span>
+              <span id="s3PctLabel" style="font-family: var(--font-mono); color: var(--accent-sky);">0%</span>
+            </div>
+            <div class="progress-track">
+              <div class="progress-fill" id="s3ProgFill"></div>
+            </div>
+            <div class="upload-steps">
+              <span id="s3StepTxt">Book Style (2-space indent) · MicroSD / Flash</span>
+              <span id="s3StatusTxt">Ready</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="flow-bridge" id="s3Bridge">
+          <div class="bridge-label" id="s3BridgeLabel">BLE GATT 0x01</div>
+          <div class="bridge-track">
+            <div class="bridge-pulse" id="s3Pulse"></div>
+          </div>
+          <div style="font-size: 16px; color: var(--text-secondary);" id="s3BridgeSub">Binary framing</div>
+        </div>
+
+        <div class="card device-result-card" id="s3RightCard">
+          <div class="device-screen-stack">
+            <img src="../../assets/Hardware/1000288499_clean.jpg" id="s3ImgSync" alt="BLE Sync QR Screen">
+            <img src="../../assets/Hardware/1000288498_clean.jpg" id="s3ImgRead" alt="Book Ready on E-Paper" style="opacity: 0;">
+          </div>
+          <div class="thumb-caption">
+            <span id="s3ScreenCaption">Sync Books · Waiting for transfer</span>
+            <span class="tag" id="s3ScreenTag">BLE ON</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Scene 4: Mushaf & Safe Web Flasher (11.60s - 16.34s) -->
+    <section class="scene" id="scene4">
+      <div class="scene-header" id="s4Header">
+        <div class="pill">CLIENT-SIDE TOOLS · ZERO INSTALLER</div>
+        <h2 class="scene-h2">Offline Mushaf Builder &amp; Safe USB Flasher</h2>
+        <p class="scene-lead">Build custom .bqm packages locally or update firmware at 0x0 while preserving books and NVS settings.</p>
+      </div>
+
+      <div class="s4-cards">
+        <div class="card feature-panel" id="s4LeftCard">
+          <div style="display: flex; flex-direction: column; gap: 14px;">
+            <span class="pill">OPTIONAL FIRMWARE TARGET</span>
+            <h3 class="panel-title">Offline Mushaf Reader (.bqm)</h3>
+            <p class="panel-desc">Client-side builder fetches Arabic script and translations in browser, then compiles a compact planar .bqm archive.</p>
+          </div>
+
+          <div class="bqm-box">
+            <div class="chip-row">
+              <span class="chip active">KFGQPC Uthmani</span>
+              <span class="chip">IndoPak Script</span>
+              <span class="chip active">Kemenag</span>
+              <span class="chip">Saheeh Intl</span>
+            </div>
+            <div class="spec-row" style="margin-top: 4px;">
+              <span class="spec-label">Output Package</span>
+              <span class="spec-val" style="color: var(--accent-sky);">mushaf_uthmani.bqm · 114 Surahs</span>
+            </div>
+          </div>
+
+          <div class="thumb-caption">
+            <span>Runs directly on Waveshare 1.54" build</span>
+            <span class="tag">SD / FLASH</span>
+          </div>
+        </div>
+
+        <div class="card feature-panel" id="s4RightCard">
+          <div style="display: flex; flex-direction: column; gap: 14px;">
+            <span class="pill">WEB SERIAL FLASHER · OFFSET 0x0</span>
+            <h3 class="panel-title">Pre-Flash Compatibility Guard</h3>
+          </div>
+
+          <div class="flasher-shot">
+            <img src="../../assets/web-flasher.png" alt="BacaIn Web Serial Flasher">
+          </div>
+
+          <div class="check-list">
+            <div class="check-item" id="s4Chk1">
+              <span>Chip &amp; Flash: ESP32-S3 · 8 MB</span>
+              <span class="check-ok">PASS</span>
+            </div>
+            <div class="check-item" id="s4Chk2">
+              <span>Board Tag: Waveshare ESP32-S3-ePaper-1.54</span>
+              <span class="check-ok">MATCH</span>
+            </div>
+            <div class="check-item" id="s4Chk3">
+              <span>Preserve Books, Bookmarks &amp; NVS</span>
+              <span class="check-ok">ON</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Scene 5: Outro (16.34s - 20.00s) -->
+    <section class="scene" id="scene5">
+      <img class="outro-icon" id="s5Icon" src="../../web/assets/icon.svg" alt="BacaIn Logo">
+      <div class="outro-wordmark" id="s5Title">Baca<span style="color: var(--accent);">In</span></div>
+      <div class="outro-line" id="s5Line">Flash in Chrome. Sync over Bluetooth. Read anywhere.</div>
+      <div class="outro-links" id="s5Links">
+        <div class="link-pill primary">bacain.khadr.dev</div>
+        <div class="link-pill">github.com/Kha-dr/BacaIn</div>
+        <div class="link-pill">GPL-3.0 · AGPL-3.0</div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const clamp01 = (v) => Math.max(0, Math.min(1, v));
+    const easeOut = (t) => 1 - Math.pow(1 - clamp01(t), 3);
+    const easeInOut = (t) => {
+      const x = clamp01(t);
+      return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+    };
+    const norm = (t, a, b) => clamp01((t - a) / (b - a));
+
+    function setSceneVisibility(el, t, start, end, fadeIn = 0.25, fadeOut = 0.22) {
+      if (t < start || t > end) {
+        el.style.opacity = "0";
+        el.style.visibility = "hidden";
+        return 0;
+      }
+      el.style.visibility = "visible";
+      let alpha = 1;
+      if (t < start + fadeIn) {
+        alpha = easeOut((t - start) / fadeIn);
+      } else if (t > end - fadeOut && end < 20.0) {
+        alpha = 1 - easeOut((t - (end - fadeOut)) / fadeOut);
+      }
+      el.style.opacity = alpha.toFixed(4);
+      return alpha;
+    }
+
+    function animSlide(el, progress, yOffset = 24) {
+      const p = easeOut(progress);
+      el.style.opacity = p.toFixed(4);
+      el.style.transform = `translate3d(0, ${((1 - p) * yOffset).toFixed(2)}px, 0)`;
+    }
+
+    window.setVideoTime = function setVideoTime(t) {
+      const s1 = document.getElementById("scene1");
+      const s2 = document.getElementById("scene2");
+      const s3 = document.getElementById("scene3");
+      const s4 = document.getElementById("scene4");
+      const s5 = document.getElementById("scene5");
+
+      // Scene 1: 0.00 - 3.16s (0.02s dip before Scene 2)
+      setSceneVisibility(s1, t, 0.0, 3.16, 0.12, 0.22);
+      if (t <= 3.16) {
+        animSlide(document.getElementById("s1Badge"), norm(t, 0.05, 0.40), -14);
+        animSlide(document.getElementById("s1Line1"), norm(t, 0.28, 0.62), 28);
+        animSlide(document.getElementById("s1Line2"), norm(t, 0.90, 1.25), 28);
+        animSlide(document.getElementById("s1Line3"), norm(t, 1.48, 1.84), 28);
+      }
+
+      // Scene 2: 3.18 - 6.32s (Poster frame 4.80s is fully settled)
+      setSceneVisibility(s2, t, 3.18, 6.32, 0.24, 0.22);
+      if (t >= 3.18 && t <= 6.32) {
+        animSlide(document.getElementById("s2Copy"), norm(t, 3.20, 3.68), 22);
+        animSlide(document.getElementById("s2Visual"), norm(t, 3.26, 3.74), 24);
+        animSlide(document.getElementById("s2Spec1"), norm(t, 3.45, 3.85), 14);
+        animSlide(document.getElementById("s2Spec2"), norm(t, 3.60, 4.00), 14);
+        animSlide(document.getElementById("s2Spec3"), norm(t, 3.75, 4.15), 14);
+        animSlide(document.getElementById("s2Thumb1"), norm(t, 3.45, 3.92), 18);
+        animSlide(document.getElementById("s2Thumb2"), norm(t, 3.62, 4.08), 18);
+      }
+
+      // Scene 3: 6.34 - 11.58s (User flow: Chrome -> BLE -> E-Paper Reading View)
+      setSceneVisibility(s3, t, 6.34, 11.58, 0.24, 0.22);
+      if (t >= 6.34 && t <= 11.58) {
+        animSlide(document.getElementById("s3Header"), norm(t, 6.36, 6.76), 18);
+        animSlide(document.getElementById("s3LeftCard"), norm(t, 6.50, 6.95), 24);
+        animSlide(document.getElementById("s3Bridge"), norm(t, 6.65, 7.05), 14);
+        animSlide(document.getElementById("s3RightCard"), norm(t, 6.65, 7.10), 24);
+
+        const transferP = easeInOut(norm(t, 7.35, 9.85));
+        const pct = Math.round(transferP * 100);
+        document.getElementById("s3ProgFill").style.width = `${pct}%`;
+        document.getElementById("s3PctLabel").textContent = `${pct}%`;
+
+        const statusEl = document.getElementById("s3StatusTxt");
+        const pulseEl = document.getElementById("s3Pulse");
+        const imgRead = document.getElementById("s3ImgRead");
+        const imgSync = document.getElementById("s3ImgSync");
+        const capEl = document.getElementById("s3ScreenCaption");
+        const tagEl = document.getElementById("s3ScreenTag");
+
+        if (t < 7.35) {
+          statusEl.textContent = "Cleaning EPUB chapters";
+          pulseEl.style.transform = "translate3d(-64px, 0, 0)";
+          imgRead.style.opacity = "0";
+          imgSync.style.opacity = "1";
+          capEl.textContent = "Sync Books · Waiting for transfer";
+          tagEl.textContent = "BLE ON";
+        } else if (t < 9.90) {
+          statusEl.textContent = "Streaming planar frames";
+          const loopX = ((t - 7.35) * 180) % 244 - 64;
+          pulseEl.style.transform = `translate3d(${loopX.toFixed(1)}px, 0, 0)`;
+          imgRead.style.opacity = "0";
+          imgSync.style.opacity = "1";
+          capEl.textContent = "Receiving over BLE GATT";
+          tagEl.textContent = `${pct}%`;
+        } else {
+          statusEl.textContent = "Saved to device · 200x200 ready";
+          pulseEl.style.transform = "translate3d(180px, 0, 0)";
+          const crossP = easeOut(norm(t, 9.90, 10.35));
+          imgRead.style.opacity = crossP.toFixed(4);
+          imgSync.style.opacity = (1 - crossP).toFixed(4);
+          capEl.textContent = "Opening book on e-paper";
+          tagEl.textContent = "SYNCED";
+        }
+      }
+
+      // Scene 4: 11.60 - 16.32s (Mushaf + Pre-Flash Guard)
+      setSceneVisibility(s4, t, 11.60, 16.32, 0.24, 0.22);
+      if (t >= 11.60 && t <= 16.32) {
+        animSlide(document.getElementById("s4Header"), norm(t, 11.62, 12.02), 18);
+        animSlide(document.getElementById("s4LeftCard"), norm(t, 11.78, 12.24), 26);
+        animSlide(document.getElementById("s4RightCard"), norm(t, 11.90, 12.36), 26);
+        animSlide(document.getElementById("s4Chk1"), norm(t, 12.50, 12.88), 14);
+        animSlide(document.getElementById("s4Chk2"), norm(t, 12.95, 13.33), 14);
+        animSlide(document.getElementById("s4Chk3"), norm(t, 13.40, 13.78), 14);
+      }
+
+      // Scene 5: 16.34 - 20.00s (Outro)
+      setSceneVisibility(s5, t, 16.34, 20.05, 0.28, 0.0);
+      if (t >= 16.34) {
+        animSlide(document.getElementById("s5Icon"), norm(t, 16.38, 16.82), 20);
+        animSlide(document.getElementById("s5Title"), norm(t, 16.50, 16.92), 22);
+        animSlide(document.getElementById("s5Line"), norm(t, 16.65, 17.08), 20);
+        animSlide(document.getElementById("s5Links"), norm(t, 16.82, 17.26), 18);
+      }
+    };
+
+    window.setVideoTime(0);
+  </script>
+</body>
+</html>

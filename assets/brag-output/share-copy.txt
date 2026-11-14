@@ -1,0 +1,1 @@
+Built BacaIn: open-source ESP32-S3 firmware and a browser PWA for a 200x200 pocket e-paper reader with zero distractions. Flash in Chrome, stream EPUB/FB2 books or offline Mushaf packages over Web Bluetooth, and read with 20s auto-sleep battery life: bacain.khadr.dev
