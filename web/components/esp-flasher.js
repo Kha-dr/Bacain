@@ -53,6 +53,8 @@ class EspWebFlasher extends HTMLElement {
     this.chipName = null;
     this.chipDesc = null;
     this.macAddress = null;
+    this.flashSizeBytes = null;
+    this.deviceAppInfo = null;
 
     const cfg =
       (typeof window !== "undefined" &&
@@ -106,9 +108,17 @@ class EspWebFlasher extends HTMLElement {
       fileIndex: 0,
       totalFiles: 0,
     };
+
+    this._beforeUnloadHandler = (e) => {
+      if (this.isFlashing) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
   }
 
   connectedCallback() {
+    window.addEventListener("beforeunload", this._beforeUnloadHandler);
     this.render();
     if (this.releasesList.length === 0 && !this.isFetchingReleasesList) {
       this.fetchReleasesList();
@@ -116,6 +126,7 @@ class EspWebFlasher extends HTMLElement {
   }
 
   disconnectedCallback() {
+    window.removeEventListener("beforeunload", this._beforeUnloadHandler);
     this.cleanUpConnection();
   }
 
@@ -144,10 +155,18 @@ class EspWebFlasher extends HTMLElement {
 
   renderDeviceInfo() {
     if (!this.isDeviceConnected) return "";
+    const app = this.deviceAppInfo;
+    const installedLine = app
+      ? `<div style="margin-top: 0.25rem;">Installed: <strong style="color: var(--text-primary);">${this.escapeHtml(app.projectName)} ${this.escapeHtml(app.version)}</strong>${app.boardName ? ` (${this.escapeHtml(app.boardName)})` : ""}</div>`
+      : `<div style="margin-top: 0.25rem; color: var(--text-muted);">Installed: Unknown firmware or blank flash</div>`;
     return `
       <div style="margin-top: 0.6rem; font-size: 0.82rem; color: var(--text-secondary);">
-        Device: <strong style="color: var(--text-primary);">${this.chipName || "ESP32-S3"}</strong>
-        ${this.macAddress ? ` &bull; MAC: <span class="mono">${this.macAddress}</span>` : ""}
+        <div>
+          Device: <strong style="color: var(--text-primary);">${this.escapeHtml(this.chipName || "ESP32-S3")}</strong>
+          ${this.flashSizeBytes ? ` &bull; Flash: <strong style="color: var(--text-primary);">${this.escapeHtml(this.formatBytes(this.flashSizeBytes))}</strong>` : ""}
+          ${this.macAddress ? ` &bull; MAC: <span class="mono">${this.escapeHtml(this.macAddress)}</span>` : ""}
+        </div>
+        ${installedLine}
       </div>
     `;
   }
@@ -1165,6 +1184,55 @@ class EspWebFlasher extends HTMLElement {
         // Non-fatal
       }
 
+      // Query SPI Flash Size (JEDEC ID)
+      this.flashSizeBytes = null;
+      try {
+        const flashId = await this.esploader.flashId();
+        const sizeCode = (flashId >> 16) & 0xff;
+        if (sizeCode >= 0x12 && sizeCode <= 0x1a) {
+          this.flashSizeBytes = 1 << sizeCode;
+          this.appendTerminal(
+            `Flash Size: ${this.formatBytes(this.flashSizeBytes)}\n`,
+            "info",
+          );
+        } else {
+          this.appendTerminal(
+            `Flash ID 0x${flashId.toString(16)}: unknown flash capacity code 0x${sizeCode.toString(16)}.\n`,
+            "warning",
+          );
+        }
+      } catch (flashIdErr) {
+        this.appendTerminal(
+          `Could not read flash size: ${flashIdErr.message}\n`,
+          "warning",
+        );
+      }
+
+      // Query Installed Firmware Descriptor (0x10020: esp_app_desc_t + .rodata_custom_desc)
+      this.deviceAppInfo = null;
+      try {
+        const rawDesc = await this.esploader.readFlash(0x10020, 0x140, () => {});
+        const descBytes =
+          rawDesc instanceof Uint8Array ? rawDesc : new Uint8Array(rawDesc);
+        this.deviceAppInfo = this.parseAppDescriptor(descBytes, 0);
+        if (this.deviceAppInfo) {
+          this.appendTerminal(
+            `Installed Firmware: ${this.deviceAppInfo.projectName} ${this.deviceAppInfo.version}${this.deviceAppInfo.boardName ? ` [${this.deviceAppInfo.boardName}]` : ""}\n`,
+            "info",
+          );
+        } else {
+          this.appendTerminal(
+            "Installed Firmware: none or non-BacaIn image at 0x10020.\n",
+            "info",
+          );
+        }
+      } catch (appErr) {
+        this.appendTerminal(
+          `Could not read installed firmware descriptor: ${appErr.message}\n`,
+          "warning",
+        );
+      }
+
       this.isDeviceConnected = true;
       this.isConnecting = false;
       this.updateUI();
@@ -1199,7 +1267,10 @@ class EspWebFlasher extends HTMLElement {
     this.esploader = null;
     this.port = null;
     this.chipName = null;
+    this.chipDesc = null;
     this.macAddress = null;
+    this.flashSizeBytes = null;
+    this.deviceAppInfo = null;
   }
 
   async rebootDevice() {
@@ -1247,8 +1318,92 @@ class EspWebFlasher extends HTMLElement {
   }
 
   // ==========================================================================
-  // Partition Table, Wear-Levelling & FAT Content Extraction Helpers
+  // Binary Inspection, Partition Table, Wear-Levelling & FAT Extraction
   // ==========================================================================
+  readCString(bytes, offset, maxLen) {
+    if (!bytes || offset < 0 || offset + maxLen > bytes.length) return "";
+    let end = offset;
+    const limit = offset + maxLen;
+    while (end < limit && bytes[end] !== 0) {
+      end++;
+    }
+    return new TextDecoder("utf-8").decode(bytes.subarray(offset, end)).trim();
+  }
+
+  parseAppDescriptor(bytes, baseOffset = 0) {
+    if (!bytes || baseOffset < 0 || bytes.length < baseOffset + 0x100) {
+      return null;
+    }
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    if (view.getUint32(baseOffset, true) !== 0xabcd5432) {
+      return null;
+    }
+    const version = this.readCString(bytes, baseOffset + 0x10, 32);
+    const projectName = this.readCString(bytes, baseOffset + 0x30, 32);
+    let boardName = null;
+    if (bytes.length >= baseOffset + 0x140) {
+      const rawBoard = this.readCString(bytes, baseOffset + 0x100, 64);
+      if (rawBoard.startsWith("BOARD:")) {
+        boardName = rawBoard.slice(6) || null;
+      }
+    }
+    return { projectName, version, boardName };
+  }
+
+  inspectBinaryImage(fwBytes) {
+    const CHIP_IDS = {
+      0x0000: "ESP32",
+      0x0002: "ESP32-S2",
+      0x0005: "ESP32-C3",
+      0x0009: "ESP32-S3",
+      0x000c: "ESP32-C2",
+      0x000d: "ESP32-C6",
+      0x0010: "ESP32-H2",
+      0x0012: "ESP32-P4",
+    };
+
+    const view =
+      fwBytes && fwBytes.length >= 24
+        ? new DataView(fwBytes.buffer, fwBytes.byteOffset, fwBytes.byteLength)
+        : null;
+    const magic = view ? fwBytes[0] : 0;
+    const chipId = view ? view.getUint16(12, true) : null;
+    const chipName = chipId !== null ? CHIP_IDS[chipId] || null : null;
+    const spiSizeNibble = view ? (fwBytes[3] >> 4) & 0x0f : 0x0f;
+    const headerFlashBytes =
+      spiSizeNibble <= 7 ? 1024 * 1024 * (1 << spiSizeNibble) : null;
+
+    const parts =
+      fwBytes && fwBytes.length >= 0x9000
+        ? this.parsePartitionTable(fwBytes.subarray(0x8000, 0x9000))
+        : {};
+    let maxPartEnd = 0;
+    for (const part of Object.values(parts)) {
+      const end = part.offset + part.size;
+      if (end > maxPartEnd) maxPartEnd = end;
+    }
+    const requiredFlashBytes = Math.max(
+      maxPartEnd,
+      fwBytes ? fwBytes.length : 0,
+    );
+
+    const appOffset = (parts.factory ? parts.factory.offset : 0x10000) + 0x20;
+    const appDesc =
+      this.parseAppDescriptor(fwBytes, appOffset) ||
+      this.parseAppDescriptor(fwBytes, 0x20);
+
+    return {
+      magic,
+      chipId,
+      chipName,
+      spiSizeNibble,
+      headerFlashBytes,
+      parts,
+      requiredFlashBytes,
+      appDesc,
+    };
+  }
+
   parsePartitionTable(tableBytes) {
     if (!tableBytes || tableBytes.length < 32) return {};
     const view = new DataView(
@@ -1700,18 +1855,86 @@ class EspWebFlasher extends HTMLElement {
       return;
     }
 
+    const fwBytes = slot.fileData;
+    const fwName = slot.fileName || "bacain_factory.bin";
+    const img = this.inspectBinaryImage(fwBytes);
+
+    // Check 1: ESP32 image magic and target chip compatibility
+    if (img.magic !== 0xe9) {
+      this.appendTerminal(
+        `Incompatible binary [${fwName}]: invalid ESP32 image header (expected 0xE9, got 0x${img.magic.toString(16)}).\n`,
+        "error",
+      );
+      return;
+    }
+    if (img.chipName && this.chipName) {
+      const devChip = this.chipName.toUpperCase().split(/[\s(]/)[0].replace(/-/g, "");
+      const binChip = img.chipName.toUpperCase().replace(/-/g, "");
+      if (devChip !== binChip) {
+        this.appendTerminal(
+          `Chip mismatch: binary targets ${img.chipName}, connected device is ${this.chipName}.\n`,
+          "error",
+        );
+        return;
+      }
+    }
+
+    // Check 2: Physical flash capacity vs binary / partition layout
+    if (this.flashSizeBytes && img.requiredFlashBytes > this.flashSizeBytes) {
+      this.appendTerminal(
+        `Flash too small: binary requires ${this.formatBytes(img.requiredFlashBytes)}, connected device has ${this.formatBytes(this.flashSizeBytes)}.\n`,
+        "error",
+      );
+      return;
+    }
+
+    // Checks 3 & 4: Board identity mismatch and destructive operation confirmations
+    const warnings = [];
+    if (
+      this.deviceAppInfo?.boardName &&
+      img.appDesc?.boardName &&
+      this.deviceAppInfo.boardName !== img.appDesc.boardName
+    ) {
+      warnings.push(
+        `Board mismatch: device runs "${this.deviceAppInfo.boardName}", selected binary is built for "${img.appDesc.boardName}". Flashing the wrong board binary can cause display or power pin conflicts.`,
+      );
+    } else if (!this.deviceAppInfo || this.deviceAppInfo.projectName !== "bacain") {
+      warnings.push(
+        "Device does not currently run BacaIn, so hardware board compatibility cannot be verified from flash. Confirm you selected the matching board binary.",
+      );
+    }
+
+    if (this.eraseBeforeFlash && !this.preserveContent) {
+      warnings.push(
+        "Full flash erase is enabled and preservation is disabled: all books, bookmarks, and settings will be permanently erased.",
+      );
+    } else if (!this.preserveContent) {
+      warnings.push(
+        "Content preservation is disabled: device settings (NVS) and internal storage layout changes may overwrite existing data.",
+      );
+    } else if (this.eraseBeforeFlash) {
+      warnings.push(
+        "Full flash erase is enabled: books and settings will be backed up in browser RAM before erasing. Keep USB connected until flashing finishes.",
+      );
+    }
+
+    if (warnings.length > 0) {
+      for (const w of warnings) {
+        this.appendTerminal(`Warning: ${w}\n`, "warning");
+      }
+      if (!window.confirm(`${warnings.join("\n\n")}\n\nProceed with flashing?`)) {
+        this.appendTerminal("Flashing cancelled by user.\n", "warning");
+        return;
+      }
+    }
+
     this.isFlashing = true;
     this.flashProgress = 0;
     this.flashStatusText = "Inspecting partition layout...";
     this.updateUI();
 
     try {
-      const fwBytes = slot.fileData;
-      const fwName = slot.fileName || "bacain_factory.bin";
-      const newParts =
-        fwBytes.length >= 0x9000
-          ? this.parsePartitionTable(fwBytes.subarray(0x8000, 0x9000))
-          : {};
+      const newParts = img.parts;
       const newStorage = newParts.storage || null;
       const newFactory = newParts.factory || null;
       const newNvs = newParts.nvs || null;
@@ -1943,6 +2166,9 @@ class EspWebFlasher extends HTMLElement {
         `Wrote ${this.formatBytes(totalBytesAll)} across ${filesToFlash.length} segment(s).\n`,
         "success",
       );
+      if (img.appDesc) {
+        this.deviceAppInfo = img.appDesc;
+      }
     } catch (flashErr) {
       this.appendTerminal(`Flash Error: ${flashErr.message}\n`, "error");
       this.flashStatusText = `Error: ${flashErr.message}`;

@@ -41,6 +41,8 @@
 #define LOOP_MAX_WAIT_MS 60000 // keeps pdMS_TO_TICKS within 32 bits; bounds staleness of BLE-changed timeout
 #define BLE_RX_REFRESH_MIN_US 500000
 
+const __attribute__((section(".rodata_custom_desc"))) char s_board_desc[64] = "BOARD:" BOARD_NAME;
+
 static QueueHandle_t s_btn_queue = NULL;
 static atomic_int s_current_view = VIEW_MENU; // written by main task, read by BLE task
 static int64_t s_last_activity_us = 0;
@@ -290,7 +292,7 @@ void app_main(void)
     app_links_init();
     app_settings_apply();
 
-    ESP_LOGI(TAG, "Starting BacaIn firmware (wakeup=%d, cold=%d)...", raw_wakeup, is_cold_boot);
+    ESP_LOGI(TAG, "Starting BacaIn firmware [%s] (wakeup=%d, cold=%d)...", s_board_desc + 6, raw_wakeup, is_cold_boot);
 
     // 4. Storage
     esp_err_t flash_ret = flash_storage_init();
